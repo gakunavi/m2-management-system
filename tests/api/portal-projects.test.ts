@@ -5,20 +5,18 @@ import { NextRequest } from 'next/server';
 // vi.hoisted でモック変数を先に定義（ホイスティング対応）
 // ============================================
 
-const { mockGetServerSession, mockPrisma } = vi.hoisted(() => ({
+const { mockGetServerSession, mockPrisma, mockGetBusinessPartnerScope } = vi.hoisted(() => ({
   mockGetServerSession: vi.fn(),
   mockPrisma: {
     project: {
       count: vi.fn(),
       findMany: vi.fn(),
     },
-    partner: {
-      findMany: vi.fn(),
-    },
     businessStatusDefinition: {
       findMany: vi.fn(),
     },
   },
+  mockGetBusinessPartnerScope: vi.fn(),
 }));
 
 vi.mock('next-auth', () => ({
@@ -32,6 +30,14 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: mockPrisma,
 }));
+
+vi.mock('@/lib/revenue-helpers', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/revenue-helpers')>('@/lib/revenue-helpers');
+  return {
+    ...actual,
+    getBusinessPartnerScope: mockGetBusinessPartnerScope,
+  };
+});
 
 import { GET } from '@/app/api/v1/portal/projects/route';
 
@@ -109,10 +115,7 @@ describe('GET /api/v1/portal/projects', () => {
       user: { id: 10, role: 'partner_admin', partnerId: 100 },
     });
 
-    mockPrisma.partner.findMany
-      .mockResolvedValueOnce([{ id: 101 }, { id: 102 }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+    mockGetBusinessPartnerScope.mockResolvedValue([100, 101, 102]);
 
     mockPrisma.project.count.mockResolvedValue(0);
     mockPrisma.project.findMany.mockResolvedValue([]);
@@ -148,7 +151,7 @@ describe('GET /api/v1/portal/projects', () => {
     mockGetServerSession.mockResolvedValue({
       user: { id: 10, role: 'partner_admin', partnerId: 100 },
     });
-    mockPrisma.partner.findMany.mockResolvedValue([]);
+    mockGetBusinessPartnerScope.mockResolvedValue([100]);
 
     mockPrisma.project.count.mockResolvedValue(1);
     mockPrisma.project.findMany.mockResolvedValue([
@@ -217,7 +220,7 @@ describe('GET /api/v1/portal/projects', () => {
     mockGetServerSession.mockResolvedValue({
       user: { id: 10, role: 'partner_admin', partnerId: 100 },
     });
-    mockPrisma.partner.findMany.mockResolvedValue([]);
+    mockGetBusinessPartnerScope.mockResolvedValue([100]);
     mockPrisma.project.count.mockResolvedValue(0);
     mockPrisma.project.findMany.mockResolvedValue([]);
     mockPrisma.businessStatusDefinition.findMany.mockResolvedValue([]);
@@ -232,7 +235,7 @@ describe('GET /api/v1/portal/projects', () => {
     mockGetServerSession.mockResolvedValue({
       user: { id: 10, role: 'partner_admin', partnerId: 100 },
     });
-    mockPrisma.partner.findMany.mockResolvedValue([]);
+    mockGetBusinessPartnerScope.mockResolvedValue([100]);
     mockPrisma.project.count.mockResolvedValue(0);
     mockPrisma.project.findMany.mockResolvedValue([]);
     mockPrisma.businessStatusDefinition.findMany.mockResolvedValue([]);

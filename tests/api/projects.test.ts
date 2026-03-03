@@ -273,6 +273,7 @@ describe('POST /api/v1/projects', () => {
         },
         businessStep: { findMany: vi.fn().mockResolvedValue([]) },
         projectMovement: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        customerBusinessLink: { upsert: vi.fn().mockResolvedValue({}) },
       });
     });
 
