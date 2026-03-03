@@ -21,10 +21,40 @@ function rateLimitResponse(resetAt: number) {
   );
 }
 
+// パートナードメイン判定
+const PARTNER_DOMAIN = 'partner.gakunavi.co.jp';
+function isPartnerDomain(host: string): boolean {
+  return host === PARTNER_DOMAIN || host.startsWith(`${PARTNER_DOMAIN}:`);
+}
+
 export default withAuth(
   function middleware(request) {
     const { pathname } = request.nextUrl;
     const token = request.nextauth.token;
+    const host = request.headers.get('host') || '';
+
+    // ============================================
+    // ドメイン別ルーティング（partner.gakunavi.co.jp）
+    // ============================================
+    if (isPartnerDomain(host)) {
+      // パートナードメインで社内専用パスにアクセス → /portal にリダイレクト
+      if (
+        pathname.startsWith('/dashboard') ||
+        pathname.startsWith('/businesses') ||
+        pathname.startsWith('/customers') ||
+        pathname.startsWith('/partners') ||
+        pathname.startsWith('/projects') ||
+        pathname.startsWith('/movements') ||
+        pathname.startsWith('/admin') ||
+        pathname.startsWith('/announcements')
+      ) {
+        return NextResponse.redirect(new URL('/portal', request.url));
+      }
+      // パートナードメインでルートアクセス → /portal にリダイレクト
+      if (pathname === '/') {
+        return NextResponse.redirect(new URL('/portal', request.url));
+      }
+    }
 
     // ============================================
     // レート制限（API リクエストのみ）
@@ -88,10 +118,11 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
 
-        // /login、/api/auth、/api/v1/health は認証不要
+        // /login、/api/auth、/api/health は認証不要
         if (
           pathname.startsWith('/login') ||
           pathname.startsWith('/api/auth') ||
+          pathname === '/api/health' ||
           pathname === '/api/v1/health'
         ) {
           return true;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,20 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 
 // useSearchParams を使うコンポーネントを分離（Suspense boundary 必須）
+const PARTNER_DOMAIN = 'partner.gakunavi.co.jp';
+
+function useIsPartnerDomain(): boolean {
+  const [isPartner, setIsPartner] = useState(false);
+  useEffect(() => {
+    setIsPartner(window.location.hostname === PARTNER_DOMAIN);
+  }, []);
+  return isPartner;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isPartnerDomain = useIsPartnerDomain();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +44,8 @@ function LoginForm() {
       return;
     }
 
-    const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+    const defaultRedirect = isPartnerDomain ? '/portal' : '/dashboard';
+    const callbackUrl = searchParams.get('callbackUrl') || defaultRedirect;
     router.push(callbackUrl);
     router.refresh();
   };
@@ -41,7 +53,9 @@ function LoginForm() {
   return (
     <div className="rounded-xl border bg-card p-8 shadow-lg">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">M² 管理システム</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {isPartnerDomain ? '代理店用ログイン' : 'M² 管理システム'}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">アカウントにサインインしてください</p>
       </div>
 
