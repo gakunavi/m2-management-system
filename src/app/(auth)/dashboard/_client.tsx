@@ -1,0 +1,225 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/hooks/use-auth';
+import { useBusiness } from '@/hooks/use-business';
+import { getCurrentFiscalYear } from '@/lib/revenue-helpers';
+import { PageHeader } from '@/components/layout/page-header';
+import { KpiSummaryCards } from '@/components/features/dashboard/kpi-summary-cards';
+import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const RevenueTrendChart = dynamic(
+  () => import('@/components/features/dashboard/revenue-trend-chart').then((m) => m.RevenueTrendChart),
+  { loading: () => <Skeleton className="h-80 w-full rounded-lg" /> },
+);
+const PipelineChart = dynamic(
+  () => import('@/components/features/dashboard/pipeline-chart').then((m) => m.PipelineChart),
+  { loading: () => <Skeleton className="h-64 w-full rounded-lg" /> },
+);
+import { BusinessSummaryList } from '@/components/features/dashboard/business-summary-list';
+import { PartnerRanking } from '@/components/features/dashboard/partner-ranking';
+import { ActivityFeed } from '@/components/features/dashboard/activity-feed';
+import { KpiTabSelector } from '@/components/features/dashboard/kpi-tab-selector';
+import { BusinessDocumentSection } from '@/components/features/dashboard/business-document-section';
+import { AnnouncementBanner } from '@/components/features/announcement/announcement-banner';
+import type {
+  DashboardSummary,
+  RevenueTrendResponse,
+  PipelineResponse,
+  PartnerRankingResponse,
+  ActivityResponse,
+  KpiDefinition,
+} from '@/types/dashboard';
+
+interface BusinessData {
+  id: number;
+  businessConfig: {
+    kpiDefinitions?: KpiDefinition[];
+  } | null;
+}
+
+function CompanyDashboard() {
+  const [trendYear, setTrendYear] = useState(getCurrentFiscalYear);
+
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: () => apiClient.get<DashboardSummary>('/dashboard/summary'),
+  });
+
+  const { data: trend, isLoading: trendLoading } = useQuery({
+    queryKey: ['dashboard', 'revenue-trend', trendYear],
+    queryFn: () => apiClient.get<RevenueTrendResponse>(`/dashboard/revenue-trend?year=${trendYear}`),
+  });
+
+  const { data: pipeline, isLoading: pipelineLoading } = useQuery({
+    queryKey: ['dashboard', 'pipeline'],
+    queryFn: () => apiClient.get<PipelineResponse>('/dashboard/pipeline'),
+  });
+
+  return (
+    <div className="space-y-6">
+      <AnnouncementBanner />
+
+      <KpiSummaryCards data={summary} isLoading={summaryLoading} />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <RevenueTrendChart
+            data={trend}
+            year={trendYear}
+            onYearChange={setTrendYear}
+            isLoading={trendLoading}
+          />
+        </div>
+        <div>
+          <BusinessSummaryList
+            data={summary?.businessSummaries}
+            isLoading={summaryLoading}
+          />
+        </div>
+      </div>
+
+      <PipelineChart data={pipeline} isLoading={pipelineLoading} />
+    </div>
+  );
+}
+
+function BusinessDashboard({ businessId }: { businessId: number }) {
+  const [trendYear, setTrendYear] = useState(getCurrentFiscalYear);
+  const [selectedKpiKey, setSelectedKpiKey] = useState('');
+
+  // 事業のKPI定義一覧を取得
+  const { data: businessData } = useQuery({
+    queryKey: ['business', businessId],
+    queryFn: () => apiClient.get<BusinessData>(`/businesses/${businessId}`),
+  });
+
+  const kpiDefinitions = useMemo<KpiDefinition[]>(
+    () => businessData?.businessConfig?.kpiDefinitions ?? [],
+    [businessData],
+  );
+
+  // KPI定義が変わったらデフォルト選択
+  useEffect(() => {
+    if (kpiDefinitions.length > 0 && !selectedKpiKey) {
+      const primary = kpiDefinitions.find((k) => k.isPrimary);
+      setSelectedKpiKey(primary?.key ?? kpiDefinitions[0].key);
+    }
+  }, [kpiDefinitions, selectedKpiKey]);
+
+  // KPIパラメータ付きでAPIを呼ぶ
+  const kpiParam = selectedKpiKey ? `&kpiKey=${selectedKpiKey}` : '';
+
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['dashboard', 'summary', businessId],
+    queryFn: () => apiClient.get<DashboardSummary>(`/dashboard/summary?businessId=${businessId}`),
+  });
+
+  const { data: trend, isLoading: trendLoading } = useQuery({
+    queryKey: ['dashboard', 'revenue-trend', businessId, trendYear, selectedKpiKey],
+    queryFn: () =>
+      apiClient.get<RevenueTrendResponse>(
+        `/dashboard/revenue-trend?businessId=${businessId}&year=${trendYear}${kpiParam}`,
+      ),
+    enabled: !!selectedKpiKey || kpiDefinitions.length === 0,
+  });
+
+  const { data: pipeline, isLoading: pipelineLoading } = useQuery({
+    queryKey: ['dashboard', 'pipeline', businessId, selectedKpiKey],
+    queryFn: () =>
+      apiClient.get<PipelineResponse>(
+        `/dashboard/pipeline?businessId=${businessId}${kpiParam}`,
+      ),
+    enabled: !!selectedKpiKey || kpiDefinitions.length === 0,
+  });
+
+  const { data: ranking, isLoading: rankingLoading } = useQuery({
+    queryKey: ['dashboard', 'partner-ranking', businessId],
+    queryFn: () =>
+      apiClient.get<PartnerRankingResponse>(`/dashboard/partner-ranking?businessId=${businessId}`),
+  });
+
+  const { data: activity, isLoading: activityLoading } = useQuery({
+    queryKey: ['dashboard', 'activity', businessId],
+    queryFn: () =>
+      apiClient.get<ActivityResponse>(`/dashboard/activity?businessId=${businessId}`),
+  });
+
+  const currentKpi = kpiDefinitions.find((k) => k.key === selectedKpiKey);
+
+  return (
+    <div className="space-y-6">
+      <AnnouncementBanner businessId={businessId} />
+
+      {/* KPIタブ切替 */}
+      {kpiDefinitions.length > 1 && (
+        <KpiTabSelector
+          kpiDefinitions={kpiDefinitions}
+          selectedKey={selectedKpiKey}
+          onSelect={setSelectedKpiKey}
+        />
+      )}
+
+      <KpiSummaryCards data={summary} isLoading={summaryLoading} />
+
+      <RevenueTrendChart
+        data={trend}
+        year={trendYear}
+        onYearChange={setTrendYear}
+        isLoading={trendLoading}
+        kpiLabel={currentKpi?.label}
+        kpiUnit={currentKpi?.unit}
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PipelineChart data={pipeline} isLoading={pipelineLoading} />
+        <PartnerRanking data={ranking} isLoading={rankingLoading} />
+      </div>
+
+      <ActivityFeed data={activity} isLoading={activityLoading} />
+
+      {/* 資料共有（支払明細書は代理店マスタから管理） */}
+      <BusinessDocumentSection
+        businessId={businessId}
+        documentType="material"
+        title="資料共有"
+        canManage
+        apiBase="/businesses"
+      />
+    </div>
+  );
+}
+
+export default function DashboardClient() {
+  const router = useRouter();
+  const { isPartner, isLoading: authLoading } = useAuth();
+  const { selectedBusinessId, currentBusiness, hasHydrated } = useBusiness();
+
+  // partner ロールは /portal へリダイレクト
+  if (!authLoading && isPartner) {
+    router.replace('/portal');
+    return null;
+  }
+
+  if (!hasHydrated) return null;
+
+  const title = selectedBusinessId && currentBusiness
+    ? `ダッシュボード — ${currentBusiness.businessName}`
+    : 'ダッシュボード';
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title={title} />
+
+      {selectedBusinessId ? (
+        <BusinessDashboard businessId={selectedBusinessId} />
+      ) : (
+        <CompanyDashboard />
+      )}
+    </div>
+  );
+}

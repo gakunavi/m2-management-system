@@ -1,0 +1,367 @@
+'use client';
+
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { BarChart3, CheckCircle, Circle, Play, SkipForward, LayoutGrid, GanttChartSquare } from 'lucide-react';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { ErrorDisplay } from '@/components/ui/error-display';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { Button } from '@/components/ui/button';
+import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
+import { MovementEditModal } from '@/components/features/project/movement-edit-modal';
+import { SalesStatusEditModal } from '@/components/features/project/sales-status-edit-modal';
+import { GanttChart, type ViewMode as GanttViewMode } from '@/components/features/project/gantt-chart';
+import {
+  toGanttRowsForList,
+} from '@/components/features/project/gantt-chart-utils';
+import type { GanttBar, GanttRow } from '@/components/features/project/gantt-chart-utils';
+import type {
+  MovementItem,
+  ProjectRow,
+  MovementOverviewResponse,
+} from '@/types/movement';
+import { useBusiness } from '@/hooks/use-business';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import type { MovementStatus } from '@/lib/validations/movement';
+
+const STATUS_CELL: Record<MovementStatus, { bg: string; icon: typeof CheckCircle; iconColor: string }> = {
+  pending:   { bg: 'bg-gray-50',    icon: Circle,      iconColor: 'text-gray-400' },
+  started:   { bg: 'bg-blue-50',    icon: Play,        iconColor: 'text-blue-600' },
+  completed: { bg: 'bg-green-50',   icon: CheckCircle, iconColor: 'text-green-600' },
+  skipped:   { bg: 'bg-yellow-50',  icon: SkipForward, iconColor: 'text-yellow-600' },
+};
+
+function formatCompactDate(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// モーダル用の状態型
+type ModalState =
+  | { type: 'none' }
+  | { type: 'movement'; movement: MovementItem & { projectId: number } }
+  | { type: 'salesStatus'; project: ProjectRow };
+
+type ViewMode = 'matrix' | 'gantt';
+
+export function MovementsClient() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { selectedBusinessId, hasHydrated } = useBusiness();
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [modal, setModal] = useState<ModalState>({ type: 'none' });
+  const [viewMode, setViewMode] = useState<ViewMode>('matrix');
+  const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Day');
+
+  // 事業未選択時はダッシュボードへリダイレクト（hydration完了後に判定）
+  useEffect(() => {
+    if (hasHydrated && !selectedBusinessId) {
+      router.replace('/dashboard');
+    }
+  }, [hasHydrated, selectedBusinessId, router]);
+
+  const { data, isLoading, error } = useQuery<MovementOverviewResponse>({
+    queryKey: ['project-movements-overview', selectedBusinessId, selectedStatuses],
+    queryFn: async () => {
+      const params = new URLSearchParams({ businessId: String(selectedBusinessId) });
+      if (selectedStatuses.length > 0) {
+        params.set('statuses', selectedStatuses.join(','));
+      }
+      const res = await fetch(`/api/v1/projects/movements?${params.toString()}`);
+      if (!res.ok) throw new Error('取得に失敗しました');
+      return res.json() as Promise<MovementOverviewResponse>;
+    },
+    enabled: !!selectedBusinessId,
+  });
+
+  const templates = data?.meta?.templates ?? [];
+  const statusDefinitions = data?.meta?.statusDefinitions ?? [];
+  const projects = data?.data ?? [];
+
+  // テーブル幅の計算（案件情報 + ステップ数 * セル幅 + 営業ステータス）
+  const minWidth = useMemo(() => 200 + templates.length * 120 + 100, [templates.length]);
+
+  // ガントチャート用データ
+  const ganttRows = useMemo(
+    () => data ? toGanttRowsForList(data as MovementOverviewResponse) : [],
+    [data]
+  );
+
+  const handleGanttBarClick = (bar: GanttBar) => {
+    const project = projects.find((p) => p.id === bar.projectId);
+    const movement = project?.movements.find((m) => m.id === bar.movementId);
+    if (movement && project) {
+      setModal({
+        type: 'movement',
+        movement: { ...movement, projectId: project.id },
+      });
+    }
+  };
+
+  const handleGanttRowClick = (row: GanttRow) => {
+    router.push(`/projects/${row.projectId}?from=/movements,案件ムーブメント`);
+  };
+
+  if (!hasHydrated || !selectedBusinessId) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
+  if (error) return <ErrorDisplay message="ムーブメント一覧の取得に失敗しました" />;
+
+  return (
+    <div className="space-y-4">
+      {/* ヘッダー */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6" />
+            案件ムーブメント
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            事業内の全案件の進捗状況を一覧で確認できます
+          </p>
+        </div>
+
+        {/* 表示切替 */}
+        <div className="flex gap-1">
+          <Button
+            variant={viewMode === 'matrix' ? 'default' : 'outline'}
+            onClick={() => setViewMode('matrix')}
+            size="sm"
+          >
+            <LayoutGrid className="h-4 w-4 mr-1" />
+            マトリクス
+          </Button>
+          <Button
+            variant={viewMode === 'gantt' ? 'default' : 'outline'}
+            onClick={() => setViewMode('gantt')}
+            size="sm"
+          >
+            <GanttChartSquare className="h-4 w-4 mr-1" />
+            ガントチャート
+          </Button>
+        </div>
+      </div>
+
+      {/* 営業ステータスフィルター */}
+      {statusDefinitions.length > 0 && (
+        <div className="bg-card rounded-lg border p-3 sm:p-4">
+          <SalesStatusFilter
+            statusDefinitions={statusDefinitions}
+            selectedStatuses={selectedStatuses}
+            onStatusChange={setSelectedStatuses}
+          />
+        </div>
+      )}
+
+      {/* ビューの切替 */}
+      {viewMode === 'matrix' ? (
+        <>
+          {/* 凡例 */}
+          <div className="bg-card rounded-lg border p-3 sm:p-4">
+            <p className="text-xs font-medium text-muted-foreground mb-2">凡例</p>
+            <div className="flex flex-wrap gap-2 sm:gap-4 text-xs">
+              <div className="flex items-center gap-1">
+                <Circle className="h-3.5 w-3.5 text-gray-400" />
+                <span>未着手</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Play className="h-3.5 w-3.5 text-blue-600" />
+                <span>進行中</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                <span>完了</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <SkipForward className="h-3.5 w-3.5 text-yellow-600" />
+                <span>スキップ</span>
+              </div>
+            </div>
+          </div>
+
+          {/* マトリクス表 */}
+          <div className="bg-card rounded-lg border overflow-hidden">
+            <div className="overflow-x-auto">
+              <div style={{ minWidth: `${minWidth}px` }}>
+                {/* ヘッダー行 */}
+                <div className="bg-muted/50 border-b flex">
+                  <div className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted/50 z-10">
+                    案件情報
+                  </div>
+                  <div className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium">
+                    営業ステータス
+                  </div>
+                  {templates.map((t) => (
+                    <div
+                      key={t.id}
+                      className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium"
+                    >
+                      <div className="leading-tight">{t.stepName}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* データ行 */}
+                {projects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="border-b flex hover:bg-accent/30 transition-colors"
+                  >
+                    <div
+                      className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 bg-card z-10 cursor-pointer hover:bg-accent/50 transition-colors"
+                      onClick={() => router.push(`/projects/${project.id}?from=/movements,案件ムーブメント`)}
+                    >
+                      <div className="text-sm font-medium truncate" title={project.customerName ?? ''}>
+                        {project.customerName ?? '顧客未設定'}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                        代理店：{project.partnerName ?? 'なし'}
+                      </div>
+                      {project.projectExpectedCloseMonth && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          受注予定月：{project.projectExpectedCloseMonth}
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r flex items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors"
+                      onClick={() => setModal({ type: 'salesStatus', project })}
+                    >
+                      {project.projectSalesStatusLabel ? (
+                        <StatusBadge
+                          label={project.projectSalesStatusLabel}
+                          color={project.projectSalesStatusColor}
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </div>
+
+                    {templates.map((template) => {
+                      const movement = project.movements.find(
+                        (m) => m.templateId === template.id,
+                      );
+
+                      if (!movement) {
+                        return (
+                          <div
+                            key={template.id}
+                            className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex items-center justify-center"
+                          >
+                            <Circle className="h-3.5 w-3.5 text-gray-300" />
+                          </div>
+                        );
+                      }
+
+                      const config = STATUS_CELL[movement.movementStatus as MovementStatus] ?? STATUS_CELL.pending;
+                      const Icon = config.icon;
+
+                      return (
+                        <div
+                          key={template.id}
+                          className={cn(
+                            'w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex flex-col items-center justify-center cursor-pointer hover:opacity-80 transition-opacity',
+                            config.bg,
+                          )}
+                          onClick={() =>
+                            setModal({
+                              type: 'movement',
+                              movement: { ...movement, projectId: project.id },
+                            })
+                          }
+                        >
+                          <Icon className={cn('h-4 w-4 mb-1', config.iconColor)} />
+                          <div className="w-full bg-gray-200 rounded-full h-1 mb-1">
+                            <div
+                              className={cn(
+                                'h-1 rounded-full transition-all',
+                                movement.movementStatus === 'completed' && 'bg-green-500 w-full',
+                                movement.movementStatus === 'started' && 'bg-blue-500 w-full',
+                                movement.movementStatus === 'skipped' && 'bg-yellow-500 w-full',
+                                movement.movementStatus === 'pending' && 'bg-gray-300 w-0',
+                              )}
+                            />
+                          </div>
+                          <div className="text-[10px] text-center space-y-0.5">
+                            {movement.movementStartedAt && (
+                              <div className="text-blue-600">
+                                開始: {formatCompactDate(movement.movementStartedAt)}
+                              </div>
+                            )}
+                            {movement.movementCompletedAt && (
+                              <div className="text-green-600">
+                                完了: {formatCompactDate(movement.movementCompletedAt)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {projects.length === 0 && (
+                  <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+                    該当する案件がありません
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ガントチャート表示 */
+        <div className="bg-card rounded-lg border p-2 sm:p-4">
+          <GanttChart
+            rows={ganttRows}
+            viewMode={ganttViewMode}
+            onViewModeChange={setGanttViewMode}
+            onBarClick={handleGanttBarClick}
+            onRowLabelClick={handleGanttRowClick}
+            labelWidth={160}
+          />
+        </div>
+      )}
+
+      {/* 件数表示 */}
+      <p className="text-xs text-muted-foreground">
+        {projects.length} 件の案件を表示中
+      </p>
+
+      {/* ムーブメント編集モーダル */}
+      {modal.type === 'movement' && (
+        <MovementEditModal
+          movement={modal.movement}
+          open
+          onClose={() => setModal({ type: 'none' })}
+          onSuccess={(result) => {
+            toast({ message: 'ムーブメントを更新しました', type: 'success' });
+            if (result.statusLinked) {
+              toast({
+                message: `営業ステータスが「${result.statusLinked.label}」に更新されました`,
+                type: 'info',
+                duration: 7000,
+              });
+            }
+          }}
+          onError={(error) => {
+            toast({ message: error.message, type: 'error' });
+          }}
+        />
+      )}
+
+      {/* 営業ステータス変更モーダル */}
+      {modal.type === 'salesStatus' && (
+        <SalesStatusEditModal
+          project={modal.project}
+          statusDefinitions={statusDefinitions}
+          open
+          onClose={() => setModal({ type: 'none' })}
+        />
+      )}
+    </div>
+  );
+}

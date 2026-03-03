@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+
+# production
+build/
+
+# misc
+.DS_Store
+*.pem
+
+# env files
+.env
+.env.local
+
+# prisma
+prisma/migrations/**/migration_lock.toml
+
+# IDE
+.vscode/
+.idea/
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+
+# Claude
+.claude/
+
+# ローカルアップロードファイル（開発環境のみ）
+public/uploads/*
+!public/uploads/.gitkeep

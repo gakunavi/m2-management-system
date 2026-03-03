@@ -1,0 +1,286 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { handleApiError, ApiError } from '@/lib/error-handler';
+import { formatPartner } from '@/lib/format-partner';
+import { getStorageAdapter } from '@/lib/storage';
+import { logger } from '@/lib/logger';
+import {
+  generateTierNumber,
+  validateTierHierarchy,
+  detectCircularReference,
+  recalculateDescendantTierNumbers,
+} from '@/lib/partner-hierarchy';
+
+// ============================================
+// 入力バリデーションスキーマ
+// ============================================
+
+const updatePartnerSchema = z.object({
+  partnerTier: z.string().max(50).optional().nullable(),
+  parentId: z.number().int().positive().optional().nullable(),
+  partnerName: z.string().min(1).max(200).optional(),
+  partnerSalutation: z.string().max(100).optional().nullable(),
+  partnerType: z.enum(['法人', '個人事業主', '個人', '確認中', '未設定']).optional(),
+  partnerPostalCode: z.string().max(10).optional().nullable(),
+  partnerAddress: z.string().optional().nullable(),
+  partnerPhone: z.string().max(20).optional().nullable(),
+  partnerFax: z.string().max(20).optional().nullable(),
+  partnerEmail: z.string().email().optional().nullable().or(z.literal('')),
+  partnerWebsite: z.string().url().optional().nullable().or(z.literal('')),
+  partnerEstablishedDate: z.string().optional().nullable(),
+  partnerCorporateNumber: z.string().regex(/^\d{13}$/, '法人番号は13桁の数字で入力してください').optional().nullable().or(z.literal('')),
+  partnerInvoiceNumber: z.string().regex(/^T\d{13}$/, 'インボイス番号は「T」+13桁の数字で入力してください').optional().nullable().or(z.literal('')),
+  partnerCapital: z.number().int().min(0).optional().nullable(),
+  industryId: z.number().int().positive().optional().nullable(),
+  partnerBpFormUrl: z.string().optional().nullable().or(z.literal('')),
+  partnerBpFormKey: z.string().optional().nullable(),
+  partnerFolderUrl: z.string().url().optional().nullable().or(z.literal('')),
+  partnerNotes: z.string().optional().nullable(),
+  partnerIsActive: z.boolean().optional(),
+  version: z.number().int().min(1),
+});
+
+const CONTACT_INCLUDE = {
+  select: {
+    id: true,
+    contactName: true,
+    contactDepartment: true,
+    contactPosition: true,
+    contactPhone: true,
+    contactEmail: true,
+    contactIsRepresentative: true,
+    contactIsPrimary: true,
+  },
+  orderBy: { contactSortOrder: 'asc' as const },
+};
+
+// ============================================
+// GET /api/v1/partners/:id
+// ============================================
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) throw ApiError.unauthorized();
+
+    const { id } = await params;
+    const partnerId = parseInt(id, 10);
+    if (isNaN(partnerId)) throw ApiError.notFound('代理店が見つかりません');
+
+    const partner = await prisma.partner.findUnique({
+      where: { id: partnerId },
+      include: {
+        industry: { select: { id: true, industryName: true } },
+        parent: { select: { id: true, partnerCode: true, partnerName: true } },
+        contacts: CONTACT_INCLUDE,
+      },
+    });
+
+    if (!partner) throw ApiError.notFound('代理店が見つかりません');
+
+    return NextResponse.json({ success: true, data: formatPartner(partner) });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+// ============================================
+// PATCH /api/v1/partners/:id
+// ============================================
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) throw ApiError.unauthorized();
+
+    const user = session.user as { id: number; role: string };
+    if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true },
+    });
+    if (!dbUser) throw ApiError.unauthorized('セッションが無効です。再ログインしてください。');
+
+    const { id } = await params;
+    const partnerId = parseInt(id, 10);
+    if (isNaN(partnerId)) throw ApiError.notFound('代理店が見つかりません');
+
+    const body = await request.json();
+    const data = updatePartnerSchema.parse(body);
+
+    const current = await prisma.partner.findUnique({
+      where: { id: partnerId },
+      select: { version: true, partnerIsActive: true, partnerTier: true, parentId: true, partnerName: true, partnerPhone: true },
+    });
+    if (!current) throw ApiError.notFound('代理店が見つかりません');
+    if (!current.partnerIsActive) throw ApiError.notFound('代理店が見つかりません');
+    if (current.version !== data.version) {
+      throw ApiError.conflict('他のユーザーによって更新されています。画面をリロードしてください。');
+    }
+
+    // 名前+電話番号の完全一致 重複チェック（自身を除外）
+    const checkName = data.partnerName ?? current.partnerName;
+    const checkPhone = data.partnerPhone !== undefined ? data.partnerPhone : current.partnerPhone;
+    if (checkName && checkPhone) {
+      const duplicate = await prisma.partner.findFirst({
+        where: {
+          id: { not: partnerId },
+          partnerIsActive: true,
+          partnerName: checkName,
+          partnerPhone: checkPhone,
+        },
+        select: { id: true, partnerCode: true, partnerName: true },
+      });
+      if (duplicate) {
+        throw ApiError.conflict(
+          `同名+同電話番号の代理店が既に存在します（${duplicate.partnerCode}: ${duplicate.partnerName}）`,
+        );
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { version: _version, parentId: rawParentId, ...updateData } = data;
+
+    // 階層変更の判定
+    const newTier = updateData.partnerTier !== undefined ? updateData.partnerTier : current.partnerTier;
+    const newParentId = newTier === '1次代理店'
+      ? null
+      : (rawParentId !== undefined ? rawParentId : current.parentId);
+    const tierChanged = updateData.partnerTier !== undefined && updateData.partnerTier !== current.partnerTier;
+    const parentChanged = rawParentId !== undefined && rawParentId !== current.parentId;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // 階層・親の整合性チェック
+      if (tierChanged || parentChanged) {
+        const tierError = await validateTierHierarchy(tx, newTier, newParentId);
+        if (tierError) {
+          throw new ApiError('VALIDATION_ERROR', tierError, 400, [
+            { field: 'parentId', message: tierError },
+          ]);
+        }
+
+        // 循環参照チェック
+        if (newParentId) {
+          const isCircular = await detectCircularReference(tx, partnerId, newParentId);
+          if (isCircular) {
+            throw new ApiError('VALIDATION_ERROR', '循環参照が検出されました', 400, [
+              { field: 'parentId', message: '指定した親代理店はこの代理店の子孫です' },
+            ]);
+          }
+        }
+      }
+
+      // tierNumber の再計算
+      let partnerTierNumber: string | null | undefined;
+      if (tierChanged || parentChanged) {
+        partnerTierNumber = await generateTierNumber(tx, newTier, newParentId);
+      }
+
+      const result = await tx.partner.update({
+        where: { id: partnerId },
+        data: {
+          ...updateData,
+          ...(rawParentId !== undefined ? { parentId: newParentId } : {}),
+          ...(partnerTierNumber !== undefined ? { partnerTierNumber } : {}),
+          partnerEstablishedDate:
+            updateData.partnerEstablishedDate
+              ? new Date(updateData.partnerEstablishedDate)
+              : updateData.partnerEstablishedDate,
+          partnerEmail: updateData.partnerEmail !== undefined ? (updateData.partnerEmail || null) : undefined,
+          partnerWebsite: updateData.partnerWebsite !== undefined ? (updateData.partnerWebsite || null) : undefined,
+          partnerCorporateNumber: updateData.partnerCorporateNumber !== undefined ? (updateData.partnerCorporateNumber || null) : undefined,
+          partnerInvoiceNumber: updateData.partnerInvoiceNumber !== undefined ? (updateData.partnerInvoiceNumber || null) : undefined,
+          partnerCapital: updateData.partnerCapital !== undefined
+            ? (updateData.partnerCapital != null ? BigInt(updateData.partnerCapital) : null)
+            : undefined,
+          partnerBpFormUrl: updateData.partnerBpFormUrl !== undefined ? (updateData.partnerBpFormUrl || null) : undefined,
+          partnerBpFormKey: updateData.partnerBpFormKey !== undefined ? (updateData.partnerBpFormKey || null) : undefined,
+          partnerFolderUrl: updateData.partnerFolderUrl !== undefined ? (updateData.partnerFolderUrl || null) : undefined,
+          version: { increment: 1 },
+          updatedBy: user.id,
+        },
+        include: {
+          industry: { select: { id: true, industryName: true } },
+          parent: { select: { id: true, partnerCode: true, partnerName: true } },
+          contacts: CONTACT_INCLUDE,
+        },
+      });
+
+      // 親変更時は子孫の tierNumber も再計算
+      if (tierChanged || parentChanged) {
+        await recalculateDescendantTierNumbers(tx, partnerId);
+      }
+
+      return result;
+    });
+
+    return NextResponse.json({ success: true, data: formatPartner(updated) });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+// ============================================
+// DELETE /api/v1/partners/:id  (論理削除)
+// ============================================
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) throw ApiError.unauthorized();
+
+    const user = session.user as { id: number; role: string };
+    if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true },
+    });
+    if (!dbUser) throw ApiError.unauthorized('セッションが無効です。再ログインしてください。');
+
+    const { id } = await params;
+    const partnerId = parseInt(id, 10);
+    if (isNaN(partnerId)) throw ApiError.notFound('代理店が見つかりません');
+
+    const current = await prisma.partner.findUnique({
+      where: { id: partnerId },
+      select: { partnerIsActive: true, partnerBpFormKey: true },
+    });
+    if (!current || !current.partnerIsActive) throw ApiError.notFound('代理店が見つかりません');
+
+    await prisma.partner.update({
+      where: { id: partnerId },
+      data: {
+        partnerIsActive: false,
+        version: { increment: 1 },
+        updatedBy: user.id,
+      },
+    });
+
+    // BP申込書ファイルをストレージから削除
+    if (current.partnerBpFormKey) {
+      const storage = getStorageAdapter();
+      await storage.delete(current.partnerBpFormKey).catch(() => {
+        // ストレージ削除失敗はログのみ（論理削除は完了済み）
+        logger.error(`storage delete failed: ${current.partnerBpFormKey}`, undefined, 'partner delete');
+      });
+    }
+
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

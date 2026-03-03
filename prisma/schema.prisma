@@ -1,0 +1,777 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  Int                      @id @default(autoincrement())
+  userEmail           String                   @unique @map("user_email") @db.VarChar(255)
+  userPasswordHash    String                   @map("user_password_hash") @db.VarChar(255)
+  userPasswordPlain   String?                  @map("user_password_plain") @db.VarChar(100)
+  userName            String                   @map("user_name") @db.VarChar(100)
+  userRole            String                   @map("user_role") @db.VarChar(20)
+  userPartnerId       Int?                     @map("user_partner_id")
+  userIsActive        Boolean                  @default(true) @map("user_is_active")
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy           Int?                     @map("created_by")
+  updatedBy           Int?                     @map("updated_by")
+  createdCustomers    Customer[]               @relation("CustomerCreator")
+  updatedCustomers    Customer[]               @relation("CustomerUpdater")
+  createdPartners     Partner[]                @relation("PartnerCreator")
+  updatedPartners     Partner[]                @relation("PartnerUpdater")
+  createdProjects     Project[]                @relation("ProjectCreator")
+  assignedProjects    Project[]                @relation("ProjectAssignedUser")
+  updatedProjects     Project[]                @relation("ProjectUpdater")
+  createdSalesTargets SalesTarget[]            @relation("SalesTargetCreator")
+  updatedSalesTargets SalesTarget[]            @relation("SalesTargetUpdater")
+  createdProjectFiles        ProjectFile[]            @relation("ProjectFileCreator")
+  createdProjectComments     ProjectComment[]         @relation("ProjectCommentCreator")
+  createdQaCategories        QaCategory[]             @relation("QaCategoryCreator")
+  createdQaItems             QaItem[]                 @relation("QaItemCreator")
+  updatedQaItems             QaItem[]                 @relation("QaItemUpdater")
+  uploadedQaAttachments      QaAttachment[]           @relation("QaAttachmentUploader")
+  assignedInquiries          Inquiry[]                @relation("InquiryAssignedUser")
+  respondedInquiries         Inquiry[]                @relation("InquiryRespondedBy")
+  createdInquiries           Inquiry[]                @relation("InquiryCreator")
+  uploadedInquiryAttachments InquiryAttachment[]      @relation("InquiryAttachmentUploader")
+  notifications              Notification[]
+  createdBusinessDocuments   BusinessDocument[]       @relation("BusinessDocumentCreator")
+  notifiedBusinessDocuments  BusinessDocument[]       @relation("BusinessDocumentNotifier")
+  createdAnnouncements       Announcement[]           @relation("AnnouncementAuthor")
+  assignedReminders          ProjectReminder[]        @relation("ReminderAssignee")
+  createdReminders           ProjectReminder[]        @relation("ReminderCreator")
+  savedTableViews            SavedTableView[]
+  businessAssignments UserBusinessAssignment[]
+  tablePreferences    UserTablePreference[]
+  creator             User?                    @relation("UserCreatedBy", fields: [createdBy], references: [id])
+  createdUsers        User[]                   @relation("UserCreatedBy")
+  updater             User?                    @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
+  updatedUsers        User[]                   @relation("UserUpdatedBy")
+  partner             Partner?                 @relation("UserPartner", fields: [userPartnerId], references: [id])
+
+  @@index([userRole])
+  @@index([userIsActive])
+  @@map("users")
+}
+
+model Business {
+  id                          Int                           @id @default(autoincrement())
+  businessCode                String                        @unique @map("business_code") @db.VarChar(20)
+  businessName                String                        @map("business_name") @db.VarChar(100)
+  businessDescription         String?                       @map("business_description")
+  businessConfig              Json                          @default("{}") @map("business_config")
+  businessIsActive            Boolean                       @default(true) @map("business_is_active")
+  businessSortOrder           Int                           @default(0) @map("business_sort_order")
+  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy                   Int?                          @map("created_by")
+  updatedBy                   Int?                          @map("updated_by")
+  version                     Int                           @default(1)
+  businessProjectPrefix       String?                       @map("business_project_prefix") @db.VarChar(10)
+  statusDefinitions           BusinessStatusDefinition[]
+  customerBankAccounts        CustomerBankAccount[]
+  customerLinks               CustomerBusinessLink[]
+  contactBusinessLinks        CustomerContactBusinessLink[]
+  movementTemplates           MovementTemplate[]
+  partnerBankAccounts         PartnerBankAccount[]
+  partnerContactBusinessLinks PartnerContactBusinessLink[]
+  partnerLinks                PartnerBusinessLink[]
+  projects                    Project[]
+  salesTargets                SalesTarget[]
+  userAssignments             UserBusinessAssignment[]
+  inquiries                   Inquiry[]
+  qaItems                     QaItem[]
+  documents                   BusinessDocument[]
+  announcements                Announcement[]
+
+  @@index([businessIsActive, businessSortOrder])
+  @@index([businessCode, businessIsActive], map: "idx_businesses_code_active")
+  @@index([businessSortOrder], map: "idx_businesses_sort_order")
+  @@map("businesses")
+}
+
+model BusinessStatusDefinition {
+  id              Int      @id @default(autoincrement())
+  businessId      Int      @map("business_id")
+  statusCode      String   @map("status_code") @db.VarChar(50)
+  statusLabel     String   @map("status_label") @db.VarChar(100)
+  statusPriority  Int      @map("status_priority")
+  statusColor     String?  @map("status_color") @db.VarChar(20)
+  statusIsFinal   Boolean  @default(false) @map("status_is_final")
+  statusIsLost    Boolean  @default(false) @map("status_is_lost")
+  statusSortOrder Int      @default(0) @map("status_sort_order")
+  statusIsActive  Boolean  @default(true) @map("status_is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  business        Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, statusCode])
+  @@index([businessId, statusSortOrder], map: "idx_business_statuses_sort")
+  @@index([businessId, statusIsFinal], map: "idx_business_statuses_final")
+  @@index([businessId, statusIsLost], map: "idx_business_statuses_lost")
+  @@map("business_status_definitions")
+}
+
+model MovementTemplate {
+  id                   Int               @id @default(autoincrement())
+  businessId           Int               @map("business_id")
+  stepNumber           Int               @map("step_number")
+  stepCode             String            @map("step_code") @db.VarChar(50)
+  stepName             String            @map("step_name") @db.VarChar(100)
+  stepDescription      String?           @map("step_description")
+  stepIsSalesLinked    Boolean           @default(false) @map("step_is_sales_linked")
+  stepLinkedStatusCode String?           @map("step_linked_status_code") @db.VarChar(50)
+  stepConfig           Json              @default("{}") @map("step_config")
+  stepIsActive         Boolean           @default(true) @map("step_is_active")
+  visibleToPartner     Boolean           @default(false) @map("visible_to_partner")
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  business             Business          @relation(fields: [businessId], references: [id])
+  movements            ProjectMovement[]
+
+  @@unique([businessId, stepNumber])
+  @@unique([businessId, stepCode], map: "uq_template_business_code")
+  @@index([businessId, stepNumber], map: "idx_movement_templates_sort")
+  @@map("movement_templates")
+}
+
+model UserBusinessAssignment {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  businessId     Int      @map("business_id")
+  assignmentRole String   @default("member") @map("assignment_role") @db.VarChar(20)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  business       Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@map("user_business_assignments")
+}
+
+model UserTablePreference {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  tableKey  String   @map("table_key") @db.VarChar(100)
+  settings  Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tableKey])
+  @@index([userId])
+  @@map("user_table_preferences")
+}
+
+model SavedTableView {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  tableKey     String   @map("table_key") @db.VarChar(100)
+  viewName     String   @map("view_name") @db.VarChar(100)
+  settings     Json
+  displayOrder Int      @default(0) @map("display_order")
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tableKey])
+  @@map("saved_table_views")
+}
+
+model Industry {
+  id           Int        @id @default(autoincrement())
+  industryName String     @unique @map("industry_name") @db.VarChar(100)
+  displayOrder Int        @default(0) @map("display_order")
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customers    Customer[]
+  partners     Partner[]
+
+  @@index([isActive, displayOrder])
+  @@map("industries")
+}
+
+model Customer {
+  id                      Int                    @id @default(autoincrement())
+  customerCode            String                 @unique @map("customer_code") @db.VarChar(20)
+  customerName            String                 @map("customer_name") @db.VarChar(200)
+  customerSalutation      String?                @map("customer_salutation") @db.VarChar(100)
+  customerType            String                 @default("未設定") @map("customer_type") @db.VarChar(20)
+  customerPostalCode      String?                @map("customer_postal_code") @db.VarChar(10)
+  customerAddress         String?                @map("customer_address")
+  customerPhone           String?                @map("customer_phone") @db.VarChar(20)
+  customerFax             String?                @map("customer_fax") @db.VarChar(20)
+  customerEmail           String?                @map("customer_email") @db.VarChar(255)
+  customerWebsite         String?                @map("customer_website") @db.VarChar(500)
+  customerCorporateNumber String?                @map("customer_corporate_number") @db.VarChar(13)
+  customerInvoiceNumber   String?                @map("customer_invoice_number") @db.VarChar(14)
+  customerCapital         BigInt?                @map("customer_capital")
+  customerEstablishedDate DateTime?              @map("customer_established_date") @db.Date
+  customerFolderUrl       String?                @map("customer_folder_url") @db.VarChar(500)
+  customerNotes           String?                @map("customer_notes")
+  customerIsActive        Boolean                @default(true) @map("customer_is_active")
+  version                 Int                    @default(1)
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy               Int?                   @map("created_by")
+  updatedBy               Int?                   @map("updated_by")
+  industryId              Int?                   @map("industry_id")
+  bankAccounts            CustomerBankAccount[]
+  businessLinks           CustomerBusinessLink[]
+  contacts                CustomerContact[]
+  creator                 User?                  @relation("CustomerCreator", fields: [createdBy], references: [id])
+  industry                Industry?              @relation(fields: [industryId], references: [id])
+  updater                 User?                  @relation("CustomerUpdater", fields: [updatedBy], references: [id])
+  projects                Project[]
+
+  @@index([customerCode, customerIsActive], map: "idx_customers_code_active")
+  @@index([customerName], map: "idx_customers_name")
+  @@index([industryId], map: "idx_customers_industry_id")
+  @@index([customerType], map: "idx_customers_type")
+  @@index([createdAt], map: "idx_customers_created_at")
+  @@index([customerIsActive, updatedAt], map: "idx_customers_active_updated")
+  @@map("customers")
+}
+
+model CustomerContact {
+  id                          Int                           @id @default(autoincrement())
+  customerId                  Int                           @map("customer_id")
+  contactName                 String                        @map("contact_name") @db.VarChar(100)
+  contactDepartment           String?                       @map("contact_department") @db.VarChar(100)
+  contactPosition             String?                       @map("contact_position") @db.VarChar(100)
+  contactIsRepresentative     Boolean                       @default(false) @map("contact_is_representative")
+  contactPhone                String?                       @map("contact_phone") @db.VarChar(20)
+  contactFax                  String?                       @map("contact_fax") @db.VarChar(20)
+  contactEmail                String?                       @map("contact_email") @db.VarChar(255)
+  contactBusinessCardFrontUrl String?                       @map("contact_business_card_front_url") @db.VarChar(500)
+  contactBusinessCardBackUrl  String?                       @map("contact_business_card_back_url") @db.VarChar(500)
+  contactIsPrimary            Boolean                       @default(false) @map("contact_is_primary")
+  contactSortOrder            Int                           @default(0) @map("contact_sort_order")
+  createdAt                   DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  businessLinks               CustomerContactBusinessLink[]
+  customer                    Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_contacts")
+}
+
+model CustomerContactBusinessLink {
+  id         Int             @id @default(autoincrement())
+  contactId  Int             @map("contact_id")
+  businessId Int             @map("business_id")
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  business   Business        @relation(fields: [businessId], references: [id])
+  contact    CustomerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, businessId])
+  @@index([businessId], map: "idx_contact_business_links_business")
+  @@map("customer_contact_business_links")
+}
+
+model CustomerBusinessLink {
+  id             Int      @id @default(autoincrement())
+  customerId     Int      @map("customer_id")
+  businessId     Int      @map("business_id")
+  linkStatus     String   @default("active") @map("link_status") @db.VarChar(20)
+  linkCustomData Json     @default("{}") @map("link_custom_data")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  business       Business @relation(fields: [businessId], references: [id])
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, businessId])
+  @@map("customer_business_links")
+}
+
+model PartnerBusinessLink {
+  id                 Int      @id @default(autoincrement())
+  partnerId          Int      @map("partner_id")
+  businessId         Int      @map("business_id")
+  linkStatus         String   @default("active") @map("link_status") @db.VarChar(20)
+  commissionRate     Decimal? @map("commission_rate") @db.Decimal(5, 2)
+  contactPerson      String?  @map("contact_person") @db.VarChar(100)
+  linkCustomData     Json     @default("{}") @map("link_custom_data")
+  businessTier       String?  @map("business_tier") @db.VarChar(50)
+  businessTierNumber String?  @map("business_tier_number") @db.VarChar(50)
+  businessParentId   Int?     @map("business_parent_id")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  business           Business @relation(fields: [businessId], references: [id])
+  partner            Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  businessParent     Partner? @relation("BusinessLinkParent", fields: [businessParentId], references: [id])
+
+  @@unique([partnerId, businessId])
+  @@index([businessId], map: "idx_partner_business_links_business")
+  @@index([businessId, businessTier], map: "idx_partner_business_links_biz_tier")
+  @@index([businessParentId], map: "idx_partner_business_links_biz_parent")
+  @@map("partner_business_links")
+}
+
+model Partner {
+  id                     Int                  @id @default(autoincrement())
+  partnerCode            String               @unique @map("partner_code") @db.VarChar(20)
+  partnerTier            String?              @map("partner_tier") @db.VarChar(50)
+  partnerName            String               @map("partner_name") @db.VarChar(200)
+  partnerSalutation      String?              @map("partner_salutation") @db.VarChar(100)
+  partnerType            String               @default("未設定") @map("partner_type") @db.VarChar(20)
+  partnerPostalCode      String?              @map("partner_postal_code") @db.VarChar(10)
+  partnerAddress         String?              @map("partner_address")
+  partnerPhone           String?              @map("partner_phone") @db.VarChar(20)
+  partnerFax             String?              @map("partner_fax") @db.VarChar(20)
+  partnerEmail           String?              @map("partner_email") @db.VarChar(255)
+  partnerWebsite         String?              @map("partner_website") @db.VarChar(500)
+  partnerEstablishedDate DateTime?            @map("partner_established_date") @db.Date
+  industryId             Int?                 @map("industry_id")
+  partnerFolderUrl       String?              @map("partner_folder_url") @db.VarChar(500)
+  partnerNotes           String?              @map("partner_notes")
+  partnerIsActive        Boolean              @default(true) @map("partner_is_active")
+  version                Int                  @default(1)
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy              Int?                 @map("created_by")
+  updatedBy              Int?                 @map("updated_by")
+  parentId               Int?                 @map("parent_id")
+  partnerTierNumber      String?              @map("partner_tier_number") @db.VarChar(50)
+  partnerBpFormKey       String?              @map("partner_bp_form_key") @db.VarChar(500)
+  partnerBpFormUrl       String?              @map("partner_bp_form_url") @db.VarChar(500)
+  partnerCapital         BigInt?              @map("partner_capital")
+  partnerCorporateNumber String?              @map("partner_corporate_number") @db.VarChar(13)
+  partnerInvoiceNumber   String?              @map("partner_invoice_number") @db.VarChar(14)
+  bankAccounts           PartnerBankAccount[]
+  contacts               PartnerContact[]
+  creator                User?                @relation("PartnerCreator", fields: [createdBy], references: [id])
+  industry               Industry?            @relation(fields: [industryId], references: [id])
+  parent                 Partner?             @relation("PartnerHierarchy", fields: [parentId], references: [id])
+  children               Partner[]            @relation("PartnerHierarchy")
+  updater                User?                @relation("PartnerUpdater", fields: [updatedBy], references: [id])
+  projects               Project[]
+  users                  User[]               @relation("UserPartner")
+  documents              BusinessDocument[]   @relation("PartnerDocuments")
+  businessLinks          PartnerBusinessLink[]
+  businessLinkChildren   PartnerBusinessLink[] @relation("BusinessLinkParent")
+
+  @@index([partnerCode, partnerIsActive], map: "idx_partners_code_active")
+  @@index([partnerName], map: "idx_partners_name")
+  @@index([industryId], map: "idx_partners_industry_id")
+  @@index([partnerType], map: "idx_partners_type")
+  @@index([createdAt], map: "idx_partners_created_at")
+  @@index([partnerIsActive, updatedAt], map: "idx_partners_active_updated")
+  @@index([parentId], map: "idx_partners_parent_id")
+  @@index([partnerTierNumber], map: "idx_partners_tier_number")
+  @@map("partners")
+}
+
+model PartnerContact {
+  id                          Int                          @id @default(autoincrement())
+  partnerId                   Int                          @map("partner_id")
+  contactName                 String                       @map("contact_name") @db.VarChar(100)
+  contactDepartment           String?                      @map("contact_department") @db.VarChar(100)
+  contactPosition             String?                      @map("contact_position") @db.VarChar(100)
+  contactIsRepresentative     Boolean                      @default(false) @map("contact_is_representative")
+  contactPhone                String?                      @map("contact_phone") @db.VarChar(20)
+  contactFax                  String?                      @map("contact_fax") @db.VarChar(20)
+  contactEmail                String?                      @map("contact_email") @db.VarChar(255)
+  contactBusinessCardFrontUrl String?                      @map("contact_business_card_front_url") @db.VarChar(500)
+  contactBusinessCardBackUrl  String?                      @map("contact_business_card_back_url") @db.VarChar(500)
+  contactIsPrimary            Boolean                      @default(false) @map("contact_is_primary")
+  contactSortOrder            Int                          @default(0) @map("contact_sort_order")
+  createdAt                   DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  businessLinks               PartnerContactBusinessLink[]
+  partner                     Partner                      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@map("partner_contacts")
+}
+
+model PartnerContactBusinessLink {
+  id         Int            @id @default(autoincrement())
+  contactId  Int            @map("contact_id")
+  businessId Int            @map("business_id")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  business   Business       @relation(fields: [businessId], references: [id])
+  contact    PartnerContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, businessId])
+  @@index([businessId], map: "idx_partner_contact_business_links_business")
+  @@map("partner_contact_business_links")
+}
+
+model PartnerBankAccount {
+  id            Int       @id @default(autoincrement())
+  partnerId     Int       @map("partner_id")
+  businessId    Int?      @map("business_id")
+  bankName      String    @map("bank_name") @db.VarChar(100)
+  branchName    String    @map("branch_name") @db.VarChar(100)
+  accountType   String    @map("account_type") @db.VarChar(10)
+  accountNumber String    @map("account_number") @db.VarChar(20)
+  accountHolder String    @map("account_holder") @db.VarChar(100)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  business      Business? @relation(fields: [businessId], references: [id])
+  partner       Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId], map: "idx_partner_bank_accounts_partner")
+  @@map("partner_bank_accounts")
+}
+
+model CustomerBankAccount {
+  id            Int       @id @default(autoincrement())
+  customerId    Int       @map("customer_id")
+  businessId    Int?      @map("business_id")
+  bankName      String    @map("bank_name") @db.VarChar(100)
+  branchName    String    @map("branch_name") @db.VarChar(100)
+  accountType   String    @map("account_type") @db.VarChar(10)
+  accountNumber String    @map("account_number") @db.VarChar(20)
+  accountHolder String    @map("account_holder") @db.VarChar(100)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  business      Business? @relation(fields: [businessId], references: [id])
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId], map: "idx_customer_bank_accounts_customer")
+  @@map("customer_bank_accounts")
+}
+
+model Project {
+  id                        Int               @id @default(autoincrement())
+  businessId                Int               @map("business_id")
+  customerId                Int               @map("customer_id")
+  partnerId                 Int?              @map("partner_id")
+  projectNo                 String            @unique @map("project_no") @db.VarChar(30)
+  projectSalesStatus        String            @map("project_sales_status") @db.VarChar(50)
+  projectExpectedCloseMonth String?           @map("project_expected_close_month") @db.VarChar(7)
+  projectAssignedUserId     Int?              @map("project_assigned_user_id")
+  projectNotes              String?           @map("project_notes")
+  projectCustomData         Json              @default("{}") @map("project_custom_data")
+  projectStatusChangedAt    DateTime?         @map("project_status_changed_at") @db.Timestamptz(6)
+  projectIsActive           Boolean           @default(true) @map("project_is_active")
+  version                   Int               @default(1)
+  createdAt                 DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy                 Int?              @map("created_by")
+  updatedBy                 Int?              @map("updated_by")
+  projectAssignedUserName   String?           @map("project_assigned_user_name") @db.VarChar(100)
+  projectRenovationNumber   String?           @map("project_renovation_number") @db.VarChar(100)
+  movements                 ProjectMovement[]
+  files                     ProjectFile[]
+  comments                  ProjectComment[]
+  reminders                 ProjectReminder[]
+  inquiries                 Inquiry[]
+  business                  Business          @relation(fields: [businessId], references: [id])
+  creator                   User?             @relation("ProjectCreator", fields: [createdBy], references: [id])
+  customer                  Customer          @relation(fields: [customerId], references: [id])
+  partner                   Partner?          @relation(fields: [partnerId], references: [id])
+  assignedUser              User?             @relation("ProjectAssignedUser", fields: [projectAssignedUserId], references: [id])
+  updater                   User?             @relation("ProjectUpdater", fields: [updatedBy], references: [id])
+
+  @@index([businessId, projectSalesStatus], map: "idx_projects_business_status")
+  @@index([customerId], map: "idx_projects_customer_id")
+  @@index([partnerId], map: "idx_projects_partner_id")
+  @@index([projectAssignedUserId], map: "idx_projects_assigned_user_id")
+  @@index([projectNo], map: "idx_projects_no")
+  @@index([projectStatusChangedAt(sort: Desc)], map: "idx_projects_status_changed")
+  @@map("projects")
+}
+
+model ProjectMovement {
+  id                  Int              @id @default(autoincrement())
+  projectId           Int              @map("project_id")
+  templateId          Int              @map("template_id")
+  movementStatus      String           @default("pending") @map("movement_status") @db.VarChar(20)
+  movementStartedAt   DateTime?        @map("movement_started_at") @db.Timestamptz(6)
+  movementCompletedAt DateTime?        @map("movement_completed_at") @db.Timestamptz(6)
+  movementNotes       String?          @map("movement_notes")
+  movementData        Json             @default("{}") @map("movement_data")
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy           Int?             @map("updated_by")
+  project             Project          @relation(fields: [projectId], references: [id])
+  template            MovementTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([projectId, templateId])
+  @@index([projectId], map: "idx_project_movements_project")
+  @@map("project_movements")
+}
+
+model ProjectComment {
+  id          Int      @id @default(autoincrement())
+  projectId   Int      @map("project_id")
+  commentText String   @map("comment_text") @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy   Int?     @map("created_by")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User?   @relation("ProjectCommentCreator", fields: [createdBy], references: [id])
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("project_comments")
+}
+
+model ProjectFile {
+  id               Int      @id @default(autoincrement())
+  projectId        Int      @map("project_id")
+  fileName         String   @map("file_name") @db.VarChar(255)
+  fileStorageKey   String   @map("file_storage_key") @db.VarChar(500)
+  fileUrl          String   @map("file_url") @db.VarChar(500)
+  fileSize         Int      @map("file_size")
+  fileMimeType     String   @map("file_mime_type") @db.VarChar(100)
+  fileCategory     String?  @map("file_category") @db.VarChar(100)
+  fileDescription  String?  @map("file_description")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy        Int?     @map("created_by")
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator          User?    @relation("ProjectFileCreator", fields: [createdBy], references: [id])
+
+  @@index([projectId], map: "idx_project_files_project_id")
+  @@index([projectId, fileCategory], map: "idx_project_files_project_category")
+  @@map("project_files")
+}
+
+model SalesTarget {
+  id           Int      @id @default(autoincrement())
+  businessId   Int      @map("business_id")
+  targetMonth  String   @map("target_month") @db.VarChar(7)
+  targetAmount Decimal  @map("target_amount") @db.Decimal(15, 2)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy    Int      @map("created_by")
+  updatedBy    Int      @map("updated_by")
+  kpiKey       String   @default("revenue") @map("kpi_key") @db.VarChar(50)
+  business     Business @relation(fields: [businessId], references: [id])
+  creator      User     @relation("SalesTargetCreator", fields: [createdBy], references: [id])
+  updater      User     @relation("SalesTargetUpdater", fields: [updatedBy], references: [id])
+
+  @@unique([businessId, targetMonth, kpiKey])
+  @@index([businessId, targetMonth, kpiKey], map: "idx_sales_targets_business_month_kpi")
+  @@map("sales_targets")
+}
+
+// ============================================
+// QA/問い合わせ管理（Phase 5B）
+// ============================================
+
+model QaCategory {
+  id                  Int      @id @default(autoincrement())
+  categoryName        String   @map("category_name") @db.VarChar(100)
+  categoryDescription String?  @map("category_description") @db.Text
+  categorySortOrder   Int      @default(0) @map("category_sort_order")
+  categoryIsActive    Boolean  @default(true) @map("category_is_active")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy           Int?     @map("created_by")
+
+  items     QaItem[]
+  inquiries Inquiry[]
+  creator   User?    @relation("QaCategoryCreator", fields: [createdBy], references: [id])
+
+  @@index([categoryIsActive, categorySortOrder])
+  @@map("qa_categories")
+}
+
+model QaItem {
+  id              Int       @id @default(autoincrement())
+  categoryId      Int       @map("category_id")
+  businessId      Int?      @map("business_id")
+  itemTitle       String    @map("item_title") @db.VarChar(200)
+  itemQuestion    String    @map("item_question") @db.Text
+  itemAnswer      String    @map("item_answer") @db.Text
+  itemStatus      String    @default("draft") @map("item_status") @db.VarChar(20)
+  itemIsPublic    Boolean   @default(false) @map("item_is_public")
+  itemViewCount   Int       @default(0) @map("item_view_count")
+  itemSortOrder   Int       @default(0) @map("item_sort_order")
+  itemPublishedAt DateTime? @map("item_published_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy       Int?      @map("created_by")
+  updatedBy       Int?      @map("updated_by")
+
+  business           Business?      @relation(fields: [businessId], references: [id])
+  category           QaCategory     @relation(fields: [categoryId], references: [id])
+  attachments        QaAttachment[]
+  inquiriesConverted Inquiry[]      @relation("InquiryConvertedQa")
+  creator            User?          @relation("QaItemCreator", fields: [createdBy], references: [id])
+  updater            User?          @relation("QaItemUpdater", fields: [updatedBy], references: [id])
+
+  @@index([categoryId, itemSortOrder])
+  @@index([itemStatus])
+  @@index([businessId])
+  @@map("qa_items")
+}
+
+model QaAttachment {
+  id                     Int      @id @default(autoincrement())
+  qaItemId               Int      @map("qa_item_id")
+  attachmentName         String   @map("attachment_name") @db.VarChar(255)
+  attachmentOriginalName String   @map("attachment_original_name") @db.VarChar(255)
+  attachmentStorageKey   String   @map("attachment_storage_key") @db.VarChar(500)
+  attachmentUrl          String   @map("attachment_url") @db.VarChar(500)
+  attachmentSize         Int      @map("attachment_size")
+  attachmentMimeType     String   @map("attachment_mime_type") @db.VarChar(100)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  uploadedBy             Int?     @map("uploaded_by")
+
+  qaItem   QaItem @relation(fields: [qaItemId], references: [id], onDelete: Cascade)
+  uploader User?  @relation("QaAttachmentUploader", fields: [uploadedBy], references: [id])
+
+  @@index([qaItemId])
+  @@map("qa_attachments")
+}
+
+model Inquiry {
+  id                     Int       @id @default(autoincrement())
+  inquirySubject         String    @map("inquiry_subject") @db.VarChar(200)
+  inquiryBody            String    @map("inquiry_body") @db.Text
+  inquiryStatus          String    @default("new") @map("inquiry_status") @db.VarChar(20)
+  inquiryBusinessId      Int?      @map("inquiry_business_id")
+  inquiryCategoryId      Int?      @map("inquiry_category_id")
+  inquiryProjectId       Int?      @map("inquiry_project_id")
+  inquiryAssignedUserId  Int?      @map("inquiry_assigned_user_id")
+  inquiryResponse        String?   @map("inquiry_response") @db.Text
+  inquiryRespondedAt     DateTime? @map("inquiry_responded_at") @db.Timestamptz(6)
+  inquiryRespondedBy     Int?      @map("inquiry_responded_by")
+  inquiryIsConvertedToQa Boolean   @default(false) @map("inquiry_is_converted_to_qa")
+  inquiryConvertedQaId   Int?      @map("inquiry_converted_qa_id")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy              Int       @map("created_by")
+
+  business        Business?            @relation(fields: [inquiryBusinessId], references: [id])
+  category        QaCategory?          @relation(fields: [inquiryCategoryId], references: [id])
+  project         Project?             @relation(fields: [inquiryProjectId], references: [id])
+  assignedUser    User?                @relation("InquiryAssignedUser", fields: [inquiryAssignedUserId], references: [id])
+  respondedByUser User?                @relation("InquiryRespondedBy", fields: [inquiryRespondedBy], references: [id])
+  creator         User                 @relation("InquiryCreator", fields: [createdBy], references: [id])
+  convertedQa     QaItem?              @relation("InquiryConvertedQa", fields: [inquiryConvertedQaId], references: [id])
+  attachments     InquiryAttachment[]
+
+  @@index([inquiryStatus])
+  @@index([inquiryBusinessId])
+  @@index([inquiryCategoryId])
+  @@index([createdBy])
+  @@index([inquiryAssignedUserId])
+  @@map("inquiries")
+}
+
+model InquiryAttachment {
+  id                     Int      @id @default(autoincrement())
+  inquiryId              Int      @map("inquiry_id")
+  attachmentName         String   @map("attachment_name") @db.VarChar(255)
+  attachmentOriginalName String   @map("attachment_original_name") @db.VarChar(255)
+  attachmentStorageKey   String   @map("attachment_storage_key") @db.VarChar(500)
+  attachmentUrl          String   @map("attachment_url") @db.VarChar(500)
+  attachmentSize         Int      @map("attachment_size")
+  attachmentMimeType     String   @map("attachment_mime_type") @db.VarChar(100)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  uploadedBy             Int?     @map("uploaded_by")
+
+  inquiry  Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  uploader User?   @relation("InquiryAttachmentUploader", fields: [uploadedBy], references: [id])
+
+  @@index([inquiryId])
+  @@map("inquiry_attachments")
+}
+
+// ============================================
+// 通知
+// ============================================
+
+model Notification {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @map("user_id")
+  notificationType    String   @map("notification_type") @db.VarChar(30)
+  notificationTitle   String   @map("notification_title") @db.VarChar(200)
+  notificationMessage String   @map("notification_message") @db.Text
+  isRead              Boolean  @default(false) @map("is_read")
+  relatedEntity       String?  @map("related_entity") @db.VarChar(50)
+  relatedEntityId     Int?     @map("related_entity_id")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model BusinessDocument {
+  id                  Int      @id @default(autoincrement())
+  businessId          Int      @map("business_id")
+  partnerId           Int?     @map("partner_id")
+  documentType        String   @map("document_type") @db.VarChar(20)
+  documentTitle       String   @map("document_title") @db.VarChar(200)
+  fileName            String   @map("file_name") @db.VarChar(255)
+  fileStorageKey      String   @map("file_storage_key") @db.VarChar(500)
+  fileUrl             String   @map("file_url") @db.VarChar(500)
+  fileSize            Int      @map("file_size")
+  fileMimeType        String   @map("file_mime_type") @db.VarChar(100)
+  targetMonth         String?  @map("target_month") @db.VarChar(7)
+  documentDescription String?  @map("document_description")
+  isPublic            Boolean   @default(true) @map("is_public")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy           Int?      @map("created_by")
+  lastNotifiedAt      DateTime? @map("last_notified_at") @db.Timestamptz(6)
+  lastNotifiedBy      Int?      @map("last_notified_by")
+
+  business Business @relation(fields: [businessId], references: [id])
+  partner  Partner? @relation("PartnerDocuments", fields: [partnerId], references: [id])
+  creator  User?    @relation("BusinessDocumentCreator", fields: [createdBy], references: [id])
+  notifier User?    @relation("BusinessDocumentNotifier", fields: [lastNotifiedBy], references: [id])
+
+  @@index([businessId, documentType])
+  @@index([businessId, documentType, targetMonth])
+  @@index([partnerId, documentType])
+  @@map("business_documents")
+}
+
+model ProjectReminder {
+  id           Int       @id @default(autoincrement())
+  projectId    Int       @map("project_id")
+  assignedTo   Int       @map("assigned_to")
+  reminderDate DateTime  @map("reminder_date") @db.Date
+  title        String    @map("title") @db.VarChar(200)
+  description  String?   @map("description") @db.Text
+  notifyEmail  Boolean   @default(false) @map("notify_email")
+  emailSentAt  DateTime? @map("email_sent_at") @db.Timestamptz(6)
+  isCompleted  Boolean   @default(false) @map("is_completed")
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdBy    Int       @map("created_by")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User    @relation("ReminderAssignee", fields: [assignedTo], references: [id])
+  creator  User    @relation("ReminderCreator", fields: [createdBy], references: [id])
+
+  @@index([assignedTo, reminderDate, isCompleted])
+  @@index([projectId])
+  @@map("project_reminders")
+}
+
+model Announcement {
+  id          Int       @id @default(autoincrement())
+  businessId  Int?      @map("business_id")
+  title       String    @map("title") @db.VarChar(200)
+  content     String    @map("content") @db.Text
+  priority    String    @default("normal") @map("priority") @db.VarChar(20)
+  targetScope String    @default("internal") @map("target_scope") @db.VarChar(20)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdBy   Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  business Business? @relation(fields: [businessId], references: [id])
+  author   User      @relation("AnnouncementAuthor", fields: [createdBy], references: [id])
+
+  @@index([publishedAt(sort: Desc)])
+  @@index([targetScope, publishedAt(sort: Desc)])
+  @@map("announcements")
+}

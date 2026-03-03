@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js build output
+.next/
+out/
+build/
+
+# env files (secrets)
+.env
+.env.local
+.env.*.local
+
+# git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# test & dev
+tests/
+vitest.config.ts
+coverage/
+*.test.ts
+*.test.tsx
+*.spec.ts
+
+# docs & misc
+*.md
+LICENSE
+claudedocs/
+.claude/
+
+# local uploads (dev only)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# docker compose (dev only)
+docker-compose.yml

@@ -1,0 +1,28 @@
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import { Providers } from '@/providers';
+import './globals.css';
+
+const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  title: 'M²管理システム',
+  description: '統合管理システム',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ja" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=JSON.parse(localStorage.getItem('font-size-preference')||'{}');var m={small:'16px',medium:'18px',large:'20px'};var f=s.state&&s.state.fontSize;if(f&&m[f])document.documentElement.style.fontSize=m[f]}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}

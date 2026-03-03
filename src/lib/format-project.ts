@@ -1,0 +1,39 @@
+import type { Project, Customer, Partner, Business, User, BusinessStatusDefinition } from '@prisma/client';
+
+type ProjectWithRelations = Project & {
+  customer?: Pick<Customer, 'id' | 'customerCode' | 'customerName' | 'customerFolderUrl'> | null;
+  partner?: Pick<Partner, 'id' | 'partnerCode' | 'partnerName' | 'partnerFolderUrl'> | null;
+  business?: Pick<Business, 'id' | 'businessName'> | null;
+  assignedUser?: Pick<User, 'id' | 'userName'> | null;
+  statusDefinition?: Pick<BusinessStatusDefinition, 'statusLabel' | 'statusColor'> | null;
+};
+
+export function formatProject(project: ProjectWithRelations) {
+  return {
+    id: project.id,
+    businessId: project.businessId,
+    customerId: project.customerId,
+    partnerId: project.partnerId,
+    projectNo: project.projectNo,
+    projectSalesStatus: project.projectSalesStatus,
+    projectSalesStatusLabel: project.statusDefinition?.statusLabel ?? null,
+    projectSalesStatusColor: project.statusDefinition?.statusColor ?? null,
+    projectExpectedCloseMonth: project.projectExpectedCloseMonth,
+    projectAssignedUserId: project.projectAssignedUserId,
+    projectAssignedUserName: project.projectAssignedUserName,
+    projectNotes: project.projectNotes,
+    projectRenovationNumber: project.projectRenovationNumber,
+    projectCustomData: project.projectCustomData,
+    projectStatusChangedAt: project.projectStatusChangedAt?.toISOString() ?? null,
+    projectIsActive: project.projectIsActive,
+    version: project.version,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+    createdBy: project.createdBy,
+    updatedBy: project.updatedBy,
+    customer: project.customer ?? null,
+    partner: project.partner ?? null,
+    business: project.business ?? null,
+    assignedUser: project.assignedUser ?? null,
+  };
+}
