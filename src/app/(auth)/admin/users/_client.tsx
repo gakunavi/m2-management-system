@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, RefreshCw, UserCheck, UserX, Pencil, Trash2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import {
+  Plus, Search, RefreshCw, UserCheck, UserX, Pencil, Trash2,
+  ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight,
+  Users, Building2, Star, LayoutList, LayoutGrid,
+} from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +56,14 @@ interface UserListResponse {
   meta: { page: number; pageSize: number; total: number; totalPages: number };
 }
 
+interface UserGroup {
+  key: string;
+  label: string;
+  type: 'internal' | 'partner';
+  partnerId: number | null;
+  users: UserItem[];
+}
+
 const ROLE_OPTIONS = [
   { value: '', label: 'すべてのロール' },
   { value: 'admin', label: '管理者' },
@@ -71,6 +83,70 @@ type SortField = 'userName' | 'userEmail' | 'userRole' | 'userIsActive' | 'creat
 type SortDirection = 'asc' | 'desc';
 
 // ============================================
+// グループ化ロジック
+// ============================================
+
+function groupUsers(users: UserItem[]): UserGroup[] {
+  const internalUsers: UserItem[] = [];
+  const partnerMap = new Map<number, { name: string; users: UserItem[] }>();
+
+  for (const user of users) {
+    if (user.userPartnerId == null) {
+      internalUsers.push(user);
+    } else {
+      const existing = partnerMap.get(user.userPartnerId);
+      if (existing) {
+        existing.users.push(user);
+      } else {
+        partnerMap.set(user.userPartnerId, {
+          name: user.partner?.partnerName ?? `代理店 #${user.userPartnerId}`,
+          users: [user],
+        });
+      }
+    }
+  }
+
+  // 各代理店グループ内で partner_admin を先頭にソート
+  for (const group of partnerMap.values()) {
+    group.users.sort((a, b) => {
+      if (a.userRole === 'partner_admin' && b.userRole !== 'partner_admin') return -1;
+      if (a.userRole !== 'partner_admin' && b.userRole === 'partner_admin') return 1;
+      return 0;
+    });
+  }
+
+  const groups: UserGroup[] = [];
+
+  // 社内ユーザーグループ（存在する場合）
+  if (internalUsers.length > 0) {
+    groups.push({
+      key: 'internal',
+      label: '社内ユーザー',
+      type: 'internal',
+      partnerId: null,
+      users: internalUsers,
+    });
+  }
+
+  // 代理店グループ（代理店名でソート）
+  const sortedPartners = Array.from(partnerMap.entries()).sort(
+    ([, a], [, b]) => a.name.localeCompare(b.name, 'ja'),
+  );
+
+  for (const [partnerId, { name, users: partnerUsers }] of sortedPartners) {
+    groups.push({
+      key: `partner-${partnerId}`,
+      label: name,
+      type: 'partner',
+      partnerId,
+      users: partnerUsers,
+    });
+  }
+
+  return groups;
+}
+
+// ============================================
 // コンポーネント
 // ============================================
 
@@ -87,15 +163,20 @@ export function UserListClient() {
   const [sortField, setSortField] = useState<SortField>('userName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
+  const [isGroupView, setIsGroupView] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapseAllOnLoad, setCollapseAllOnLoad] = useState(false);
 
-  const queryKey = ['admin-users', { search, roleFilter, isActiveFilter, page, sortField, sortDirection }];
+  const pageSize = isGroupView ? 200 : 25;
+
+  const queryKey = ['admin-users', { search, roleFilter, isActiveFilter, page: isGroupView ? 1 : page, pageSize, sortField, sortDirection }];
 
   const { data, isLoading, isError, refetch } = useQuery<UserListResponse>({
     queryKey,
     queryFn: async () => {
       const params = new URLSearchParams({
-        page: String(page),
-        pageSize: '25',
+        page: String(isGroupView ? 1 : page),
+        pageSize: String(pageSize),
         ...(search ? { search } : {}),
         ...(roleFilter ? { userRole: roleFilter } : {}),
         isActive: isActiveFilter,
@@ -161,6 +242,46 @@ export function UserListClient() {
     setPage(1);
   }, [sortField]);
 
+  const toggleGroup = useCallback((groupKey: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAllGroups = useCallback((groups: UserGroup[]) => {
+    setCollapsedGroups((prev) => {
+      const allKeys = groups.map((g) => g.key);
+      const allCollapsed = allKeys.every((k) => prev.has(k));
+      if (allCollapsed) {
+        return new Set();
+      } else {
+        return new Set(allKeys);
+      }
+    });
+  }, []);
+
+  const users = data?.data ?? [];
+  const meta = data?.meta;
+
+  const groups = useMemo(() => {
+    if (!isGroupView) return [];
+    return groupUsers(users);
+  }, [users, isGroupView]);
+
+  // グループ表示切替時に全て折りたたむ
+  useEffect(() => {
+    if (collapseAllOnLoad && groups.length > 0) {
+      setCollapsedGroups(new Set(groups.map((g) => g.key)));
+      setCollapseAllOnLoad(false);
+    }
+  }, [collapseAllOnLoad, groups]);
+
   // admin以外はアクセス禁止（すべてのHooksの後に配置）
   if (!isAdmin) {
     return (
@@ -169,9 +290,6 @@ export function UserListClient() {
       </div>
     );
   }
-
-  const users = data?.data ?? [];
-  const meta = data?.meta;
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -222,6 +340,27 @@ export function UserListClient() {
           </SelectContent>
         </Select>
 
+        <div className="flex items-center gap-1 border rounded-md">
+          <Button
+            variant={isGroupView ? 'ghost' : 'secondary'}
+            size="sm"
+            className="h-8 rounded-r-none"
+            onClick={() => { setIsGroupView(false); setPage(1); }}
+            title="フラット表示"
+          >
+            <LayoutList className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={isGroupView ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-8 rounded-l-none"
+            onClick={() => { setIsGroupView(true); setPage(1); setCollapseAllOnLoad(true); }}
+            title="グループ表示"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </div>
+
         <Button variant="ghost" size="icon" onClick={() => refetch()} title="更新">
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -233,6 +372,20 @@ export function UserListClient() {
         )}
       </div>
 
+      {/* グループ表示時の一括開閉ボタン */}
+      {isGroupView && groups.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={() => toggleAllGroups(groups)}
+          >
+            {groups.every((g) => collapsedGroups.has(g.key)) ? 'すべて展開' : 'すべて折りたたむ'}
+          </Button>
+        </div>
+      )}
+
       {/* テーブル */}
       {isLoading ? (
         <LoadingSpinner />
@@ -242,7 +395,70 @@ export function UserListClient() {
         <div className="py-16 text-center text-muted-foreground">
           ユーザーが見つかりません
         </div>
+      ) : isGroupView ? (
+        /* ===== グループ表示 ===== */
+        <div className="space-y-3">
+          {groups.map((group) => {
+            const isCollapsed = collapsedGroups.has(group.key);
+            return (
+              <div key={group.key} className="rounded-md border overflow-hidden">
+                {/* グループヘッダー */}
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-muted/50 hover:bg-muted/80 transition-colors text-left"
+                  onClick={() => toggleGroup(group.key)}
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
+                  {group.type === 'internal' ? (
+                    <Users className="h-4 w-4 text-blue-600 shrink-0" />
+                  ) : (
+                    <Building2 className="h-4 w-4 text-orange-600 shrink-0" />
+                  )}
+                  <span className="font-medium text-sm">{group.label}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {group.users.length}名
+                  </Badge>
+                </button>
+
+                {/* グループ内テーブル */}
+                {!isCollapsed && (
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/30">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-medium text-xs text-muted-foreground">名前</th>
+                        <th className="text-left px-4 py-2 font-medium text-xs text-muted-foreground">メールアドレス</th>
+                        <th className="text-left px-4 py-2 font-medium text-xs text-muted-foreground">パスワード</th>
+                        <th className="text-left px-4 py-2 font-medium text-xs text-muted-foreground">ロール</th>
+                        <th className="text-left px-4 py-2 font-medium text-xs text-muted-foreground hidden lg:table-cell">事業</th>
+                        <th className="text-left px-4 py-2 font-medium text-xs text-muted-foreground">状態</th>
+                        <th className="px-4 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {group.users.map((user) => (
+                        <UserRow
+                          key={user.id}
+                          user={user}
+                          currentUserId={currentUser?.id}
+                          onEdit={(id) => router.push(`/admin/users/${id}`)}
+                          onDelete={setDeleteTarget}
+                          isGroupView
+                          showPartnerColumn={false}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* ===== フラット表示 ===== */
         <div className="rounded-md border overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
@@ -259,76 +475,23 @@ export function UserListClient() {
             </thead>
             <tbody className="divide-y">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{user.userName}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{user.userEmail}</td>
-                  <td className="px-4 py-3">
-                    {user.userPasswordPlain ? (
-                      <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
-                        {user.userPasswordPlain}
-                      </code>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={ROLE_BADGE_VARIANTS[user.userRole] ?? 'outline'}>
-                      {user.userRoleLabel}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
-                    {user.partner?.partnerName ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
-                    {user.businesses.length > 0
-                      ? user.businesses.map((b) => b.businessName).join('、')
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    {user.userIsActive ? (
-                      <span className="flex items-center gap-1 text-green-600 text-xs">
-                        <UserCheck className="h-3.5 w-3.5" /> 有効
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-muted-foreground text-xs">
-                        <UserX className="h-3.5 w-3.5" /> 無効
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => router.push(`/admin/users/${user.id}`)}
-                        title="編集"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {user.id !== currentUser?.id && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(user)}
-                          title="無効化"
-                          disabled={!user.userIsActive}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                <UserRow
+                  key={user.id}
+                  user={user}
+                  currentUserId={currentUser?.id}
+                  onEdit={(id) => router.push(`/admin/users/${id}`)}
+                  onDelete={setDeleteTarget}
+                  isGroupView={false}
+                  showPartnerColumn
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* ページネーション */}
-      {meta && meta.totalPages > 1 && (
+      {/* ページネーション（フラット表示のみ） */}
+      {!isGroupView && meta && meta.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <Button
             variant="outline"
@@ -366,6 +529,112 @@ export function UserListClient() {
     </div>
   );
 }
+
+// ============================================
+// ユーザー行コンポーネント
+// ============================================
+
+function UserRow({
+  user,
+  currentUserId,
+  onEdit,
+  onDelete,
+  isGroupView,
+  showPartnerColumn,
+}: {
+  user: UserItem;
+  currentUserId?: number;
+  onEdit: (id: number) => void;
+  onDelete: (user: UserItem) => void;
+  isGroupView: boolean;
+  showPartnerColumn: boolean;
+}) {
+  const isPartnerStaff = user.userRole === 'partner_staff';
+  const isPartnerAdmin = user.userRole === 'partner_admin';
+
+  return (
+    <tr className="hover:bg-muted/30 transition-colors">
+      <td className="px-4 py-3 font-medium">
+        <div className="flex items-center gap-2">
+          {isGroupView && isPartnerAdmin && (
+            <Star className="h-3.5 w-3.5 text-amber-500 shrink-0" fill="currentColor" />
+          )}
+          {isGroupView && isPartnerStaff && (
+            <span className="w-3.5 shrink-0" />
+          )}
+          <span className={isGroupView && isPartnerStaff ? 'pl-1' : ''}>
+            {user.userName}
+          </span>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-muted-foreground">{user.userEmail}</td>
+      <td className="px-4 py-3">
+        {user.userPasswordPlain ? (
+          <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
+            {user.userPasswordPlain}
+          </code>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <Badge variant={ROLE_BADGE_VARIANTS[user.userRole] ?? 'outline'}>
+          {user.userRoleLabel}
+        </Badge>
+      </td>
+      {showPartnerColumn && (
+        <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
+          {user.partner?.partnerName ?? '—'}
+        </td>
+      )}
+      <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
+        {user.businesses.length > 0
+          ? user.businesses.map((b) => b.businessName).join('、')
+          : '—'}
+      </td>
+      <td className="px-4 py-3">
+        {user.userIsActive ? (
+          <span className="flex items-center gap-1 text-green-600 text-xs">
+            <UserCheck className="h-3.5 w-3.5" /> 有効
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-muted-foreground text-xs">
+            <UserX className="h-3.5 w-3.5" /> 無効
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1 justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => onEdit(user.id)}
+            title="編集"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          {user.id !== currentUserId && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={() => onDelete(user)}
+              title="無効化"
+              disabled={!user.userIsActive}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ============================================
+// ソート可能ヘッダー
+// ============================================
 
 function SortableTh({
   field,
