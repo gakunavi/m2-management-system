@@ -107,8 +107,8 @@ function groupUsers(users: UserItem[]): UserGroup[] {
   }
 
   // 各代理店グループ内で partner_admin を先頭にソート
-  for (const group of partnerMap.values()) {
-    group.users.sort((a, b) => {
+  for (const group of Array.from(partnerMap.values())) {
+    group.users.sort((a: UserItem, b: UserItem) => {
       if (a.userRole === 'partner_admin' && b.userRole !== 'partner_admin') return -1;
       if (a.userRole !== 'partner_admin' && b.userRole === 'partner_admin') return 1;
       return 0;
@@ -130,7 +130,7 @@ function groupUsers(users: UserItem[]): UserGroup[] {
 
   // 代理店グループ（代理店名でソート）
   const sortedPartners = Array.from(partnerMap.entries()).sort(
-    ([, a], [, b]) => a.name.localeCompare(b.name, 'ja'),
+    ([, a]: [number, { name: string; users: UserItem[] }], [, b]: [number, { name: string; users: UserItem[] }]) => a.name.localeCompare(b.name, 'ja'),
   );
 
   for (const [partnerId, { name, users: partnerUsers }] of sortedPartners) {
