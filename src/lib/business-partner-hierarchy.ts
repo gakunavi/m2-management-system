@@ -58,10 +58,9 @@ export async function generateBusinessTierNumber(
 }
 
 /**
- * 事業別の階層ラベルと親代理店の整合性を検証する
+ * 事業別の階層ラベルと親代理店の整合性を検証する（N次対応）
  * - 1次代理店 → businessParentId は null であるべき
- * - 2次代理店 → 親は同事業内で businessTier = '1次代理店'
- * - 3次代理店 → 親は同事業内で businessTier = '2次代理店'
+ * - N次代理店 → 親は同事業内で (N-1)次代理店
  */
 export async function validateBusinessTierHierarchy(
   tx: TxClient,
@@ -71,31 +70,26 @@ export async function validateBusinessTierHierarchy(
 ): Promise<string | null> {
   if (!businessTier) return null;
 
-  if (businessTier === '1次代理店') {
+  const match = businessTier.match(/^(\d+)次代理店$/);
+  if (!match) return `不正な階層ラベルです: ${businessTier}`;
+  const depth = parseInt(match[1], 10);
+
+  if (depth === 1) {
     if (businessParentId) return '1次代理店は親代理店を設定できません';
     return null;
   }
 
-  if (businessTier === '2次代理店') {
-    if (!businessParentId) return '2次代理店は親代理店（1次代理店）の選択が必須です';
-    const parentLink = await tx.partnerBusinessLink.findFirst({
-      where: { businessId, partnerId: businessParentId },
-      select: { businessTier: true },
-    });
-    if (!parentLink) return '指定された親代理店はこの事業にリンクされていません';
-    if (parentLink.businessTier !== '1次代理店') return '2次代理店の親はこの事業で1次代理店である必要があります';
-    return null;
-  }
+  // N次(N>=2)は親が必須
+  const expectedParentTier = `${depth - 1}次代理店`;
+  if (!businessParentId) return `${businessTier}は親代理店（${expectedParentTier}）の選択が必須です`;
 
-  if (businessTier === '3次代理店') {
-    if (!businessParentId) return '3次代理店は親代理店（2次代理店）の選択が必須です';
-    const parentLink = await tx.partnerBusinessLink.findFirst({
-      where: { businessId, partnerId: businessParentId },
-      select: { businessTier: true },
-    });
-    if (!parentLink) return '指定された親代理店はこの事業にリンクされていません';
-    if (parentLink.businessTier !== '2次代理店') return '3次代理店の親はこの事業で2次代理店である必要があります';
-    return null;
+  const parentLink = await tx.partnerBusinessLink.findFirst({
+    where: { businessId, partnerId: businessParentId },
+    select: { businessTier: true },
+  });
+  if (!parentLink) return '指定された親代理店はこの事業にリンクされていません';
+  if (parentLink.businessTier !== expectedParentTier) {
+    return `${businessTier}の親はこの事業で${expectedParentTier}である必要があります`;
   }
 
   return null;
@@ -139,9 +133,15 @@ export async function recalculateBusinessDescendantTierNumbers(
 ): Promise<void> {
   const parentLink = await tx.partnerBusinessLink.findFirst({
     where: { businessId, partnerId },
-    select: { businessTierNumber: true },
+    select: { businessTier: true, businessTierNumber: true },
   });
   if (!parentLink) return;
+
+  // 親の階層深さを取得（N次対応: 子は N+1 次）
+  const parentDepth = parentLink.businessTier
+    ? parseInt(parentLink.businessTier.match(/^(\d+)/)?.[1] ?? '0', 10)
+    : null;
+  const childTierLabel = parentDepth ? `${parentDepth + 1}次代理店` : null;
 
   const children = await tx.partnerBusinessLink.findMany({
     where: { businessId, businessParentId: partnerId },
@@ -156,7 +156,10 @@ export async function recalculateBusinessDescendantTierNumbers(
 
     await tx.partnerBusinessLink.update({
       where: { id: children[i].id },
-      data: { businessTierNumber: childTierNumber },
+      data: {
+        businessTierNumber: childTierNumber,
+        ...(childTierLabel ? { businessTier: childTierLabel } : {}),
+      },
     });
 
     // 再帰的に孫も更新

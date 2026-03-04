@@ -65,7 +65,7 @@ export async function PATCH(
       }
 
       await prisma.$transaction(async (tx) => {
-        // 親代理店が指定された場合、階層を自動判定
+        // 親代理店が指定された場合、階層を自動判定（N次対応）
         if (newParentId) {
           const parentLink = await tx.partnerBusinessLink.findFirst({
             where: { businessId: existing.businessId, partnerId: newParentId },
@@ -74,13 +74,12 @@ export async function PATCH(
           if (!parentLink?.businessTier) {
             throw ApiError.badRequest('指定された親代理店はこの事業で階層が設定されていません');
           }
-          if (parentLink.businessTier === '1次代理店') {
-            newTier = '2次代理店';
-          } else if (parentLink.businessTier === '2次代理店') {
-            newTier = '3次代理店';
-          } else {
-            throw ApiError.badRequest('3次代理店を親に設定することはできません');
+          const parentMatch = parentLink.businessTier.match(/^(\d+)次代理店$/);
+          if (!parentMatch) {
+            throw ApiError.badRequest('親代理店の階層ラベルが不正です');
           }
+          const parentDepth = parseInt(parentMatch[1], 10);
+          newTier = `${parentDepth + 1}次代理店`;
         }
 
         // バリデーション

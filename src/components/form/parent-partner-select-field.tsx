@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { apiClient } from '@/lib/api-client';
 import { X, Search, Loader2 } from 'lucide-react';
 import type { PartnerSelectConfig } from '@/types/config';
@@ -23,6 +24,16 @@ interface ParentPartnerSelectFieldProps {
   formData?: Record<string, unknown>;
   disabled?: boolean;
   placeholder?: string;
+  /** 他のフィールドを更新するコールバック（partnerTier 自動セット用） */
+  onSetField?: (key: string, value: unknown) => void;
+}
+
+/**
+ * 階層ラベルから深さを取得するヘルパー
+ */
+function getTierDepth(tierLabel: string): number | null {
+  const match = tierLabel.match(/^(\d+)次代理店$/);
+  return match ? parseInt(match[1], 10) : null;
 }
 
 export function ParentPartnerSelectField({
@@ -33,6 +44,7 @@ export function ParentPartnerSelectField({
   formData,
   disabled,
   placeholder,
+  onSetField,
 }: ParentPartnerSelectFieldProps) {
   const [search, setSearch] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -42,9 +54,12 @@ export function ParentPartnerSelectField({
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // 現在のフォームの partnerTier から親の階層を決定
+  // parentTierMapping が空 = N次対応モード（tier 制限なし）
+  const isAutoTierMode = Object.keys(config.parentTierMapping).length === 0;
+
+  // 旧モード: フォームの partnerTier から親の階層を決定
   const currentTier = (formData?.partnerTier as string) ?? '';
-  const parentTier = config.parentTierMapping[currentTier] ?? '';
+  const parentTier = isAutoTierMode ? '' : (config.parentTierMapping[currentTier] ?? '');
 
   // 選択済みの候補を取得（初回ロード or value変更時）
   useEffect(() => {
@@ -58,8 +73,14 @@ export function ParentPartnerSelectField({
 
     const fetchSelected = async () => {
       try {
+        const params = new URLSearchParams();
+        if (!isAutoTierMode && parentTier) params.set('tier', parentTier);
+        // 編集時、自身のIDを除外
+        const excludeId = formData?.id as number | undefined;
+        if (excludeId) params.set('exclude', String(excludeId));
+
         const candidates = await apiClient.get<Candidate[]>(
-          `${config.candidatesEndpoint}?tier=${encodeURIComponent(parentTier)}`
+          `${config.candidatesEndpoint}?${params.toString()}`
         );
         const found = candidates.find((c) => c.id === value);
         if (found) setSelectedCandidate(found);
@@ -67,24 +88,26 @@ export function ParentPartnerSelectField({
         // ignore
       }
     };
-    if (parentTier) fetchSelected();
-  }, [value, parentTier, config.candidatesEndpoint, selectedCandidate?.id]);
+    if (isAutoTierMode || parentTier) fetchSelected();
+  }, [value, parentTier, isAutoTierMode, config.candidatesEndpoint, selectedCandidate?.id, formData?.id]);
 
-  // 階層変更時に親代理店をクリア
+  // 旧モード: 階層変更時に親代理店をクリア
   useEffect(() => {
+    if (isAutoTierMode) return;
     if (!parentTier && value) {
       onChange(null);
       setSelectedCandidate(null);
     }
-  }, [parentTier, value, onChange]);
+  }, [parentTier, value, onChange, isAutoTierMode]);
 
   // 候補を検索
   const fetchCandidates = useCallback(
     async (query: string) => {
-      if (!parentTier) return;
+      if (!isAutoTierMode && !parentTier) return;
       setIsLoading(true);
       try {
-        const params = new URLSearchParams({ tier: parentTier });
+        const params = new URLSearchParams();
+        if (!isAutoTierMode && parentTier) params.set('tier', parentTier);
         if (query) params.set('search', query);
         // 編集時、自身のIDを除外
         const excludeId = formData?.id as number | undefined;
@@ -100,7 +123,7 @@ export function ParentPartnerSelectField({
         setIsLoading(false);
       }
     },
-    [parentTier, config.candidatesEndpoint, formData?.id],
+    [parentTier, isAutoTierMode, config.candidatesEndpoint, formData?.id],
   );
 
   // デバウンス検索
@@ -133,6 +156,14 @@ export function ParentPartnerSelectField({
     setSelectedCandidate(candidate);
     setIsOpen(false);
     setSearch('');
+
+    // N次対応: 親の階層から子の階層を自動セット
+    if (isAutoTierMode && onSetField && candidate.partnerTier) {
+      const parentDepth = getTierDepth(candidate.partnerTier);
+      if (parentDepth) {
+        onSetField('partnerTier', `${parentDepth + 1}次代理店`);
+      }
+    }
   };
 
   // 選択解除
@@ -140,15 +171,26 @@ export function ParentPartnerSelectField({
     onChange(null);
     setSelectedCandidate(null);
     setSearch('');
+
+    // N次対応: 親をクリアしたら1次代理店に戻す
+    if (isAutoTierMode && onSetField) {
+      onSetField('partnerTier', '1次代理店');
+    }
   };
 
-  if (!parentTier) return null;
+  // 旧モード: parentTier が決まらない場合は非表示
+  if (!isAutoTierMode && !parentTier) return null;
 
   return (
     <div ref={containerRef} className="relative">
       {selectedCandidate ? (
         <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <span className="flex-1">
+            {selectedCandidate.partnerTier && (
+              <Badge variant="outline" className="text-[10px] mr-1.5">
+                {selectedCandidate.partnerTier.replace('代理店', '')}
+              </Badge>
+            )}
             {selectedCandidate.partnerTierNumber && (
               <span className="text-muted-foreground mr-1">[{selectedCandidate.partnerTierNumber}]</span>
             )}
@@ -175,7 +217,7 @@ export function ParentPartnerSelectField({
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             onFocus={handleFocus}
-            placeholder={placeholder ?? `${parentTier}を検索...`}
+            placeholder={placeholder ?? (isAutoTierMode ? '親代理店を検索（未選択 = 1次代理店）' : `${parentTier}を検索...`)}
             disabled={disabled}
             className="pl-9"
           />
@@ -201,6 +243,11 @@ export function ParentPartnerSelectField({
                 className="w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors"
                 onClick={() => handleSelect(c)}
               >
+                {c.partnerTier && (
+                  <Badge variant="outline" className="text-[10px] mr-1.5">
+                    {c.partnerTier.replace('代理店', '')}
+                  </Badge>
+                )}
                 {c.partnerTierNumber && (
                   <span className="text-muted-foreground mr-1">[{c.partnerTierNumber}]</span>
                 )}

@@ -60,9 +60,13 @@ export async function recalculateDescendantTierNumbers(
 ): Promise<void> {
   const partner = await tx.partner.findUnique({
     where: { id: partnerId },
-    select: { id: true, partnerTierNumber: true },
+    select: { id: true, partnerTier: true, partnerTierNumber: true },
   });
   if (!partner) return;
+
+  // 親の階層深さを取得（N次対応: 子は N+1 次）
+  const parentDepth = partner.partnerTier ? getTierDepth(partner.partnerTier) : null;
+  const childTierLabel = parentDepth ? getTierLabel(parentDepth + 1) : null;
 
   const children = await tx.partner.findMany({
     where: { parentId: partnerId },
@@ -77,7 +81,10 @@ export async function recalculateDescendantTierNumbers(
 
     await tx.partner.update({
       where: { id: children[i].id },
-      data: { partnerTierNumber: childTierNumber },
+      data: {
+        partnerTierNumber: childTierNumber,
+        ...(childTierLabel ? { partnerTier: childTierLabel } : {}),
+      },
     });
 
     // 再帰的に孫も更新
@@ -136,10 +143,49 @@ export async function detectCircularReference(
 }
 
 /**
- * 階層ラベル（partnerTier）と親代理店の階層整合性を検証する
+ * 階層の深さから階層ラベルを生成する（N次対応）
+ * depth=1 → '1次代理店', depth=2 → '2次代理店', ...
+ */
+export function getTierLabel(depth: number): string {
+  return `${depth}次代理店`;
+}
+
+/**
+ * 階層ラベルから深さを取得する
+ * '1次代理店' → 1, '2次代理店' → 2, ...
+ */
+export function getTierDepth(tierLabel: string): number | null {
+  const match = tierLabel.match(/^(\d+)次代理店$/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+/**
+ * 親代理店の階層から子の階層ラベルを算出する
+ * 親が null → '1次代理店'
+ * 親が 'N次代理店' → '(N+1)次代理店'
+ */
+export async function calculateTierFromParent(
+  tx: TxClient,
+  parentId: number | null,
+): Promise<string> {
+  if (!parentId) return '1次代理店';
+
+  const parent = await tx.partner.findUnique({
+    where: { id: parentId },
+    select: { partnerTier: true },
+  });
+  if (!parent?.partnerTier) return '1次代理店';
+
+  const parentDepth = getTierDepth(parent.partnerTier);
+  if (!parentDepth) return '1次代理店';
+
+  return getTierLabel(parentDepth + 1);
+}
+
+/**
+ * 階層ラベル（partnerTier）と親代理店の階層整合性を検証する（N次対応）
  * - 1次代理店 → parentId は null であるべき
- * - 2次代理店 → 親は 1次代理店
- * - 3次代理店 → 親は 2次代理店
+ * - N次代理店 → 親は (N-1)次代理店
  */
 export async function validateTierHierarchy(
   tx: TxClient,
@@ -148,31 +194,29 @@ export async function validateTierHierarchy(
 ): Promise<string | null> {
   if (!partnerTier) return null;
 
-  if (partnerTier === '1次代理店') {
+  const depth = getTierDepth(partnerTier);
+  if (!depth) return `不正な階層ラベルです: ${partnerTier}`;
+
+  if (depth === 1) {
     if (parentId) return '1次代理店は親代理店を設定できません';
     return null;
   }
 
-  if (partnerTier === '2次代理店') {
-    if (!parentId) return '2次代理店は親代理店（1次代理店）の選択が必須です';
-    const parent = await tx.partner.findUnique({
-      where: { id: parentId },
-      select: { partnerTier: true },
-    });
-    if (!parent) return '指定された親代理店が見つかりません';
-    if (parent.partnerTier !== '1次代理店') return '2次代理店の親は1次代理店である必要があります';
-    return null;
+  // N次(N>=2)は親が必須
+  if (!parentId) {
+    const parentTierLabel = getTierLabel(depth - 1);
+    return `${partnerTier}は親代理店（${parentTierLabel}）の選択が必須です`;
   }
 
-  if (partnerTier === '3次代理店') {
-    if (!parentId) return '3次代理店は親代理店（2次代理店）の選択が必須です';
-    const parent = await tx.partner.findUnique({
-      where: { id: parentId },
-      select: { partnerTier: true },
-    });
-    if (!parent) return '指定された親代理店が見つかりません';
-    if (parent.partnerTier !== '2次代理店') return '3次代理店の親は2次代理店である必要があります';
-    return null;
+  const parent = await tx.partner.findUnique({
+    where: { id: parentId },
+    select: { partnerTier: true },
+  });
+  if (!parent) return '指定された親代理店が見つかりません';
+
+  const expectedParentTier = getTierLabel(depth - 1);
+  if (parent.partnerTier !== expectedParentTier) {
+    return `${partnerTier}の親は${expectedParentTier}である必要があります`;
   }
 
   return null;

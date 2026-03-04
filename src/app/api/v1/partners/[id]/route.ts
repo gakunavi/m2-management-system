@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger';
 import {
   generateTierNumber,
   validateTierHierarchy,
+  calculateTierFromParent,
   detectCircularReference,
   recalculateDescendantTierNumbers,
 } from '@/lib/partner-hierarchy';
@@ -149,20 +150,20 @@ export async function PATCH(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { version: _version, parentId: rawParentId, ...updateData } = data;
+    const { version: _version, parentId: rawParentId, partnerTier: _ignoredTier, ...updateData } = data;
 
-    // 階層変更の判定
-    const newTier = updateData.partnerTier !== undefined ? updateData.partnerTier : current.partnerTier;
-    const newParentId = newTier === '1次代理店'
-      ? null
-      : (rawParentId !== undefined ? rawParentId : current.parentId);
-    const tierChanged = updateData.partnerTier !== undefined && updateData.partnerTier !== current.partnerTier;
+    // 親代理店の変更判定（N次対応: parentId から tier を自動算出）
     const parentChanged = rawParentId !== undefined && rawParentId !== current.parentId;
+    const newParentId = rawParentId !== undefined ? (rawParentId ?? null) : current.parentId;
 
     const updated = await prisma.$transaction(async (tx) => {
-      // 階層・親の整合性チェック
-      if (tierChanged || parentChanged) {
-        const tierError = await validateTierHierarchy(tx, newTier, newParentId);
+      // 親変更時: tier を自動再算出
+      let newTier = current.partnerTier;
+      if (parentChanged) {
+        newTier = await calculateTierFromParent(tx, newParentId);
+        const effectiveParentId = newTier === '1次代理店' ? null : newParentId;
+
+        const tierError = await validateTierHierarchy(tx, newTier, effectiveParentId);
         if (tierError) {
           throw new ApiError('VALIDATION_ERROR', tierError, 400, [
             { field: 'parentId', message: tierError },
@@ -170,8 +171,8 @@ export async function PATCH(
         }
 
         // 循環参照チェック
-        if (newParentId) {
-          const isCircular = await detectCircularReference(tx, partnerId, newParentId);
+        if (effectiveParentId) {
+          const isCircular = await detectCircularReference(tx, partnerId, effectiveParentId);
           if (isCircular) {
             throw new ApiError('VALIDATION_ERROR', '循環参照が検出されました', 400, [
               { field: 'parentId', message: '指定した親代理店はこの代理店の子孫です' },
@@ -182,15 +183,18 @@ export async function PATCH(
 
       // tierNumber の再計算
       let partnerTierNumber: string | null | undefined;
+      const tierChanged = newTier !== current.partnerTier;
       if (tierChanged || parentChanged) {
-        partnerTierNumber = await generateTierNumber(tx, newTier, newParentId);
+        const effectiveParentId = newTier === '1次代理店' ? null : newParentId;
+        partnerTierNumber = await generateTierNumber(tx, newTier, effectiveParentId);
       }
 
       const result = await tx.partner.update({
         where: { id: partnerId },
         data: {
           ...updateData,
-          ...(rawParentId !== undefined ? { parentId: newParentId } : {}),
+          ...(parentChanged ? { parentId: newTier === '1次代理店' ? null : newParentId } : {}),
+          ...(parentChanged ? { partnerTier: newTier } : {}),
           ...(partnerTierNumber !== undefined ? { partnerTierNumber } : {}),
           partnerEstablishedDate:
             updateData.partnerEstablishedDate

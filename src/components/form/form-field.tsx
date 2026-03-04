@@ -194,6 +194,7 @@ function renderInput(
           formData={formData}
           disabled={field.disabled}
           placeholder={field.placeholder}
+          onSetField={onSetField}
         />
       );
 

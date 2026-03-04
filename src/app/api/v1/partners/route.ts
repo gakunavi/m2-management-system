@@ -12,7 +12,7 @@ import {
   whereDateRange,
   whereBoolean,
 } from '@/lib/filter-helper';
-import { generateTierNumber, validateTierHierarchy } from '@/lib/partner-hierarchy';
+import { generateTierNumber, validateTierHierarchy, calculateTierFromParent } from '@/lib/partner-hierarchy';
 
 // ============================================
 // 代理店コード採番ロジック
@@ -182,12 +182,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 1次代理店なら parentId を強制 null
-    const parentId = data.partnerTier === '1次代理店' ? null : (data.parentId ?? null);
+    // 親代理店から階層を自動算出（N次対応）
+    const parentId = data.parentId ?? null;
 
     const partner = await prisma.$transaction(async (tx) => {
+      // parentId から partnerTier を自動算出
+      const partnerTier = await calculateTierFromParent(tx, parentId);
+
+      // 1次代理店なら parentId を強制 null
+      const effectiveParentId = partnerTier === '1次代理店' ? null : parentId;
+
       // 階層整合性チェック
-      const tierError = await validateTierHierarchy(tx, data.partnerTier ?? null, parentId);
+      const tierError = await validateTierHierarchy(tx, partnerTier, effectiveParentId);
       if (tierError) {
         throw new ApiError('VALIDATION_ERROR', tierError, 400, [
           { field: 'parentId', message: tierError },
@@ -195,14 +201,14 @@ export async function POST(request: NextRequest) {
       }
 
       const partnerCode = await generatePartnerCode();
-      const partnerTierNumber = await generateTierNumber(tx, data.partnerTier ?? null, parentId);
+      const partnerTierNumber = await generateTierNumber(tx, partnerTier, effectiveParentId);
 
       return tx.partner.create({
         data: {
           partnerCode,
-          partnerTier: data.partnerTier ?? null,
+          partnerTier,
           partnerTierNumber,
-          parentId,
+          parentId: effectiveParentId,
           partnerName: data.partnerName,
           partnerSalutation: data.partnerSalutation ?? null,
           partnerType: data.partnerType,

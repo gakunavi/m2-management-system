@@ -13,11 +13,7 @@ const PARTNER_TYPE_OPTIONS = [
   { value: '未設定', label: '未設定' },
 ];
 
-const PARTNER_TIER_OPTIONS = [
-  { value: '1次代理店', label: '1次代理店' },
-  { value: '2次代理店', label: '2次代理店' },
-  { value: '3次代理店', label: '3次代理店' },
-];
+// PARTNER_TIER_OPTIONS は廃止（N次対応: 親代理店選択から自動算出）
 
 // ============================================
 // 業種マスタ設定
@@ -76,7 +72,6 @@ export const partnerListConfig: EntityListConfig = {
       label: '階層',
       width: 130,
       sortable: true,
-      edit: { type: 'select', options: PARTNER_TIER_OPTIONS },
     },
     {
       key: 'parentPartnerName',
@@ -305,7 +300,7 @@ export const partnerListConfig: EntityListConfig = {
       key: 'partnerTier',
       label: '階層',
       type: 'multi-select',
-      options: PARTNER_TIER_OPTIONS,
+      optionsEndpoint: '/partners/filter-options',
     },
     {
       key: 'industryId',
@@ -558,22 +553,20 @@ export const partnerFormConfig: EntityFormConfig = {
           options: PARTNER_TYPE_OPTIONS,
         },
         {
-          key: 'partnerTier',
-          label: '階層',
-          type: 'select',
-          placeholder: '未設定',
-          options: PARTNER_TIER_OPTIONS,
-        },
-        {
           key: 'parentId',
           label: '親代理店',
           type: 'partner-select',
-          required: true,
-          visibleWhen: (fd) => fd.partnerTier === '2次代理店' || fd.partnerTier === '3次代理店',
+          description: '未選択の場合は1次代理店になります',
           partnerSelect: {
             candidatesEndpoint: '/partners/candidates',
-            parentTierMapping: { '2次代理店': '1次代理店', '3次代理店': '2次代理店' },
+            parentTierMapping: {},
           },
+        },
+        {
+          key: 'partnerTier',
+          label: '階層',
+          type: 'readonly',
+          description: '親代理店から自動決定されます',
         },
         {
           key: 'partnerName',
@@ -667,15 +660,10 @@ export const partnerFormConfig: EntityFormConfig = {
     partnerBpFormKey: z.string().optional().nullable(),
     partnerFolderUrl: z.string().url('有効なURLを入力してください').optional().nullable().or(z.literal('')),
     partnerNotes: z.string().optional().nullable(),
-  }).refine(
-    (data) => {
-      if (data.partnerTier === '2次代理店' || data.partnerTier === '3次代理店') {
-        return !!data.parentId;
-      }
-      return true;
-    },
-    { message: '2次・3次代理店は親代理店の選択が必須です', path: ['parentId'] },
-  ),
+  }),
+  defaultValues: {
+    partnerTier: '1次代理店',
+  },
   redirectAfterSave: (id) => `/partners/${id}`,
   warnOnLeave: true,
 };

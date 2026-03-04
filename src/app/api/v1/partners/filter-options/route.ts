@@ -13,7 +13,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const [industries, businesses] = await Promise.all([
+    const [industries, businesses, tierValues] = await Promise.all([
       prisma.industry.findMany({
         where: { isActive: true },
         select: { id: true, industryName: true },
@@ -24,7 +24,24 @@ export async function GET() {
         select: { id: true, businessName: true, businessCode: true },
         orderBy: { businessSortOrder: 'asc' },
       }),
+      // N次対応: DBに存在する階層ラベルを動的取得
+      prisma.partner.findMany({
+        where: { partnerIsActive: true, partnerTier: { not: null } },
+        select: { partnerTier: true },
+        distinct: ['partnerTier'],
+        orderBy: { partnerTier: 'asc' },
+      }),
     ]);
+
+    // N次順にソート（"1次代理店" → "2次代理店" → ... → "10次代理店"）
+    const tierOptions = tierValues
+      .map((t) => t.partnerTier!)
+      .sort((a, b) => {
+        const numA = parseInt(a.match(/^(\d+)/)?.[1] ?? '0', 10);
+        const numB = parseInt(b.match(/^(\d+)/)?.[1] ?? '0', 10);
+        return numA - numB;
+      })
+      .map((tier) => ({ value: tier, label: tier }));
 
     return NextResponse.json({
       success: true,
@@ -40,11 +57,7 @@ export async function GET() {
           { value: '確認中', label: '確認中' },
           { value: '未設定', label: '未設定' },
         ],
-        partnerTier: [
-          { value: '1次代理店', label: '1次代理店' },
-          { value: '2次代理店', label: '2次代理店' },
-          { value: '3次代理店', label: '3次代理店' },
-        ],
+        partnerTier: tierOptions,
         businesses: businesses.map((b) => ({
           value: String(b.id),
           label: b.businessName,
