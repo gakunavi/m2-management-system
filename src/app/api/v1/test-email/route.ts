@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendEmail } from '@/lib/email';
+import { Resend } from 'resend';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
 // ============================================
 // POST /api/v1/test-email
-// テストメール送信（admin専用）
+// テストメール送信（admin専用・エラー詳細あり）
 // ============================================
 
 export async function POST(request: NextRequest) {
@@ -28,8 +28,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await sendEmail({
-      to,
+    const apiKey = process.env.EMAIL_API_KEY;
+    const emailFrom = process.env.EMAIL_FROM ?? 'noreply@example.com';
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, error: { message: 'EMAIL_API_KEY is not configured' } },
+        { status: 500 },
+      );
+    }
+
+    const resend = new Resend(apiKey);
+
+    const result = await resend.emails.send({
+      from: emailFrom,
+      to: [to],
       subject: '[M²] テストメール',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
@@ -46,12 +59,8 @@ export async function POST(request: NextRequest) {
               <td style="padding: 8px 12px;">${to}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 12px; background: #f8fafc; font-weight: 600;">送信日時</td>
-              <td style="padding: 8px 12px;">${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}</td>
-            </tr>
-            <tr>
               <td style="padding: 8px 12px; background: #f8fafc; font-weight: 600;">送信元</td>
-              <td style="padding: 8px 12px;">${process.env.EMAIL_FROM ?? 'noreply@example.com'}</td>
+              <td style="padding: 8px 12px;">${emailFrom}</td>
             </tr>
           </table>
           <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
@@ -63,11 +72,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { message: `Test email sent to ${to}` },
+      data: { message: `Test email sent to ${to}`, resendResponse: result },
     });
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { success: false, error: { message: 'Failed to send test email' } },
+      { success: false, error: { message, detail: String(err) } },
       { status: 500 },
     );
   }
