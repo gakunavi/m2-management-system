@@ -90,7 +90,7 @@ const STATUS_FORM_FIELDS: SortableItemFormField[] = [
     key: 'statusIsFinal',
     label: '最終ステータス',
     type: 'checkbox',
-    description: '事業内で1つのみ設定可',
+    description: '複数設定可（購入済・失注・断念など）',
   },
   {
     key: 'statusIsLost',

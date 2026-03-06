@@ -137,47 +137,10 @@ export async function POST(
       });
     }
 
-    // statusIsFinal / statusIsLost の重複チェック
-    // CSV 内で true になっている行数を確認
-    const csvFinalCount = parsedRows.filter((r) => r.statusIsFinal).length;
-
-    if (csvFinalCount > 1) {
-      throw new ApiError(
-        'VALIDATION_ERROR',
-        `CSVに最終ステータス（statusIsFinal=true）が${csvFinalCount}件あります。1件のみ設定できます`,
-        400
-      );
-    }
-    // statusIsLost は複数設定可能（制約なし）
+    // statusIsFinal / statusIsLost は複数設定可能（制約なし）
 
     try {
       await prisma.$transaction(async (tx) => {
-        // upsert モードの場合、CSV で更新対象となる既存レコードの statusCode を特定し、
-        // DB 側の残存レコード（CSV に含まれないもの）における isFinal / isLost を考慮する
-        const csvCodes = parsedRows.map((r) => r.statusCode);
-
-        // DB 上の既存レコードを取得（CSV 対象コード以外 = 変更されない行）
-        const existingAll = await tx.businessStatusDefinition.findMany({
-          where: { businessId },
-          select: { statusCode: true, statusIsFinal: true, statusIsLost: true },
-        });
-
-        // 変更されない既存行（create_only 時は CSV コードが既存にあっても skip になるため除外しない）
-        // upsert の場合: CSV コードで上書きされる行を「変更行」として扱う
-        const unchangedExisting = existingAll.filter((e) => !csvCodes.includes(e.statusCode));
-
-        const unchangedFinalCount = unchangedExisting.filter((e) => e.statusIsFinal).length;
-
-        // CSV 中の isFinal 行と DB 中の変更されない isFinal 行の合計が 1 を超えないか検証
-        if (csvFinalCount + unchangedFinalCount > 1) {
-          throw new ApiError(
-            'VALIDATION_ERROR',
-            `最終ステータスは事業内に1件のみ設定できます（CSVで${csvFinalCount}件、既存で${unchangedFinalCount}件）`,
-            400
-          );
-        }
-        // statusIsLost は複数設定可能（制約なし）
-
         for (const row of parsedRows) {
           try {
             const existing = await tx.businessStatusDefinition.findFirst({
