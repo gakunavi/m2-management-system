@@ -26,7 +26,7 @@ export const projectBaseSchema = z.object({
     .or(z.literal('')),
   projectRenovationNumber: z
     .string()
-    .max(100, '改装番号は100文字以内で入力してください')
+    .max(100, '階層番号は100文字以内で入力してください')
     .optional()
     .nullable()
     .or(z.literal('')),

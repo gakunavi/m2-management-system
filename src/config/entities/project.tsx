@@ -89,7 +89,7 @@ export const projectListConfig: EntityListConfig = {
     },
     {
       key: 'projectRenovationNumber',
-      label: '改装番号',
+      label: '階層番号',
       width: 140,
       sortable: true,
       edit: { type: 'text' },
@@ -163,7 +163,7 @@ export const projectListConfig: EntityListConfig = {
     {
       key: 'customerFolderUrl',
       label: '顧客フォルダURL',
-      width: 160,
+      width: 100,
       sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
@@ -174,10 +174,10 @@ export const projectListConfig: EntityListConfig = {
             href={c.customerFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm truncate block"
+            className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
           >
-            {c.customerFolderUrl}
+            リンク
           </a>
         );
       },
@@ -207,7 +207,7 @@ export const projectListConfig: EntityListConfig = {
     {
       key: 'partnerFolderUrl',
       label: '代理店フォルダURL',
-      width: 160,
+      width: 100,
       sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
@@ -218,10 +218,10 @@ export const projectListConfig: EntityListConfig = {
             href={p.partnerFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm truncate block"
+            className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
           >
-            {p.partnerFolderUrl}
+            リンク
           </a>
         );
       },
@@ -378,7 +378,7 @@ export const projectDetailConfig: EntityDetailConfig = {
                   return b?.businessName ?? '-';
                 },
               },
-              { key: 'projectRenovationNumber', label: '改装番号', type: 'text' },
+              { key: 'projectRenovationNumber', label: '階層番号', type: 'text' },
               {
                 key: 'customerSalutation',
                 label: '顧客呼称',
@@ -618,9 +618,9 @@ export const projectFormConfig: EntityFormConfig = {
         },
         {
           key: 'projectRenovationNumber',
-          label: '改装番号',
+          label: '階層番号',
           type: 'text',
-          placeholder: '改装番号を入力',
+          placeholder: '階層番号を入力',
         },
         {
           key: 'projectNotes',

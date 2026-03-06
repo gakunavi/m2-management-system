@@ -46,13 +46,31 @@ export function useInlineCellEdit(config: EntityListConfig) {
           if (!endpoint || endpoint.trim() === '') {
             throw new Error('PATCH 対象が見つかりません');
           }
-          await apiClient.patch(endpoint, {
-            [customPatch.field]: value,
-          });
-          // リスト全体を再取得して最新データに同期
-          if (customPatch.refetchOnSuccess !== false) {
-            await queryClient.invalidateQueries({ queryKey });
+          // dot-notation field → nested object（例: projectCustomData.fieldKey）
+          const fieldParts = customPatch.field.split('.');
+          let body: Record<string, unknown>;
+          if (fieldParts.length === 2) {
+            body = { [fieldParts[0]]: { [fieldParts[1]]: value }, version };
+          } else {
+            body = { [customPatch.field]: value };
           }
+          const updated = await apiClient.patch<Record<string, unknown>>(endpoint, body);
+          // サーバーレスポンスで該当行を完全置換（新 version 取得）
+          queryClient.setQueryData(queryKey, (old: unknown) => {
+            if (!old || typeof old !== 'object') return old;
+            const cached = old as Record<string, unknown>;
+            if (!Array.isArray(cached.data)) return old;
+            return {
+              ...cached,
+              data: (cached.data as Record<string, unknown>[]).map((r) =>
+                r.id === (row.id as number) ? updated : r,
+              ),
+            };
+          });
+          // 詳細・編集画面のキャッシュも無効化
+          queryClient.invalidateQueries({
+            queryKey: [config.entityType, String(row.id)],
+          });
         } else {
           // 通常 PATCH: 顧客テーブルへの更新
           if (!config.patchEndpoint) {

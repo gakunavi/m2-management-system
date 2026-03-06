@@ -92,7 +92,7 @@ function getDefaultWidth(type: ProjectFieldDefinition['type']): number {
     case 'date':     return 130;
     case 'month':    return 120;
     case 'checkbox': return 80;
-    case 'url':      return 200;
+    case 'url':      return 120;
     default:         return 160;
   }
 }

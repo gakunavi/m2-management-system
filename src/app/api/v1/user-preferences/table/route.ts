@@ -22,6 +22,9 @@ const columnSettingsSchema = z.object({
       direction: z.enum(['asc', 'desc']),
     }),
   ),
+  columnPinning: z
+    .object({ left: z.array(z.string()) })
+    .optional(),
 });
 
 const putSchema = z.object({

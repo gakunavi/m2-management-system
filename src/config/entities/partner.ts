@@ -191,7 +191,7 @@ export const partnerListConfig: EntityListConfig = {
     {
       key: 'partnerWebsite',
       label: 'Webサイト',
-      width: 200,
+      width: 120,
       sortable: true,
       defaultVisible: false,
       edit: { type: 'url', placeholder: 'https://example.com' },
@@ -249,7 +249,7 @@ export const partnerListConfig: EntityListConfig = {
     {
       key: 'partnerBpFormUrl',
       label: 'BP申込書',
-      width: 200,
+      width: 120,
       sortable: false,
       defaultVisible: false,
       render: (v) => (v ? 'あり' : '-'),
@@ -257,7 +257,7 @@ export const partnerListConfig: EntityListConfig = {
     {
       key: 'partnerFolderUrl',
       label: 'フォルダURL',
-      width: 200,
+      width: 120,
       sortable: true,
       defaultVisible: false,
       edit: { type: 'url', placeholder: 'https://drive.example.com/...' },

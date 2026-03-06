@@ -168,7 +168,7 @@ export const customerListConfig: EntityListConfig = {
     {
       key: 'customerWebsite',
       label: 'Webサイト',
-      width: 200,
+      width: 120,
       sortable: true,
       defaultVisible: false,
       edit: { type: 'url', placeholder: 'https://example.com' },
@@ -238,7 +238,7 @@ export const customerListConfig: EntityListConfig = {
     {
       key: 'customerFolderUrl',
       label: 'フォルダURL',
-      width: 200,
+      width: 120,
       sortable: true,
       defaultVisible: false,
       edit: { type: 'url', placeholder: 'https://drive.example.com/...' },
