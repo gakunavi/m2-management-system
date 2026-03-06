@@ -48,9 +48,8 @@ export const projectListConfig: EntityListConfig = {
       edit: { type: 'select', options: [] },
       render: (_value, row) => {
         const label = row.projectSalesStatusLabel as string | null;
-        const color = row.projectSalesStatusColor as string | null;
-        if (label && color) {
-          return label; // StatusBadge は別途対応
+        if (label) {
+          return label;
         }
         return (row.projectSalesStatus as string) ?? '-';
       },
@@ -142,7 +141,7 @@ export const projectListConfig: EntityListConfig = {
             href={c.customerWebsite}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary hover:underline text-xs truncate block max-w-[140px]"
+            className="text-blue-600 hover:underline text-sm truncate block"
             onClick={(e) => e.stopPropagation()}
           >
             {c.customerWebsite}
@@ -174,7 +173,7 @@ export const projectListConfig: EntityListConfig = {
             href={c.customerFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary hover:underline text-xs truncate block max-w-[140px]"
+            className="text-blue-600 hover:underline text-sm truncate block"
             onClick={(e) => e.stopPropagation()}
           >
             {c.customerFolderUrl}
@@ -217,7 +216,7 @@ export const projectListConfig: EntityListConfig = {
             href={p.partnerFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary hover:underline text-xs truncate block max-w-[140px]"
+            className="text-blue-600 hover:underline text-sm truncate block"
             onClick={(e) => e.stopPropagation()}
           >
             {p.partnerFolderUrl}

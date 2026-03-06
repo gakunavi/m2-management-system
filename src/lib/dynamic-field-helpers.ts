@@ -66,14 +66,18 @@ export function buildDynamicColumns(fields: ProjectFieldDefinition[]): ColumnDef
         width: getDefaultWidth(field.type),
         sortable: true,
         defaultVisible: false,
-        render: (_value, row) => {
-          const customData = row.projectCustomData as Record<string, unknown> | null;
-          const val = customData?.[field.key];
-          return formatDynamicValue(val, field.type);
-        },
+        // URL型: render を提供せず EditableCell のネイティブURL表示（青文字+アイコン+truncate）に委任
+        // ※ API レスポンスで customData_* キーにフラット展開済みなので value が取れる
+        ...(field.type !== 'url' && {
+          render: (_value: unknown, row: Record<string, unknown>) => {
+            const customData = row.projectCustomData as Record<string, unknown> | null;
+            const val = customData?.[field.key];
+            return formatDynamicValue(val, field.type);
+          },
+        }),
         edit: buildDynamicCellEdit(field),
         customPatch: {
-          endpoint: (row) => `/projects/${row.id}`,
+          endpoint: (row: Record<string, unknown>) => `/projects/${row.id}`,
           field: `projectCustomData.${field.key}`,
         },
       };

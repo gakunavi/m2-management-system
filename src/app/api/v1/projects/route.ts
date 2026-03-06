@@ -189,8 +189,17 @@ export async function GET(request: NextRequest) {
       data: projects.map((p) => {
         const formatted = formatProject(p);
         const status = statusMap.get(`${p.businessId}:${p.projectSalesStatus}`);
+        // customData をフラットキーに展開（EditableCell の URL 型検出用）
+        const customData = p.projectCustomData as Record<string, unknown> | null;
+        const flatCustom: Record<string, unknown> = {};
+        if (customData) {
+          for (const [k, v] of Object.entries(customData)) {
+            flatCustom[`customData_${k}`] = v;
+          }
+        }
         return {
           ...formatted,
+          ...flatCustom,
           projectSalesStatusLabel: status?.label ?? null,
           projectSalesStatusColor: status?.color ?? null,
         };

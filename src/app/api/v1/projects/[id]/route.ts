@@ -211,10 +211,20 @@ export async function PATCH(
       })();
     }
 
+    // customData をフラットキーに展開（一覧キャッシュ直接更新で EditableCell の URL 型検出用）
+    const updatedCustomData = updated.projectCustomData as Record<string, unknown> | null;
+    const flatCustom: Record<string, unknown> = {};
+    if (updatedCustomData) {
+      for (const [k, v] of Object.entries(updatedCustomData)) {
+        flatCustom[`customData_${k}`] = v;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(updated),
+        ...flatCustom,
         projectSalesStatusLabel: statusDef?.statusLabel ?? null,
         projectSalesStatusColor: statusDef?.statusColor ?? null,
       },
