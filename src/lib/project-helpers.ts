@@ -13,10 +13,10 @@ export async function generateProjectNo(
 ): Promise<string> {
   const business = await prisma.business.findUniqueOrThrow({
     where: { id: businessId },
-    select: { businessProjectPrefix: true },
+    select: { businessCode: true },
   });
 
-  const prefix = business.businessProjectPrefix ?? 'PRJ';
+  const prefix = business.businessCode;
 
   const latest = await prisma.project.findFirst({
     where: { businessId },
