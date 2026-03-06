@@ -6,22 +6,59 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import {
   parseSortParams,
-  buildOrderBy,
   getCustomSortPagination,
   applyAppSortAndSlice,
+  isCustomDataSort,
 } from '@/lib/sort-helper';
+import type { SortDirection } from '@/lib/sort-helper';
 import { formatProject } from '@/lib/format-project';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 
-const PROJECT_SORT_FIELDS = [
-  'projectNo',
-  'projectSalesStatus',
-  'projectExpectedCloseMonth',
-  'projectAssignedUserName',
-  'updatedAt',
-  'createdAt',
-] as const;
+/**
+ * ソートフィールド → Prisma orderBy マッピング。
+ * 直接フィールドとリレーション経由フィールドの両方に対応。
+ */
+const SORT_FIELD_MAP: Record<string, (dir: SortDirection) => Record<string, unknown>> = {
+  // 直接フィールド
+  projectNo: (dir) => ({ projectNo: dir }),
+  projectSalesStatus: (dir) => ({ projectSalesStatus: dir }),
+  projectExpectedCloseMonth: (dir) => ({ projectExpectedCloseMonth: dir }),
+  projectAssignedUserName: (dir) => ({ projectAssignedUserName: dir }),
+  projectRenovationNumber: (dir) => ({ projectRenovationNumber: dir }),
+  projectNotes: (dir) => ({ projectNotes: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  // リレーション経由フィールド（顧客）
+  customerName: (dir) => ({ customer: { customerName: dir } }),
+  customerSalutation: (dir) => ({ customer: { customerSalutation: dir } }),
+  customerType: (dir) => ({ customer: { customerType: dir } }),
+  customerWebsite: (dir) => ({ customer: { customerWebsite: dir } }),
+  customerFiscalMonth: (dir) => ({ customer: { customerFiscalMonth: dir } }),
+  customerFolderUrl: (dir) => ({ customer: { customerFolderUrl: dir } }),
+  // リレーション経由フィールド（代理店）
+  partnerName: (dir) => ({ partner: { partnerName: dir } }),
+  partnerCode: (dir) => ({ partner: { partnerCode: dir } }),
+  partnerSalutation: (dir) => ({ partner: { partnerSalutation: dir } }),
+  partnerFolderUrl: (dir) => ({ partner: { partnerFolderUrl: dir } }),
+  // リレーション経由フィールド（事業）
+  businessName: (dir) => ({ business: { businessName: dir } }),
+};
+
+/** ソートパラメータから Prisma orderBy を構築（リレーションフィールド対応） */
+function buildProjectOrderBy(
+  sortItems: { field: string; direction: SortDirection }[],
+  defaultOrderBy: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const orderBy = sortItems
+    .filter((item) => !isCustomDataSort(item.field) && SORT_FIELD_MAP[item.field])
+    .map((item) => SORT_FIELD_MAP[item.field](item.direction));
+
+  if (orderBy.length === 0 && !sortItems.some((item) => isCustomDataSort(item.field))) {
+    return defaultOrderBy;
+  }
+  return orderBy;
+}
 
 const createProjectSchema = z.object({
   businessId: z.number().int().positive('事業を選択してください'),
@@ -145,8 +182,8 @@ export async function GET(request: NextRequest) {
       where.projectAssignedUserId = parseInt(assignedUserFilter, 10);
     }
 
-    const defaultSort = [{ field: 'updatedAt' as const, direction: 'desc' as const }];
-    const orderBy = buildOrderBy(sortItems, PROJECT_SORT_FIELDS, defaultSort);
+    const defaultOrderBy = [{ updatedAt: 'desc' as const }];
+    const orderBy = buildProjectOrderBy(sortItems, defaultOrderBy);
     const originalSkip = (page - 1) * pageSize;
     const { skip, take, needsAppSort } = getCustomSortPagination(sortItems, originalSkip, pageSize);
 

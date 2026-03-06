@@ -24,7 +24,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'customerName',
       label: '顧客',
       minWidth: 180,
-      sortable: false,
+      sortable: true,
       render: (_value, row) => {
         const customer = row.customer as { id?: number; customerName?: string } | null;
         if (!customer?.customerName) return '-';
@@ -58,7 +58,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'partnerName',
       label: '代理店',
       width: 180,
-      sortable: false,
+      sortable: true,
       render: (_value, row) => {
         const partner = row.partner as { id?: number; partnerName?: string } | null;
         if (!partner?.partnerName) return '-';
@@ -98,7 +98,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'customerSalutation',
       label: '顧客呼称',
       width: 140,
-      sortable: false,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const c = row.customer as { customerSalutation?: string | null } | null;
@@ -109,7 +109,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'customerType',
       label: '顧客種別',
       width: 110,
-      sortable: false,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const c = row.customer as { customerType?: string | null } | null;
@@ -131,7 +131,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'customerWebsite',
       label: '顧客WEBサイト',
       width: 160,
-      sortable: false,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const c = row.customer as { customerWebsite?: string | null } | null;
@@ -153,7 +153,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'customerFiscalMonth',
       label: '顧客決算月',
       width: 110,
-      sortable: false,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const c = row.customer as { customerFiscalMonth?: number | null } | null;
@@ -164,6 +164,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'customerFolderUrl',
       label: '顧客フォルダURL',
       width: 160,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const c = row.customer as { customerFolderUrl?: string | null } | null;
@@ -185,7 +186,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'partnerCode',
       label: '代理店コード',
       width: 130,
-      sortable: false,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const p = row.partner as { partnerCode?: string } | null;
@@ -196,7 +197,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'partnerSalutation',
       label: '代理店呼称',
       width: 140,
-      sortable: false,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const p = row.partner as { partnerSalutation?: string | null } | null;
@@ -207,6 +208,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'partnerFolderUrl',
       label: '代理店フォルダURL',
       width: 160,
+      sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
         const p = row.partner as { partnerFolderUrl?: string | null } | null;
@@ -228,6 +230,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'projectNotes',
       label: '備考',
       width: 200,
+      sortable: true,
       defaultVisible: false,
       edit: { type: 'textarea' },
     },
@@ -235,7 +238,7 @@ export const projectListConfig: EntityListConfig = {
       key: 'businessName',
       label: '事業',
       width: 140,
-      sortable: false,
+      sortable: true,
       render: (_value, row) => {
         const biz = row.business as { businessName?: string } | null;
         return biz?.businessName ?? '-';
