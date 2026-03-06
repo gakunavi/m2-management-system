@@ -1,8 +1,10 @@
 import type { Project, Customer, Partner, Business, User, BusinessStatusDefinition } from '@prisma/client';
 
 type ProjectWithRelations = Project & {
-  customer?: Pick<Customer, 'id' | 'customerCode' | 'customerName' | 'customerFolderUrl'> | null;
-  partner?: Pick<Partner, 'id' | 'partnerCode' | 'partnerName' | 'partnerFolderUrl'> | null;
+  customer?: (Pick<Customer, 'id' | 'customerCode' | 'customerName' | 'customerFolderUrl' | 'customerSalutation' | 'customerType' | 'customerWebsite' | 'customerFiscalMonth'> & {
+    contacts?: { contactName: string }[];
+  }) | null;
+  partner?: Pick<Partner, 'id' | 'partnerCode' | 'partnerName' | 'partnerFolderUrl' | 'partnerSalutation'> | null;
   business?: Pick<Business, 'id' | 'businessName'> | null;
   assignedUser?: Pick<User, 'id' | 'userName'> | null;
   statusDefinition?: Pick<BusinessStatusDefinition, 'statusLabel' | 'statusColor'> | null;

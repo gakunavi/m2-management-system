@@ -45,6 +45,7 @@ export const CUSTOMER_CSV_HEADERS: readonly CsvHeaderDef[] = [
   { key: 'customerCorporateNumber', label: '法人番号' },
   { key: 'customerInvoiceNumber', label: 'インボイス番号' },
   { key: 'customerCapital', label: '資本金' },
+  { key: 'customerFiscalMonth', label: '決算月' },
   { key: 'customerEstablishedDate', label: '設立日' },
   { key: 'customerFolderUrl', label: 'フォルダURL' },
   { key: 'customerNotes', label: 'メモ' },

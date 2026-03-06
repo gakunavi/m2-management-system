@@ -22,6 +22,7 @@ export interface CustomerRow {
   customerCapital: bigint | null;
   customerEstablishedDate: Date | null;
   customerFolderUrl: string | null;
+  customerFiscalMonth: number | null;
   customerNotes: string | null;
   customerIsActive: boolean;
   version: number;

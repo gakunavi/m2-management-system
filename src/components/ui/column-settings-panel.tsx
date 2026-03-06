@@ -79,7 +79,33 @@ export function ColumnSettingsPanel({
           );
         })}
         <DropdownMenuSeparator />
-        <div className="p-1">
+        <div
+          className="p-1 flex gap-1"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={() => table.toggleAllColumnsVisible(true)}
+          >
+            全て表示
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={() => table.toggleAllColumnsVisible(false)}
+          >
+            全て解除
+          </Button>
+        </div>
+        <div
+          className="p-1 pt-0"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => e.stopPropagation()}
+        >
           <Button
             variant="ghost"
             size="sm"

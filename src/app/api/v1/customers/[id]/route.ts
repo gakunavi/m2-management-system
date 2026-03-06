@@ -24,6 +24,7 @@ const updateCustomerSchema = z.object({
   customerCorporateNumber: z.string().regex(/^\d{13}$/).optional().nullable().or(z.literal('')),
   customerInvoiceNumber: z.string().regex(/^T\d{13}$/).optional().nullable().or(z.literal('')),
   customerCapital: z.number().int().min(0).optional().nullable(),
+  customerFiscalMonth: z.number().int().min(1).max(12).optional().nullable(),
   customerEstablishedDate: z.string().optional().nullable(),
   customerFolderUrl: z.string().url().optional().nullable().or(z.literal('')),
   customerNotes: z.string().optional().nullable(),

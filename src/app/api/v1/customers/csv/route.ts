@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
         customerCorporateNumber: c.customerCorporateNumber,
         customerInvoiceNumber: c.customerInvoiceNumber,
         customerCapital: c.customerCapital !== null ? Number(c.customerCapital) : '',
+        customerFiscalMonth: c.customerFiscalMonth ?? '',
         customerEstablishedDate: c.customerEstablishedDate?.toISOString().split('T')[0] ?? '',
         customerFolderUrl: c.customerFolderUrl,
         customerNotes: c.customerNotes,
@@ -225,6 +226,17 @@ export async function POST(request: NextRequest) {
             customerCapital = BigInt(trimmed);
           }
 
+          let customerFiscalMonth: number | null = null;
+          if (row.customerFiscalMonth) {
+            const fm = parseInt(row.customerFiscalMonth.trim(), 10);
+            if (isNaN(fm) || fm < 1 || fm > 12) {
+              results.errors.push(`行${lineNo}: 決算月の値が不正です（1〜12）: ${row.customerFiscalMonth}`);
+              results.skipped++;
+              continue;
+            }
+            customerFiscalMonth = fm;
+          }
+
           let customerEstablishedDate: Date | null = null;
           if (row.customerEstablishedDate) {
             const d = new Date(row.customerEstablishedDate);
@@ -250,6 +262,7 @@ export async function POST(request: NextRequest) {
             customerCorporateNumber: row.customerCorporateNumber || null,
             customerInvoiceNumber: row.customerInvoiceNumber || null,
             customerCapital,
+            customerFiscalMonth,
             customerEstablishedDate,
             customerFolderUrl: row.customerFolderUrl || null,
             customerNotes: row.customerNotes || null,

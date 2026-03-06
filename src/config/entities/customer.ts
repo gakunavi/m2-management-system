@@ -216,6 +216,18 @@ export const customerListConfig: EntityListConfig = {
       render: (v) => (v != null ? `${Number(v).toLocaleString()}円` : '-'),
     },
     {
+      key: 'customerFiscalMonth',
+      label: '決算月',
+      width: 100,
+      sortable: true,
+      defaultVisible: false,
+      edit: {
+        type: 'select',
+        options: Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}月` })),
+      },
+      render: (v) => (v != null ? `${v}月` : '-'),
+    },
+    {
       key: 'customerEstablishedDate',
       label: '設立日',
       width: 130,
@@ -357,6 +369,7 @@ export const customerListConfig: EntityListConfig = {
       { key: 'customerCorporateNumber', label: '法人番号', description: '13桁の数字', example: '1234567890123' },
       { key: 'customerInvoiceNumber', label: 'インボイス番号', description: 'T + 13桁の数字', example: 'T1234567890123' },
       { key: 'customerCapital', label: '資本金', description: '数値（円）', example: '10000000' },
+      { key: 'customerFiscalMonth', label: '決算月', description: '1〜12の数字', example: '3' },
       { key: 'customerEstablishedDate', label: '設立日', description: 'YYYY-MM-DD 形式', example: '2020-01-01' },
       { key: 'customerFolderUrl', label: 'フォルダURL', example: '' },
       { key: 'customerNotes', label: 'メモ', example: '' },
@@ -414,6 +427,12 @@ export const customerDetailConfig: EntityDetailConfig = {
                   const industry = data.industry as { industryName: string } | null;
                   return industry?.industryName ?? '-';
                 },
+              },
+              {
+                key: 'customerFiscalMonth',
+                label: '決算月',
+                type: 'text',
+                render: (v) => (v != null ? `${v}月` : '-'),
               },
               { key: 'customerEstablishedDate', label: '設立日', type: 'date' },
               { key: 'customerCorporateNumber', label: '法人番号', type: 'text' },
@@ -535,6 +554,13 @@ export const customerFormConfig: EntityFormConfig = {
           type: 'master-select',
           masterSelect: INDUSTRY_MASTER_CONFIG,
         },
+        {
+          key: 'customerFiscalMonth',
+          label: '決算月',
+          type: 'select',
+          options: Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}月` })),
+          placeholder: '決算月を選択',
+        },
         { key: 'customerEstablishedDate', label: '設立日', type: 'date' },
         { key: 'customerCorporateNumber', label: '法人番号', type: 'text', placeholder: '13桁の数字' },
         { key: 'customerInvoiceNumber', label: 'インボイス登録番号', type: 'text', placeholder: 'T + 13桁の数字' },
@@ -574,6 +600,7 @@ export const customerFormConfig: EntityFormConfig = {
       .nullable()
       .or(z.literal('')),
     customerCapital: z.number().int().min(0).optional().nullable(),
+    customerFiscalMonth: z.number().int().min(1).max(12).optional().nullable(),
     customerEstablishedDate: z.string().optional().nullable(),
     customerFolderUrl: z.string().url('有効なURLを入力してください').optional().nullable().or(z.literal('')),
     customerNotes: z.string().optional().nullable(),

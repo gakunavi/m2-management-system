@@ -27,8 +27,23 @@ const updateProjectSchema = z.object({
 });
 
 const PROJECT_INCLUDE = {
-  customer: { select: { id: true, customerCode: true, customerName: true, customerFolderUrl: true } },
-  partner: { select: { id: true, partnerCode: true, partnerName: true, partnerFolderUrl: true } },
+  customer: {
+    select: {
+      id: true, customerCode: true, customerName: true, customerFolderUrl: true,
+      customerSalutation: true, customerType: true, customerWebsite: true, customerFiscalMonth: true,
+      contacts: {
+        where: { contactIsRepresentative: true },
+        select: { contactName: true },
+        take: 1,
+      },
+    },
+  },
+  partner: {
+    select: {
+      id: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
+      partnerSalutation: true,
+    },
+  },
   business: { select: { id: true, businessName: true } },
   assignedUser: { select: { id: true, userName: true } },
 } as const;

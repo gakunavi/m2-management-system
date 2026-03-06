@@ -96,6 +96,72 @@ export const projectListConfig: EntityListConfig = {
       edit: { type: 'text' },
     },
     {
+      key: 'customerSalutation',
+      label: '顧客呼称',
+      width: 140,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const c = row.customer as { customerSalutation?: string | null } | null;
+        return c?.customerSalutation || '-';
+      },
+    },
+    {
+      key: 'customerType',
+      label: '顧客種別',
+      width: 110,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const c = row.customer as { customerType?: string | null } | null;
+        return c?.customerType || '-';
+      },
+    },
+    {
+      key: 'customerRepresentativeName',
+      label: '顧客代表者',
+      width: 140,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const c = row.customer as { contacts?: { contactName: string }[] } | null;
+        return c?.contacts?.[0]?.contactName || '-';
+      },
+    },
+    {
+      key: 'customerWebsite',
+      label: '顧客WEBサイト',
+      width: 160,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const c = row.customer as { customerWebsite?: string | null } | null;
+        if (!c?.customerWebsite) return '-';
+        return (
+          <a
+            href={c.customerWebsite}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline text-xs truncate block max-w-[140px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {c.customerWebsite}
+          </a>
+        );
+      },
+    },
+    {
+      key: 'customerFiscalMonth',
+      label: '顧客決算月',
+      width: 110,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const c = row.customer as { customerFiscalMonth?: number | null } | null;
+        return c?.customerFiscalMonth ? `${c.customerFiscalMonth}月` : '-';
+      },
+    },
+    {
       key: 'customerFolderUrl',
       label: '顧客フォルダURL',
       width: 160,
@@ -114,6 +180,28 @@ export const projectListConfig: EntityListConfig = {
             {c.customerFolderUrl}
           </a>
         );
+      },
+    },
+    {
+      key: 'partnerCode',
+      label: '代理店コード',
+      width: 130,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const p = row.partner as { partnerCode?: string } | null;
+        return p?.partnerCode || '-';
+      },
+    },
+    {
+      key: 'partnerSalutation',
+      label: '代理店呼称',
+      width: 140,
+      sortable: false,
+      defaultVisible: false,
+      render: (_value, row) => {
+        const p = row.partner as { partnerSalutation?: string | null } | null;
+        return p?.partnerSalutation || '-';
       },
     },
     {
@@ -290,6 +378,61 @@ export const projectDetailConfig: EntityDetailConfig = {
               },
               { key: 'projectRenovationNumber', label: '改装番号', type: 'text' },
               {
+                key: 'customerSalutation',
+                label: '顧客呼称',
+                type: 'text',
+                render: (_value, data) => {
+                  const c = data.customer as { customerSalutation?: string | null } | null;
+                  return c?.customerSalutation || '-';
+                },
+              },
+              {
+                key: 'customerType',
+                label: '顧客種別',
+                type: 'text',
+                render: (_value, data) => {
+                  const c = data.customer as { customerType?: string | null } | null;
+                  return c?.customerType || '-';
+                },
+              },
+              {
+                key: 'customerRepresentativeName',
+                label: '顧客代表者',
+                type: 'text',
+                render: (_value, data) => {
+                  const c = data.customer as { contacts?: { contactName: string }[] } | null;
+                  return c?.contacts?.[0]?.contactName || '-';
+                },
+              },
+              {
+                key: 'customerWebsite',
+                label: '顧客WEBサイト',
+                type: 'url',
+                render: (_value, data) => {
+                  const c = data.customer as { customerWebsite?: string | null } | null;
+                  if (!c?.customerWebsite) return '-';
+                  return (
+                    <a
+                      href={c.customerWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {c.customerWebsite}
+                    </a>
+                  );
+                },
+              },
+              {
+                key: 'customerFiscalMonth',
+                label: '顧客決算月',
+                type: 'text',
+                render: (_value, data) => {
+                  const c = data.customer as { customerFiscalMonth?: number | null } | null;
+                  return c?.customerFiscalMonth ? `${c.customerFiscalMonth}月` : '-';
+                },
+              },
+              {
                 key: 'customerFolderUrl',
                 label: '顧客フォルダURL',
                 type: 'text',
@@ -306,6 +449,24 @@ export const projectDetailConfig: EntityDetailConfig = {
                       {c.customerFolderUrl}
                     </a>
                   );
+                },
+              },
+              {
+                key: 'partnerCode',
+                label: '代理店コード',
+                type: 'text',
+                render: (_value, data) => {
+                  const p = data.partner as { partnerCode?: string } | null;
+                  return p?.partnerCode || '-';
+                },
+              },
+              {
+                key: 'partnerSalutation',
+                label: '代理店呼称',
+                type: 'text',
+                render: (_value, data) => {
+                  const p = data.partner as { partnerSalutation?: string | null } | null;
+                  return p?.partnerSalutation || '-';
                 },
               },
               {
