@@ -163,7 +163,7 @@ export const projectListConfig: EntityListConfig = {
     {
       key: 'customerFolderUrl',
       label: '顧客フォルダURL',
-      width: 100,
+      width: 120,
       sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
@@ -174,10 +174,11 @@ export const projectListConfig: EntityListConfig = {
             href={c.customerFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1"
+            className="text-blue-600 hover:underline text-sm truncate block max-w-full"
             onClick={(e) => e.stopPropagation()}
+            title={c.customerFolderUrl}
           >
-            リンク
+            {c.customerFolderUrl}
           </a>
         );
       },
@@ -207,7 +208,7 @@ export const projectListConfig: EntityListConfig = {
     {
       key: 'partnerFolderUrl',
       label: '代理店フォルダURL',
-      width: 100,
+      width: 120,
       sortable: true,
       defaultVisible: false,
       render: (_value, row) => {
@@ -218,10 +219,11 @@ export const projectListConfig: EntityListConfig = {
             href={p.partnerFolderUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm inline-flex items-center gap-1"
+            className="text-blue-600 hover:underline text-sm truncate block max-w-full"
             onClick={(e) => e.stopPropagation()}
+            title={p.partnerFolderUrl}
           >
-            リンク
+            {p.partnerFolderUrl}
           </a>
         );
       },

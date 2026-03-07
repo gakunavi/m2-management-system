@@ -230,6 +230,10 @@ export function SpreadsheetTable({
     () => preferences?.columnPinning?.left ?? [],
   );
 
+  // pinnedCols の最新値を ref で保持（save ハンドラで stale closure を防止）
+  const pinnedColsRef = useRef(pinnedCols);
+  pinnedColsRef.current = pinnedCols;
+
   // DB から復元されたら同期
   useEffect(() => {
     const fromDb = preferences?.columnPinning?.left ?? [];
@@ -393,7 +397,7 @@ export function SpreadsheetTable({
         columnVisibility: next,
         columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
         sortState: preferences?.sortState ?? [],
-        columnPinning: preferences?.columnPinning ?? { left: [] },
+        columnPinning: { left: pinnedColsRef.current },
       });
     },
     onColumnOrderChange: (updater) => {
@@ -404,7 +408,7 @@ export function SpreadsheetTable({
         columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
         columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
         sortState: preferences?.sortState ?? [],
-        columnPinning: preferences?.columnPinning ?? { left: [] },
+        columnPinning: { left: pinnedColsRef.current },
       });
     },
     onColumnSizingChange: (updater) => {
@@ -415,7 +419,7 @@ export function SpreadsheetTable({
         columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
         columnWidths: next,
         sortState: preferences?.sortState ?? [],
-        columnPinning: preferences?.columnPinning ?? { left: [] },
+        columnPinning: { left: pinnedColsRef.current },
       });
     },
     getCoreRowModel: getCoreRowModel(),

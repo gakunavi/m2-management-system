@@ -196,7 +196,7 @@ export function EditableCell({
           )}
         >
           {hasUrlValue ? (
-            <span className="inline-flex items-center gap-1">
+            <span className="flex items-center gap-1 min-w-0 w-full">
               <span className="truncate">{displayContent}</span>
               <ExternalLink className="h-3 w-3 shrink-0 text-blue-400" />
             </span>

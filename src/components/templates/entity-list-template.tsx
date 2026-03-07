@@ -116,6 +116,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       columnVisibility: {},
       columnWidths: {},
       sortState: [],
+      columnPinning: { left: [] },
     },
     filters,
     sortItems,
@@ -127,13 +128,18 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   const applyViewState = useCallback(
     (view: SavedTableView) => {
       const s = view.settings as SavedViewSettings;
-      savePreferences(s.columnSettings);
+      // ビューに columnPinning がない場合は現在の設定を維持
+      const mergedSettings = {
+        ...s.columnSettings,
+        columnPinning: s.columnSettings.columnPinning ?? preferences?.columnPinning,
+      };
+      savePreferences(mergedSettings);
       setSearchQuery(s.searchQuery);
       setPageSize(s.pageSize);
       setFilters(s.filters);
       setSortItems(s.sortItems);
     },
-    [savePreferences, setSearchQuery, setPageSize, setFilters, setSortItems],
+    [savePreferences, setSearchQuery, setPageSize, setFilters, setSortItems, preferences?.columnPinning],
   );
 
   /** タブ切替 */
