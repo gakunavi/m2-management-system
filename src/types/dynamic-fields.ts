@@ -8,9 +8,11 @@ export interface ProjectFieldDefinition {
   /** 表示ラベル */
   label: string;
   /** フィールドの型 */
-  type: 'text' | 'textarea' | 'number' | 'date' | 'month' | 'select' | 'checkbox' | 'url';
+  type: 'text' | 'textarea' | 'number' | 'date' | 'month' | 'select' | 'checkbox' | 'url' | 'formula';
   /** select型の選択肢 */
   options?: string[];
+  /** formula型のみ: 計算式（例: 'unit_price * quantity'） */
+  formula?: string;
   /** 入力必須か */
   required?: boolean;
   /** 入力ヒント・プレースホルダー */

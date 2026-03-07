@@ -42,16 +42,21 @@ export function useProjectFieldDefinitions(businessId: number) {
   };
 
   const create = async (formData: Record<string, unknown>) => {
+    const fieldType = formData.type as ProjectFieldDefinition['type'];
     const newField: ProjectFieldDefinition = {
       key: formData.key as string,
       label: formData.label as string,
-      type: formData.type as ProjectFieldDefinition['type'],
-      required: (formData.required as boolean) ?? false,
+      type: fieldType,
+      required: fieldType === 'formula' ? false : ((formData.required as boolean) ?? false),
       description: (formData.description as string) || undefined,
-      options: formData.type === 'select' && formData.options
+      options: fieldType === 'select' && formData.options
         ? (formData.options as string).split('\n').map((s) => s.trim()).filter(Boolean)
         : undefined,
+      formula: fieldType === 'formula' && formData.formula
+        ? (formData.formula as string).trim()
+        : undefined,
       sortOrder: projectFields.length + 1,
+      visibleToPartner: (formData.visibleToPartner as boolean) ?? false,
     };
 
     // キーの重複チェック
@@ -69,11 +74,15 @@ export function useProjectFieldDefinitions(businessId: number) {
         return {
           ...f,
           label: formData.label as string,
-          required: (formData.required as boolean) ?? false,
+          required: f.type === 'formula' ? false : ((formData.required as boolean) ?? false),
           description: (formData.description as string) || undefined,
           options: f.type === 'select' && formData.options
             ? (formData.options as string).split('\n').map((s) => s.trim()).filter(Boolean)
             : f.options,
+          formula: f.type === 'formula' && formData.formula
+            ? (formData.formula as string).trim()
+            : f.formula,
+          visibleToPartner: (formData.visibleToPartner as boolean) ?? f.visibleToPartner,
         };
       }
       return f;

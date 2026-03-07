@@ -16,6 +16,7 @@ const FIELD_TYPE_OPTIONS = [
   { label: '選択（ドロップダウン）', value: 'select' },
   { label: 'チェックボックス', value: 'checkbox' },
   { label: 'URL', value: 'url' },
+  { label: '計算（数式）', value: 'formula' },
 ];
 
 type ProjectFieldDefinitionWithId = ProjectFieldDefinition & { id: string };
@@ -39,6 +40,12 @@ const FIELD_COLUMNS: SortableItemColumn<ProjectFieldDefinitionWithId>[] = [
       const opt = FIELD_TYPE_OPTIONS.find((o) => o.value === value);
       return opt?.label ?? String(value);
     },
+  },
+  {
+    key: 'formula',
+    label: '計算式',
+    width: 160,
+    render: (value) => (value ? String(value) : '-'),
   },
   {
     key: 'required',
@@ -87,9 +94,19 @@ const FIELD_FORM_FIELDS: SortableItemFormField[] = [
     visibleWhen: (formData) => formData.type === 'select',
   },
   {
+    key: 'formula',
+    label: '計算式',
+    type: 'text',
+    required: true,
+    placeholder: '例：unit_price * quantity',
+    description: '他のフィールドキーと四則演算（+, -, *, /）、括弧が使えます',
+    visibleWhen: (formData) => formData.type === 'formula',
+  },
+  {
     key: 'required',
     label: '必須',
     type: 'checkbox',
+    visibleWhen: (formData) => formData.type !== 'formula',
   },
   {
     key: 'description',

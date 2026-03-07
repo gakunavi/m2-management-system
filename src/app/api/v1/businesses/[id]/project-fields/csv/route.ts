@@ -13,8 +13,9 @@ import { PROJECT_FIELD_TEMPLATE_COLUMNS, FIELD_TYPE_LABEL_MAP, parseCSVLine } fr
 interface ProjectFieldDefinition {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'number' | 'date' | 'month' | 'select' | 'checkbox' | 'url';
+  type: 'text' | 'textarea' | 'number' | 'date' | 'month' | 'select' | 'checkbox' | 'url' | 'formula';
   options?: string[];
+  formula?: string;
   required?: boolean;
   description?: string;
   sortOrder: number;
@@ -147,7 +148,7 @@ export async function POST(
         }
         const mappedType = FIELD_TYPE_LABEL_MAP[rawType];
         if (!mappedType) {
-          const validLabels = ['テキスト', 'テキストエリア', '数値', '日付', '年月', '選択', 'チェックボックス', 'URL'];
+          const validLabels = ['テキスト', 'テキストエリア', '数値', '日付', '年月', '選択', 'チェックボックス', 'URL', '計算（数式）'];
           results.errors.push(`行${lineNo}: 型「${rawType}」は無効です。有効な値: ${validLabels.join(', ')}`);
           results.skipped++;
           continue;
@@ -178,12 +179,16 @@ export async function POST(
           row.visibleToPartner?.trim() === '1' ||
           row.visibleToPartner?.trim().toLowerCase() === 'true';
 
+        // formula型: required は常に false
+        const entryRequired = typeValue === 'formula' ? false : required;
+
         const entry: ProjectFieldDefinition = {
           key: fieldKey,
           label,
           type: typeValue,
           ...(options !== undefined ? { options } : {}),
-          required,
+          ...(typeValue === 'formula' && row.formula?.trim() ? { formula: row.formula.trim() } : {}),
+          required: entryRequired,
           ...(row.description?.trim() ? { description: row.description.trim() } : {}),
           sortOrder,
           visibleToPartner,

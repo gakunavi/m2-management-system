@@ -14,6 +14,8 @@ import type { SortDirection } from '@/lib/sort-helper';
 import { formatProject } from '@/lib/format-project';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
+import { computeAllFormulas } from '@/lib/formula-evaluator';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 /**
  * ソートフィールド → Prisma orderBy マッピング。
@@ -221,6 +223,23 @@ export async function GET(request: NextRequest) {
       statusDefs.map((s) => [`${s.businessId}:${s.statusCode}`, { label: s.statusLabel, color: s.statusColor }]),
     );
 
+    // formula 計算のため、事業のフィールド定義を取得
+    const businessIds = Array.from(new Set(projects.map((p) => p.businessId)));
+    const businessFieldsMap = new Map<number, ProjectFieldDefinition[]>();
+    if (businessIds.length > 0) {
+      const businesses = await prisma.business.findMany({
+        where: { id: { in: businessIds } },
+        select: { id: true, businessConfig: true },
+      });
+      for (const biz of businesses) {
+        const config = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+        const fields = config?.projectFields ?? [];
+        if (fields.some((f) => f.type === 'formula')) {
+          businessFieldsMap.set(biz.id, fields);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: projects.map((p) => {
@@ -231,6 +250,14 @@ export async function GET(request: NextRequest) {
         const flatCustom: Record<string, unknown> = {};
         if (customData) {
           for (const [k, v] of Object.entries(customData)) {
+            flatCustom[`customData_${k}`] = v;
+          }
+        }
+        // formula フィールドの計算値を注入
+        const fields = businessFieldsMap.get(p.businessId);
+        if (fields) {
+          const formulaResults = computeAllFormulas(fields, customData);
+          for (const [k, v] of Object.entries(formulaResults)) {
             flatCustom[`customData_${k}`] = v;
           }
         }

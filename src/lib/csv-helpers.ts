@@ -215,6 +215,7 @@ export const PROJECT_FIELD_TEMPLATE_COLUMNS: readonly CsvTemplateDef[] = [
   { key: 'label', label: '表示ラベル', required: true, example: '案件金額' },
   { key: 'type', label: '型', required: true, example: '数値' },
   { key: 'options', label: '選択肢（カンマ区切り）', example: '' },
+  { key: 'formula', label: '計算式', example: '' },
   { key: 'required', label: '必須', example: '0' },
   { key: 'description', label: '説明', example: '税込金額を入力' },
   { key: 'sortOrder', label: '表示順', example: '0' },
@@ -232,6 +233,8 @@ export const FIELD_TYPE_LABEL_MAP: Record<string, string> = {
   'チェックボックス': 'checkbox',
   'URL': 'url',
   'url': 'url',
+  '計算（数式）': 'formula',
+  '計算': 'formula',
   // 英語そのままでも受け付け
   'text': 'text',
   'textarea': 'textarea',
@@ -240,6 +243,7 @@ export const FIELD_TYPE_LABEL_MAP: Record<string, string> = {
   'month': 'month',
   'select': 'select',
   'checkbox': 'checkbox',
+  'formula': 'formula',
 };
 
 /** KPI集計方法: 日本語 → 内部値マッピング（英語入力も受け付ける） */

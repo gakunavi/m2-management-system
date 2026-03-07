@@ -11,6 +11,7 @@ import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
  */
 export function buildFormFields(fields: ProjectFieldDefinition[]): FormFieldDef[] {
   return fields
+    .filter((f) => f.type !== 'formula') // formula型はフォームに表示しない
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => {
       const base: FormFieldDef = {
@@ -44,6 +45,7 @@ function mapFieldType(
     case 'select':   return 'select';
     case 'checkbox': return 'checkbox';
     case 'url':      return 'url';
+    case 'formula':  return 'text'; // フォームには表示しないが型安全のため
     default:         return 'text';
   }
 }
@@ -60,6 +62,22 @@ export function buildDynamicColumns(fields: ProjectFieldDefinition[]): ColumnDef
   return fields
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => {
+      // formula型: 読み取り専用・計算値をサーバー側で注入済み
+      if (field.type === 'formula') {
+        return {
+          key: `customData_${field.key}`,
+          label: field.label,
+          width: getDefaultWidth(field.type),
+          sortable: true,
+          defaultVisible: false,
+          render: (_value: unknown, row: Record<string, unknown>) => {
+            // サーバー側で flatCustom に注入済みの計算値を使用
+            const val = row[`customData_${field.key}`];
+            return formatDynamicValue(val, 'formula');
+          },
+        } satisfies ColumnDef;
+      }
+
       const col: ColumnDef = {
         key: `customData_${field.key}`,
         label: field.label,
@@ -93,6 +111,7 @@ function getDefaultWidth(type: ProjectFieldDefinition['type']): number {
     case 'month':    return 120;
     case 'checkbox': return 80;
     case 'url':      return 120;
+    case 'formula':  return 120;
     default:         return 160;
   }
 }
@@ -104,7 +123,8 @@ export function formatDynamicValue(
   if (value == null) return '-';
   switch (type) {
     case 'checkbox': return value ? '✓' : '-';
-    case 'number':   return Number(value).toLocaleString();
+    case 'number':
+    case 'formula':  return Number(value).toLocaleString();
     default:         return String(value);
   }
 }
@@ -151,10 +171,15 @@ export function buildDynamicDisplayFields(
   return fields
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => ({
-      key: `projectCustomData.${field.key}`,
+      key: field.type === 'formula' ? `customData_${field.key}` : `projectCustomData.${field.key}`,
       label: field.label,
       type: 'text' as const,
       render: (_value: unknown, data: Record<string, unknown>) => {
+        if (field.type === 'formula') {
+          // formula はサーバー側で flatCustom に注入済み
+          const val = data[`customData_${field.key}`];
+          return formatDynamicValue(val, 'formula') as React.ReactNode;
+        }
         const customData = data.projectCustomData as Record<string, unknown> | null;
         const val = customData?.[field.key];
         return formatDynamicValue(val, field.type) as React.ReactNode;
@@ -181,6 +206,7 @@ export function buildDynamicCsvColumns(
   fields: ProjectFieldDefinition[]
 ): CsvTemplateColumn[] {
   return fields
+    .filter((f) => f.type !== 'formula') // formula型はCSVインポート対象外
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => ({
       key: field.key,
@@ -216,6 +242,7 @@ export function extractCustomData(
 ): Record<string, unknown> {
   const customData: Record<string, unknown> = {};
   for (const field of fields) {
+    if (field.type === 'formula') continue; // formula型はスキップ
     const formKey = `customData.${field.key}`;
     if (formKey in formData) {
       customData[field.key] = formData[formKey];

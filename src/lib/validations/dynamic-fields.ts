@@ -10,6 +10,9 @@ export function buildDynamicFieldSchema(
   const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const field of fields) {
+    // formula型は計算値のためバリデーション対象外
+    if (field.type === 'formula') continue;
+
     let schema: z.ZodTypeAny;
 
     switch (field.type) {

@@ -7,6 +7,7 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 import { parseSortParams, buildOrderBy } from '@/lib/sort-helper';
 import { escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
+import { computeAllFormulas } from '@/lib/formula-evaluator';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 const PROJECT_SORT_FIELDS = [
@@ -164,7 +165,15 @@ export async function GET(request: NextRequest) {
 
       // 動的フィールドを追加
       for (const field of projectFields) {
+        if (field.type === 'formula') continue; // formula は後で計算値を設定
         rowData[field.key] = customData?.[field.key] ?? '';
+      }
+      // formula フィールドの計算値を追加
+      if (projectFields.some((f) => f.type === 'formula')) {
+        const formulaResults = computeAllFormulas(projectFields, customData);
+        for (const [k, v] of Object.entries(formulaResults)) {
+          rowData[k] = v ?? '';
+        }
       }
 
       return exportHeaders.map((h) => escapeCSV(rowData[h.key])).join(',');
@@ -377,9 +386,10 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          // 動的フィールドデータの構築
+          // 動的フィールドデータの構築（formula型はスキップ）
           const customData: Record<string, unknown> = {};
           for (const field of projectFields) {
+            if (field.type === 'formula') continue;
             const val = row[`custom_${field.key}`];
             if (val !== undefined && val !== '') {
               if (field.type === 'number') {

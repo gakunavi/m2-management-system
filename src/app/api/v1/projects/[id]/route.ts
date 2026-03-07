@@ -8,6 +8,8 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 import { formatProject } from '@/lib/format-project';
 import { createNotificationsForUsers } from '@/lib/notification-helper';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
+import { computeAllFormulas } from '@/lib/formula-evaluator';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 const updateProjectSchema = z.object({
   partnerId: z.number().int().positive().optional().nullable(),
@@ -89,10 +91,32 @@ export async function GET(
       select: { statusLabel: true, statusColor: true },
     });
 
+    // formula フィールドの計算値を注入
+    const customData = project.projectCustomData as Record<string, unknown> | null;
+    const flatCustom: Record<string, unknown> = {};
+    if (customData) {
+      for (const [k, v] of Object.entries(customData)) {
+        flatCustom[`customData_${k}`] = v;
+      }
+    }
+    const business = await prisma.business.findUnique({
+      where: { id: project.businessId },
+      select: { businessConfig: true },
+    });
+    const bizConfig = business?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+    const projectFields = bizConfig?.projectFields ?? [];
+    if (projectFields.some((f) => f.type === 'formula')) {
+      const formulaResults = computeAllFormulas(projectFields, customData);
+      for (const [k, v] of Object.entries(formulaResults)) {
+        flatCustom[`customData_${k}`] = v;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(project),
+        ...flatCustom,
         projectSalesStatusLabel: statusDef?.statusLabel ?? null,
         projectSalesStatusColor: statusDef?.statusColor ?? null,
       },
@@ -216,6 +240,19 @@ export async function PATCH(
     const flatCustom: Record<string, unknown> = {};
     if (updatedCustomData) {
       for (const [k, v] of Object.entries(updatedCustomData)) {
+        flatCustom[`customData_${k}`] = v;
+      }
+    }
+    // formula フィールドの計算値を注入
+    const bizForPatch = await prisma.business.findUnique({
+      where: { id: updated.businessId },
+      select: { businessConfig: true },
+    });
+    const patchBizConfig = bizForPatch?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+    const patchFields = patchBizConfig?.projectFields ?? [];
+    if (patchFields.some((f) => f.type === 'formula')) {
+      const formulaResults = computeAllFormulas(patchFields, updatedCustomData);
+      for (const [k, v] of Object.entries(formulaResults)) {
         flatCustom[`customData_${k}`] = v;
       }
     }

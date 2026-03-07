@@ -35,7 +35,7 @@ const FIXED_COLUMNS = [
 function formatCustomFieldValue(value: unknown, type: string): string {
   if (value === null || value === undefined) return '-';
   if (type === 'checkbox') return value ? '✓' : '-';
-  if (type === 'number' && typeof value === 'number') return value.toLocaleString();
+  if ((type === 'number' || type === 'formula') && typeof value === 'number') return value.toLocaleString();
   return String(value);
 }
 
