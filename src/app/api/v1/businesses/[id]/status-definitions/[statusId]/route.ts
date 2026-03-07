@@ -43,17 +43,10 @@ export async function PATCH(
     const { statusCode: _, ...rest } = body; // eslint-disable-line @typescript-eslint/no-unused-vars
     const data = updateSchema.parse(rest);
 
-    const updated = await prisma.$transaction(async (tx) => {
-      if (data.statusIsFinal) {
-        await tx.businessStatusDefinition.updateMany({
-          where: { businessId, statusIsFinal: true, id: { not: statusDefId } },
-          data: { statusIsFinal: false },
-        });
-      }
-      return tx.businessStatusDefinition.update({
-        where: { id: statusDefId },
-        data,
-      });
+    // statusIsFinal / statusIsLost は複数設定可能（制約なし）
+    const updated = await prisma.businessStatusDefinition.update({
+      where: { id: statusDefId },
+      data,
     });
 
     return NextResponse.json({ success: true, data: updated });

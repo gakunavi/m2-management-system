@@ -83,22 +83,14 @@ export async function POST(
     });
     const nextSortOrder = (maxSort._max.statusSortOrder ?? -1) + 1;
 
-    const created = await prisma.$transaction(async (tx) => {
-      // statusIsFinal の排他制御
-      if (data.statusIsFinal) {
-        await tx.businessStatusDefinition.updateMany({
-          where: { businessId, statusIsFinal: true },
-          data: { statusIsFinal: false },
-        });
-      }
-      return tx.businessStatusDefinition.create({
-        data: {
-          businessId,
-          ...data,
-          statusSortOrder: nextSortOrder,
-          statusIsActive: true,
-        },
-      });
+    // statusIsFinal / statusIsLost は複数設定可能（制約なし）
+    const created = await prisma.businessStatusDefinition.create({
+      data: {
+        businessId,
+        ...data,
+        statusSortOrder: nextSortOrder,
+        statusIsActive: true,
+      },
     });
 
     return NextResponse.json({ success: true, data: created }, { status: 201 });
