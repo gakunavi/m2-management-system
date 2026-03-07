@@ -16,7 +16,7 @@ interface KpiDefinition {
   unit?: string;
   aggregation: 'sum' | 'count';
   sourceField?: string;
-  statusFilter?: string;
+  statusFilter?: string[] | null;
   dateField?: string;
   isPrimary: boolean;
   sortOrder: number;
@@ -187,7 +187,14 @@ export async function POST(
           ...(row.unit?.trim() ? { unit: row.unit.trim() } : {}),
           aggregation,
           ...(row.sourceField?.trim() ? { sourceField: row.sourceField.trim() } : {}),
-          ...(row.statusFilter?.trim() ? { statusFilter: row.statusFilter.trim() } : {}),
+          ...(row.statusFilter?.trim()
+            ? {
+                statusFilter: row.statusFilter
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter((s) => s !== ''),
+              }
+            : {}),
           ...(row.dateField?.trim() ? { dateField: row.dateField.trim() } : {}),
           isPrimary,
           sortOrder,

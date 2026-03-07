@@ -389,7 +389,9 @@ export async function calculateKpiMonthlyActuals(
   };
 
   if (kpi.statusFilter) {
-    where.projectSalesStatus = kpi.statusFilter;
+    where.projectSalesStatus = Array.isArray(kpi.statusFilter)
+      ? { in: kpi.statusFilter }
+      : kpi.statusFilter;
   }
 
   if (partnerIds) {
@@ -484,8 +486,11 @@ export async function calculateKpiBatchForBusiness(
     const monthMap = new Map<string, { actualValue: number; projectCount: number }>();
 
     for (const project of projects) {
-      // ステータスフィルター
-      if (kpi.statusFilter && project.projectSalesStatus !== kpi.statusFilter) continue;
+      // ステータスフィルター（配列対応）
+      if (kpi.statusFilter) {
+        const filters = Array.isArray(kpi.statusFilter) ? kpi.statusFilter : [kpi.statusFilter];
+        if (!filters.includes(project.projectSalesStatus)) continue;
+      }
 
       const month = getRevenueMonth(
         project as unknown as ProjectForRevenue,

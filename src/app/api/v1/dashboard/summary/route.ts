@@ -6,10 +6,10 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 import {
   getCurrentMonth,
   getPreviousMonth,
-  calculateMonthRevenue,
   getBusinessIdsForUser,
-  getRevenueRecognition,
   getKpiDefinitions,
+  getPrimaryKpiDefinition,
+  getKpiDefinition,
   calculateKpiBatchForBusiness,
 } from '@/lib/revenue-helpers';
 import type { DashboardSummary, BusinessSummaryItem, KpiSummaryItem } from '@/types/dashboard';
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const businessIdParam = searchParams.get('businessId');
     const monthParam = searchParams.get('month');
+    const kpiKeyParam = searchParams.get('kpiKey') ?? null;
 
     // 月パラメータのバリデーション
     const currentMonth = monthParam ?? getCurrentMonth();
@@ -95,102 +96,8 @@ export async function GET(request: NextRequest) {
     });
 
     // ============================================
-    // 売上金額集計（当月・前月）
-    // ============================================
-
-    let currentRevenue = 0;
-    let previousRevenue = 0;
-
-    // 売上計上ルールがある事業IDのリスト
-    const businessesWithRR = businesses
-      .map((biz) => ({ ...biz, rr: getRevenueRecognition(biz.businessConfig) }))
-      .filter((biz) => biz.rr !== null) as Array<{
-      id: number;
-      businessName: string;
-      businessConfig: unknown;
-      rr: NonNullable<ReturnType<typeof getRevenueRecognition>>;
-    }>;
-
-    // 当月・前月の売上を並列集計
-    const revenueResults = await Promise.all(
-      businessesWithRR.map(async (biz) => {
-        const [current, previous] = await Promise.all([
-          calculateMonthRevenue(prisma, biz.id, biz.rr, currentMonth),
-          calculateMonthRevenue(prisma, biz.id, biz.rr, previousMonth),
-        ]);
-        return { biz, current, previous };
-      }),
-    );
-
-    for (const { current, previous } of revenueResults) {
-      currentRevenue += current.actualAmount;
-      previousRevenue += previous.actualAmount;
-    }
-
-    // ============================================
-    // 総案件数（projectIsActive=true）
-    // ============================================
-
-    const projectWhere: Record<string, unknown> = { projectIsActive: true };
-    if (targetBusinessId !== null) {
-      projectWhere.businessId = targetBusinessId;
-    } else if (allowedIds !== null) {
-      projectWhere.businessId = { in: allowedIds };
-    }
-
-    // 案件数（projectIsActive=true の現在スナップショット）
-    // 注: totalProjects は active 案件の現時点のカウント。
-    // 前月比較は won(受注)件数で月フィールド識別する設計のため、同一値を使用。
-    const currentTotalProjects = await prisma.project.count({ where: projectWhere });
-
-    // ============================================
-    // 受注案件数（wonProjects）集計
-    // ============================================
-    // 各事業の revenueRecognition.statusCode を持つプロジェクトを
-    // dateField が currentMonth / previousMonth に一致するもので集計
-
-    let currentWon = 0;
-    let previousWon = 0;
-
-    for (const { current, previous } of revenueResults) {
-      currentWon += current.projectCount;
-      previousWon += previous.projectCount;
-    }
-
-    // ============================================
-    // 達成率: SalesTarget との照合
-    // ============================================
-
-    const targetWhere: Record<string, unknown> = {
-      targetMonth: { in: [currentMonth, previousMonth] },
-    };
-    if (targetBusinessId !== null) {
-      targetWhere.businessId = targetBusinessId;
-    } else if (allowedIds !== null) {
-      targetWhere.businessId = { in: allowedIds };
-    }
-
-    const salesTargets = await prisma.salesTarget.findMany({ where: targetWhere });
-
-    // 達成率: プライマリ KPI（revenue）の目標のみ使用（全KPI合算を避ける）
-    let currentTarget = 0;
-    let previousTarget = 0;
-    for (const t of salesTargets) {
-      // revenueRecognition ベースの既存4カード用 → 'revenue' kpiKey の目標のみ集計
-      if (t.kpiKey !== 'revenue') continue;
-      if (t.targetMonth === currentMonth) {
-        currentTarget += Number(t.targetAmount);
-      } else if (t.targetMonth === previousMonth) {
-        previousTarget += Number(t.targetAmount);
-      }
-    }
-
-    const currentAchievementRate = calcAchievementRate(currentRevenue, currentTarget);
-    const previousAchievementRate = calcAchievementRate(previousRevenue, previousTarget);
-    const achievementChangePoints = Math.round((currentAchievementRate - previousAchievementRate) * 10) / 10;
-
-    // ============================================
-    // kpiSummaries（KPI別集計）
+    // KPI 定義ベースで売上・受注案件数を集計
+    // kpiKey 指定時はその KPI、未指定時はプライマリ KPI を使用
     // ============================================
 
     // 各事業の KPI 定義を収集し、kpiKey でユニーク化して集計
@@ -200,19 +107,11 @@ export async function GET(request: NextRequest) {
       unit: string;
       currentValue: number;
       previousValue: number;
-      targetAmount: number;
+      currentProjectCount: number;
+      previousProjectCount: number;
     }
 
     const kpiAccMap = new Map<string, KpiAccumulator>();
-
-    // KPI ターゲットレコードを kpiKey でフィルタリングするため先に取得済みの salesTargets を再利用
-    // kpiKey を持つ SalesTarget レコードのみ集計対象
-    const kpiTargetMap = new Map<string, number>(); // `${kpiKey}` → currentMonth のターゲット合計
-    for (const t of salesTargets) {
-      if (t.targetMonth === currentMonth && t.kpiKey) {
-        kpiTargetMap.set(t.kpiKey, (kpiTargetMap.get(t.kpiKey) ?? 0) + Number(t.targetAmount));
-      }
-    }
 
     // 各事業の KPI 実績を一括計算（N+1 クエリ回避: 事業ごとに 1 クエリ）
     await Promise.all(
@@ -236,6 +135,8 @@ export async function GET(request: NextRequest) {
           if (existing) {
             existing.currentValue += currentActual.actualValue;
             existing.previousValue += previousActual.actualValue;
+            existing.currentProjectCount += currentActual.projectCount;
+            existing.previousProjectCount += previousActual.projectCount;
           } else {
             kpiAccMap.set(kpi.key, {
               kpiKey: kpi.key,
@@ -243,16 +144,108 @@ export async function GET(request: NextRequest) {
               unit: kpi.unit,
               currentValue: currentActual.actualValue,
               previousValue: previousActual.actualValue,
-              targetAmount: 0,
+              currentProjectCount: currentActual.projectCount,
+              previousProjectCount: previousActual.projectCount,
             });
           }
         }
       }),
     );
 
-    // ターゲット金額をマージしてレスポンス配列を構築
+    // ============================================
+    // SalesTarget から目標値を取得
+    // ============================================
+
+    const targetWhere: Record<string, unknown> = {
+      targetMonth: { in: [currentMonth, previousMonth] },
+    };
+    if (targetBusinessId !== null) {
+      targetWhere.businessId = targetBusinessId;
+    } else if (allowedIds !== null) {
+      targetWhere.businessId = { in: allowedIds };
+    }
+
+    const salesTargets = await prisma.salesTarget.findMany({ where: targetWhere });
+
+    // kpiKey → currentMonth/previousMonth のターゲット合計
+    const kpiTargetMap = new Map<string, { current: number; previous: number }>();
+    for (const t of salesTargets) {
+      if (!t.kpiKey) continue;
+      const entry = kpiTargetMap.get(t.kpiKey) ?? { current: 0, previous: 0 };
+      if (t.targetMonth === currentMonth) {
+        entry.current += Number(t.targetAmount);
+      } else if (t.targetMonth === previousMonth) {
+        entry.previous += Number(t.targetAmount);
+      }
+      kpiTargetMap.set(t.kpiKey, entry);
+    }
+
+    // ============================================
+    // メインカード用: 選択 KPI（または プライマリ KPI）の実績を使用
+    // ============================================
+
+    // 選択 KPI の kpiKey を解決
+    let resolvedKpiKey: string | null = null;
+    if (kpiKeyParam) {
+      // 指定 KPI が存在するか確認
+      for (const biz of businesses) {
+        if (getKpiDefinition(biz.businessConfig, kpiKeyParam)) {
+          resolvedKpiKey = kpiKeyParam;
+          break;
+        }
+      }
+    }
+    if (!resolvedKpiKey) {
+      // プライマリ KPI を使用
+      for (const biz of businesses) {
+        const primary = getPrimaryKpiDefinition(biz.businessConfig);
+        if (primary) {
+          resolvedKpiKey = primary.key;
+          break;
+        }
+      }
+    }
+
+    // 選択 KPI の実績を取得
+    const selectedKpiAcc = resolvedKpiKey ? kpiAccMap.get(resolvedKpiKey) : null;
+    const currentRevenue = selectedKpiAcc?.currentValue ?? 0;
+    const previousRevenue = selectedKpiAcc?.previousValue ?? 0;
+    const currentWon = selectedKpiAcc?.currentProjectCount ?? 0;
+    const previousWon = selectedKpiAcc?.previousProjectCount ?? 0;
+
+    // 選択 KPI の目標
+    const selectedKpiTargets = resolvedKpiKey ? kpiTargetMap.get(resolvedKpiKey) : null;
+    const currentTarget = selectedKpiTargets?.current ?? 0;
+    const previousTarget = selectedKpiTargets?.previous ?? 0;
+
+    // ============================================
+    // 総案件数（projectIsActive=true）
+    // ============================================
+
+    const projectWhere: Record<string, unknown> = { projectIsActive: true };
+    if (targetBusinessId !== null) {
+      projectWhere.businessId = targetBusinessId;
+    } else if (allowedIds !== null) {
+      projectWhere.businessId = { in: allowedIds };
+    }
+
+    const currentTotalProjects = await prisma.project.count({ where: projectWhere });
+
+    // ============================================
+    // 達成率計算
+    // ============================================
+
+    const currentAchievementRate = calcAchievementRate(currentRevenue, currentTarget);
+    const previousAchievementRate = calcAchievementRate(previousRevenue, previousTarget);
+    const achievementChangePoints = Math.round((currentAchievementRate - previousAchievementRate) * 10) / 10;
+
+    // ============================================
+    // kpiSummaries（KPI別集計）
+    // ============================================
+
     const kpiSummaries: KpiSummaryItem[] = Array.from(kpiAccMap.values()).map((acc) => {
-      const targetAmount = kpiTargetMap.get(acc.kpiKey) ?? 0;
+      const targets = kpiTargetMap.get(acc.kpiKey);
+      const targetAmount = targets?.current ?? 0;
       return {
         kpiKey: acc.kpiKey,
         label: acc.label,
@@ -272,31 +265,50 @@ export async function GET(request: NextRequest) {
 
     let businessSummaries: BusinessSummaryItem[] | undefined;
 
-    if (targetBusinessId === null) {
-      // 事業別の目標月額マップ（プライマリKPIのみ）
+    if (targetBusinessId === null && resolvedKpiKey) {
+      // 事業別の目標月額マップ（選択KPIのみ）
       const bizTargetMap = new Map<number, number>();
       for (const t of salesTargets) {
-        if (t.targetMonth === currentMonth && t.kpiKey === 'revenue') {
+        if (t.targetMonth === currentMonth && t.kpiKey === resolvedKpiKey) {
           bizTargetMap.set(t.businessId, (bizTargetMap.get(t.businessId) ?? 0) + Number(t.targetAmount));
         }
       }
 
-      businessSummaries = businesses.map((biz) => {
-        const rrResult = revenueResults.find((r) => r.biz.id === biz.id);
-        const actualAmount = rrResult?.current.actualAmount ?? 0;
-        const projectCount = rrResult?.current.projectCount ?? 0;
-        const targetAmount = bizTargetMap.get(biz.id) ?? 0;
-        const achievementRate = targetAmount > 0 ? calcAchievementRate(actualAmount, targetAmount) : null;
+      // 事業ごとのKPI実績を個別に取得
+      businessSummaries = await Promise.all(
+        businesses.map(async (biz) => {
+          const kpiDefs = getKpiDefinitions(biz.businessConfig);
+          const kpiDef = kpiDefs.find((k) => k.key === resolvedKpiKey);
 
-        return {
-          businessId: biz.id,
-          businessName: biz.businessName,
-          actualAmount,
-          targetAmount,
-          achievementRate,
-          projectCount,
-        };
-      });
+          let actualAmount = 0;
+          let projectCount = 0;
+
+          if (kpiDef) {
+            const batchResult = await calculateKpiBatchForBusiness(
+              prisma,
+              biz.id,
+              [kpiDef],
+              [currentMonth],
+            );
+            const monthMap = batchResult.get(kpiDef.key);
+            const actual = monthMap?.get(currentMonth);
+            actualAmount = actual?.actualValue ?? 0;
+            projectCount = actual?.projectCount ?? 0;
+          }
+
+          const targetAmount = bizTargetMap.get(biz.id) ?? 0;
+          const achievementRate = targetAmount > 0 ? calcAchievementRate(actualAmount, targetAmount) : null;
+
+          return {
+            businessId: biz.id,
+            businessName: biz.businessName,
+            actualAmount,
+            targetAmount,
+            achievementRate,
+            projectCount,
+          };
+        }),
+      );
     }
 
     // ============================================

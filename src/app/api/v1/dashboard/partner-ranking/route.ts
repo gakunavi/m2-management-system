@@ -3,10 +3,16 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessIdsForUser, getRevenueRecognition, getRevenueAmount } from '@/lib/revenue-helpers';
+import {
+  getBusinessIdsForUser,
+  getRevenueAmount,
+  getRevenueMonth,
+  getKpiDefinition,
+  getPrimaryKpiDefinition,
+} from '@/lib/revenue-helpers';
 
 // ============================================
-// GET /api/v1/dashboard/partner-ranking?businessId=1&limit=10
+// GET /api/v1/dashboard/partner-ranking?businessId=1&kpiKey=revenue&month=2026-03&limit=10
 // ============================================
 
 export async function GET(request: NextRequest) {
@@ -24,6 +30,8 @@ export async function GET(request: NextRequest) {
     if (isNaN(businessId)) throw ApiError.badRequest('businessId が不正です');
 
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '10', 10)));
+    const kpiKeyParam = searchParams.get('kpiKey') ?? null;
+    const monthParam = searchParams.get('month') ?? null;
 
     // スコープ確認
     const allowedIds = await getBusinessIdsForUser(prisma, user);
@@ -31,28 +39,42 @@ export async function GET(request: NextRequest) {
       throw ApiError.forbidden();
     }
 
-    // 計上ルール取得
+    // KPI定義を取得
     const business = await prisma.business.findUnique({
       where: { id: businessId },
       select: { businessConfig: true },
     });
     if (!business) throw ApiError.notFound('事業が見つかりません');
 
-    const rr = getRevenueRecognition(business.businessConfig);
+    const kpiDef = kpiKeyParam
+      ? getKpiDefinition(business.businessConfig, kpiKeyParam)
+      : getPrimaryKpiDefinition(business.businessConfig);
 
-    // 受注案件を取得
+    // KPI定義ベースでステータスフィルター・金額フィールドを解決
+    const statusFilters: string[] | null = kpiDef?.statusFilter
+      ? Array.isArray(kpiDef.statusFilter)
+        ? kpiDef.statusFilter
+        : [kpiDef.statusFilter]
+      : null;
+    const sourceField = kpiDef?.aggregation === 'sum' && kpiDef?.sourceField
+      ? kpiDef.sourceField
+      : null;
+    const dateField = kpiDef?.dateField ?? 'projectExpectedCloseMonth';
+
+    // 案件を取得
     const projectWhere: Record<string, unknown> = {
       businessId,
       projectIsActive: true,
     };
-    if (rr) {
-      projectWhere.projectSalesStatus = rr.statusCode;
+    if (statusFilters && statusFilters.length > 0) {
+      projectWhere.projectSalesStatus = { in: statusFilters };
     }
 
     const projects = await prisma.project.findMany({
       where: projectWhere,
       select: {
         partnerId: true,
+        projectExpectedCloseMonth: true,
         projectCustomData: true,
         partner: { select: { id: true, partnerName: true } },
       },
@@ -62,12 +84,27 @@ export async function GET(request: NextRequest) {
     const partnerAgg = new Map<number | null, { name: string; amount: number; count: number }>();
 
     for (const p of projects) {
+      // 月フィルター: 指定月のみ集計
+      if (monthParam) {
+        const month = getRevenueMonth(
+          { id: 0, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData },
+          dateField,
+        );
+        if (month !== monthParam) continue;
+      }
+
       const partnerId = p.partnerId;
       const partnerName = p.partner?.partnerName ?? '直販';
-      const amount = rr ? getRevenueAmount(
-        { id: 0, projectExpectedCloseMonth: null, projectCustomData: p.projectCustomData },
-        rr.amountField,
-      ) : 0;
+
+      let amount = 0;
+      if (sourceField) {
+        amount = getRevenueAmount(
+          { id: 0, projectExpectedCloseMonth: null, projectCustomData: p.projectCustomData },
+          sourceField,
+        );
+      } else if (kpiDef?.aggregation === 'count') {
+        amount = 1;
+      }
 
       const entry = partnerAgg.get(partnerId) || { name: partnerName, amount: 0, count: 0 };
       entry.amount += amount;

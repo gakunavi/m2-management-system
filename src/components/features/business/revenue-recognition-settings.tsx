@@ -178,9 +178,13 @@ export function RevenueRecognitionSettings({ entityId }: Props) {
 
       // 後方互換: プライマリ KPI から revenueRecognition も生成
       const primaryKpi = sortedKpis.find((k) => k.isPrimary);
+      const primaryStatusFilter = primaryKpi?.statusFilter;
+      const rrStatusCode = Array.isArray(primaryStatusFilter)
+        ? primaryStatusFilter[0] ?? ''
+        : primaryStatusFilter || '';
       const revenueRecognition = primaryKpi && primaryKpi.aggregation === 'sum' && primaryKpi.sourceField
         ? {
-            statusCode: primaryKpi.statusFilter || '',
+            statusCode: rrStatusCode,
             amountField: primaryKpi.sourceField,
             dateField: primaryKpi.dateField,
           }
@@ -352,26 +356,61 @@ export function RevenueRecognitionSettings({ entityId }: Props) {
                       </div>
                     )}
 
-                    {/* ステータスフィルタ */}
-                    <div>
-                      <label className="block text-sm font-medium mb-1">対象ステータス</label>
-                      <select
-                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={kpi.statusFilter || ''}
-                        onChange={(e) => handleUpdate(index, 'statusFilter', e.target.value || null)}
-                        disabled={!canEdit}
-                      >
-                        <option value="">全ステータス</option>
-                        {statusDefs
-                          .filter((s) => s.statusIsActive)
-                          .map((s) => (
-                            <option key={s.statusCode} value={s.statusCode}>
-                              {s.statusLabel}
-                            </option>
-                          ))}
-                      </select>
+                    {/* ステータスフィルタ（複数選択） */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium mb-1">対象ステータス（複数選択可）</label>
+                      <div className="rounded-md border border-input bg-background p-3">
+                        {statusDefs.filter((s) => s.statusIsActive).length === 0 ? (
+                          <p className="text-sm text-muted-foreground">ステータスが未定義です</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-3">
+                            {statusDefs
+                              .filter((s) => s.statusIsActive)
+                              .map((s) => {
+                                const currentFilters = kpi.statusFilter
+                                  ? Array.isArray(kpi.statusFilter)
+                                    ? kpi.statusFilter
+                                    : [kpi.statusFilter]
+                                  : [];
+                                const isChecked = currentFilters.includes(s.statusCode);
+                                return (
+                                  <label
+                                    key={s.statusCode}
+                                    className="flex items-center gap-1.5 text-sm cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        if (!canEdit) return;
+                                        let newFilters: string[];
+                                        if (isChecked) {
+                                          newFilters = currentFilters.filter((c) => c !== s.statusCode);
+                                        } else {
+                                          newFilters = [...currentFilters, s.statusCode];
+                                        }
+                                        handleUpdate(
+                                          index,
+                                          'statusFilter',
+                                          newFilters.length > 0 ? newFilters : null,
+                                        );
+                                      }}
+                                      disabled={!canEdit}
+                                      className="rounded border-input"
+                                    />
+                                    <span
+                                      className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                                      style={{ backgroundColor: s.statusColor ?? '#6b7280' }}
+                                    />
+                                    {s.statusLabel}
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        指定したステータスの案件のみ集計（未指定=全ステータス）
+                        チェックしたステータスの案件のみ集計（未選択=全ステータス）
                       </p>
                     </div>
 

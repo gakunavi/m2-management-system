@@ -3,10 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessIdsForUser, getRevenueAmount, getKpiDefinition, getPrimaryKpiDefinition } from '@/lib/revenue-helpers';
+import { getBusinessIdsForUser, getRevenueAmount, getRevenueMonth, getKpiDefinition, getPrimaryKpiDefinition } from '@/lib/revenue-helpers';
 
 // ============================================
-// GET /api/v1/dashboard/pipeline?businessId=1
+// GET /api/v1/dashboard/pipeline?businessId=1&kpiKey=revenue&month=2026-03
 // ============================================
 
 export async function GET(request: NextRequest) {
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     const businessIdParam = searchParams.get('businessId');
     const businessId = businessIdParam ? parseInt(businessIdParam, 10) : null;
     const kpiKey = searchParams.get('kpiKey') ?? null;
+    const monthParam = searchParams.get('month') ?? null;
 
     const allowedIds = await getBusinessIdsForUser(prisma, user);
     if (businessId !== null && allowedIds !== null && !allowedIds.includes(businessId)) {
@@ -91,6 +92,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 事業ごとの dateField を解決（月フィルター用）
+    const kpiDateFieldMap = new Map<number, string>();
+    for (const biz of businesses) {
+      const kpi = kpiKey
+        ? getKpiDefinition(biz.businessConfig, kpiKey)
+        : getPrimaryKpiDefinition(biz.businessConfig);
+      kpiDateFieldMap.set(biz.id, kpi?.dateField ?? 'projectExpectedCloseMonth');
+    }
+
     // アクティブ案件を取得
     const projectWhere: Record<string, unknown> = { projectIsActive: true };
     if (businessId !== null) {
@@ -104,6 +114,7 @@ export async function GET(request: NextRequest) {
       select: {
         businessId: true,
         projectSalesStatus: true,
+        projectExpectedCloseMonth: true,
         projectCustomData: true,
       },
     });
@@ -111,6 +122,16 @@ export async function GET(request: NextRequest) {
     // ステータス別に集計
     const statusAgg = new Map<string, { projectCount: number; totalAmount: number }>();
     for (const p of projects) {
+      // 月フィルター
+      if (monthParam) {
+        const dateField = kpiDateFieldMap.get(p.businessId) ?? 'projectExpectedCloseMonth';
+        const month = getRevenueMonth(
+          { id: 0, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData },
+          dateField,
+        );
+        if (month !== monthParam) continue;
+      }
+
       const code = p.projectSalesStatus;
       const entry = statusAgg.get(code) || { projectCount: 0, totalAmount: 0 };
       entry.projectCount++;

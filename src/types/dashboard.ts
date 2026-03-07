@@ -18,7 +18,7 @@ export interface KpiDefinition {
   unit: string;
   aggregation: 'sum' | 'count';
   sourceField: string | null;
-  statusFilter: string | null;
+  statusFilter: string | string[] | null;
   dateField: string;
   isPrimary: boolean;
   sortOrder: number;
