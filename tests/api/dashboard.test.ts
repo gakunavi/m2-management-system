@@ -143,7 +143,20 @@ describe('GET /api/v1/dashboard/summary', () => {
       {
         id: 1,
         businessName: '事業A',
-        businessConfig: {},
+        businessConfig: {
+          kpiDefinitions: [
+            {
+              key: 'revenue',
+              label: '売上',
+              unit: '円',
+              aggregation: 'sum',
+              sourceField: 'estimatedRevenue',
+              dateField: 'projectExpectedCloseMonth',
+              statusFilter: ['won'],
+              isPrimary: true,
+            },
+          ],
+        },
       },
     ]);
     mockPrisma.project.count.mockResolvedValue(0);

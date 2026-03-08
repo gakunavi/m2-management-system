@@ -15,6 +15,7 @@ const { mockGetServerSession, mockPrisma } = vi.hoisted(() => ({
     },
     business: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     customer: {
       findFirst: vi.fn(),
@@ -76,6 +77,8 @@ function createRequest(url: string, options?: { method?: string; body?: string }
 describe('GET /api/v1/projects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // formula 計算用の事業取得モック（デフォルト: formula フィールドなし）
+    mockPrisma.business.findMany.mockResolvedValue([]);
   });
 
   it('未認証の場合は 401 を返す', async () => {
