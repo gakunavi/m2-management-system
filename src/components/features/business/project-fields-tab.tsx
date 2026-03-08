@@ -101,6 +101,36 @@ const FIELD_FORM_FIELDS: SortableItemFormField[] = [
     placeholder: '例：unit_price * quantity',
     description: '他のフィールドキーと四則演算（+, -, *, /）、括弧が使えます',
     visibleWhen: (formData) => formData.type === 'formula',
+    renderAddon: ({ value, setField, items, editItemId }) => {
+      const allFields = items as ProjectFieldDefinitionWithId[];
+      // 自分自身を除外した参照可能フィールド（number + 他の formula）
+      const refFields = allFields.filter(
+        (f) => f.id !== editItemId && (f.type === 'number' || f.type === 'formula'),
+      );
+      if (refFields.length === 0) return null;
+      return (
+        <div className="mt-2">
+          <p className="text-xs text-muted-foreground mb-1.5">フィールドを挿入:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {refFields.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-input bg-muted/50 px-2 py-1 text-xs hover:bg-accent hover:text-accent-foreground transition-colors"
+                onClick={() => {
+                  const current = ((value as string) ?? '').trim();
+                  const newValue = current ? `${current} ${f.key}` : f.key;
+                  setField('formula', newValue);
+                }}
+              >
+                <span className="font-medium">{f.label}</span>
+                <span className="text-muted-foreground">{f.key}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    },
   },
   {
     key: 'required',

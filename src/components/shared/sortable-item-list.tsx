@@ -58,6 +58,14 @@ export interface SortableItemFormField {
   description?: string;
   /** 他のフィールドの値によって表示/非表示を切り替える */
   visibleWhen?: (formData: Record<string, unknown>) => boolean;
+  /** フィールド入力の下に追加UIを描画（例: 計算式のフィールド参照ボタン） */
+  renderAddon?: (params: {
+    value: unknown;
+    formData: Record<string, unknown>;
+    setField: (key: string, value: unknown) => void;
+    items: unknown[];
+    editItemId: string | number | null;
+  }) => React.ReactNode;
 }
 
 interface SortableItemListProps<T extends { id: string | number }> {
@@ -315,6 +323,14 @@ export function SortableItemList<T extends { id: string | number }>({
                   {field.description && field.type !== 'checkbox' && (
                     <p className="text-xs text-muted-foreground">{field.description}</p>
                   )}
+
+                  {field.renderAddon && field.renderAddon({
+                    value,
+                    formData,
+                    setField,
+                    items: localItems,
+                    editItemId: editItem?.id ?? null,
+                  })}
                 </div>
               );
             })}
