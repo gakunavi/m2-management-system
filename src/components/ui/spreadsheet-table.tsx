@@ -214,6 +214,17 @@ export function SpreadsheetTable({
     return [...prefix, ...configColumns.map((c) => c.key)];
   }, [configColumns, hasSelection]);
 
+  // 保存済み columnOrder と現在のカラム定義を整合: 新規カラムを末尾追加 + 削除済みカラムを除外
+  const reconciledColumnOrder = useMemo<ColumnOrderState | undefined>(() => {
+    const persisted = preferences?.columnOrder;
+    if (!persisted) return undefined;
+    const validSet = new Set(defaultColumnOrder);
+    const filtered = persisted.filter((id) => validSet.has(id));
+    const missingCols = defaultColumnOrder.filter((id) => !persisted.includes(id));
+    if (missingCols.length === 0 && filtered.length === persisted.length) return persisted;
+    return [...filtered, ...missingCols];
+  }, [preferences?.columnOrder, defaultColumnOrder]);
+
   const defaultColumnSizing = useMemo<ColumnSizingState>(() => {
     const sizing: ColumnSizingState = {};
     configColumns.forEach((col) => {
@@ -386,14 +397,14 @@ export function SpreadsheetTable({
     columns: tanstackColumns,
     state: {
       columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
-      columnOrder: preferences?.columnOrder ?? defaultColumnOrder,
+      columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
       columnSizing: preferences?.columnWidths ?? defaultColumnSizing,
     },
     onColumnVisibilityChange: (updater) => {
       const current = preferences?.columnVisibility ?? defaultColumnVisibility;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
-        columnOrder: preferences?.columnOrder ?? defaultColumnOrder,
+        columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
         columnVisibility: next,
         columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
         sortState: preferences?.sortState ?? [],
@@ -401,7 +412,7 @@ export function SpreadsheetTable({
       });
     },
     onColumnOrderChange: (updater) => {
-      const current = preferences?.columnOrder ?? defaultColumnOrder;
+      const current = reconciledColumnOrder ?? defaultColumnOrder;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: next,
@@ -415,7 +426,7 @@ export function SpreadsheetTable({
       const current = preferences?.columnWidths ?? defaultColumnSizing;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
-        columnOrder: preferences?.columnOrder ?? defaultColumnOrder,
+        columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
         columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
         columnWidths: next,
         sortState: preferences?.sortState ?? [],
