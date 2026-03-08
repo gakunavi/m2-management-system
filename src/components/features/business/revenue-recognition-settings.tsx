@@ -88,7 +88,7 @@ export function RevenueRecognitionSettings({ entityId }: Props) {
 
   const projectFields: ProjectFieldDefinition[] =
     businessData?.businessConfig?.projectFields ?? [];
-  const numberFields = projectFields.filter((f) => f.type === 'number');
+  const numberFields = projectFields.filter((f) => f.type === 'number' || f.type === 'formula');
   const dateFields = projectFields.filter((f) => f.type === 'date' || f.type === 'month');
 
   const validate = (items: KpiDefinition[]): Record<number, string[]> => {
