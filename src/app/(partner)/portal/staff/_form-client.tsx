@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
-import { Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,38 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { ApiClientError } from '@/lib/api-client';
+
+// ============================================
+// パスワード自動生成
+// ============================================
+
+function generatePassword(length = 12): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%&*';
+  const all = upper + lower + digits + symbols;
+
+  // 各文字種を最低1文字含める
+  const required = [
+    upper[Math.floor(Math.random() * upper.length)],
+    lower[Math.floor(Math.random() * lower.length)],
+    digits[Math.floor(Math.random() * digits.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+  ];
+
+  const remaining = Array.from({ length: length - required.length }, () =>
+    all[Math.floor(Math.random() * all.length)]
+  );
+
+  // シャッフル
+  const chars = [...required, ...remaining];
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 // ============================================
 // 型・定数
@@ -274,23 +306,38 @@ export function StaffFormClient({ mode, staffId }: Props) {
                   </span>
                 )}
               </Label>
-              <div className="relative">
-                <Input
-                  id="userPassword"
-                  type={showPassword ? 'text' : 'password'}
-                  value={userPassword}
-                  onChange={(e) => setUserPassword(e.target.value)}
-                  placeholder={mode === 'new' ? '8文字以上' : '変更しない場合は空欄'}
-                  className={errors.userPassword ? 'border-destructive pr-10' : 'pr-10'}
-                />
-                <button
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="userPassword"
+                    type={showPassword ? 'text' : 'password'}
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                    placeholder={mode === 'new' ? '8文字以上' : '変更しない場合は空欄'}
+                    className={errors.userPassword ? 'border-destructive pr-10' : 'pr-10'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <Button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 whitespace-nowrap"
+                  onClick={() => {
+                    setUserPassword(generatePassword());
+                    setShowPassword(true);
+                  }}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  自動生成
+                </Button>
               </div>
               {errors.userPassword && (
                 <p className="text-xs text-destructive">{errors.userPassword}</p>

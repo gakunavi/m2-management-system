@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
+import { RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,9 +18,42 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { EntitySelectField } from '@/components/form/entity-select-field';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { ApiClientError } from '@/lib/api-client';
+
+// ============================================
+// パスワード自動生成
+// ============================================
+
+function generatePassword(length = 12): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%&*';
+  const all = upper + lower + digits + symbols;
+
+  // 各文字種を最低1文字含める
+  const required = [
+    upper[Math.floor(Math.random() * upper.length)],
+    lower[Math.floor(Math.random() * lower.length)],
+    digits[Math.floor(Math.random() * digits.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+  ];
+
+  const remaining = Array.from({ length: length - required.length }, () =>
+    all[Math.floor(Math.random() * all.length)]
+  );
+
+  // シャッフル
+  const chars = [...required, ...remaining];
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 // ============================================
 // 型・定数
@@ -29,12 +63,6 @@ interface Business {
   id: number;
   businessCode: string;
   businessName: string;
-}
-
-interface Partner {
-  id: number;
-  partnerName: string;
-  partnerCode: string;
 }
 
 interface UserData {
@@ -146,20 +174,7 @@ export function UserFormClient({ mode, userId }: Props) {
     enabled: isAdmin,
   });
 
-  // 代理店一覧取得
-  const { data: partnersData } = useQuery<{ data: Partner[] }>({
-    queryKey: ['partners-all'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/partners?pageSize=200&isActive=true');
-      const json = await res.json();
-      if (!res.ok) throw new Error('代理店一覧の取得に失敗しました');
-      return json;
-    },
-    enabled: isAdmin && PARTNER_ROLES.includes(userRole),
-  });
-
   const businesses = businessesData?.data ?? [];
-  const partners = partnersData?.data ?? [];
 
   // 保存ミューテーション
   const mutation = useMutation({
@@ -306,14 +321,26 @@ export function UserFormClient({ mode, userId }: Props) {
                 </span>
               )}
             </Label>
-            <Input
-              id="userPassword"
-              type="password"
-              value={userPassword}
-              onChange={(e) => setUserPassword(e.target.value)}
-              placeholder={mode === 'new' ? '8文字以上' : '変更しない場合は空欄'}
-              className={errors.userPassword ? 'border-destructive' : ''}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="userPassword"
+                type="text"
+                value={userPassword}
+                onChange={(e) => setUserPassword(e.target.value)}
+                placeholder={mode === 'new' ? '8文字以上' : '変更しない場合は空欄'}
+                className={errors.userPassword ? 'border-destructive flex-1' : 'flex-1'}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 whitespace-nowrap"
+                onClick={() => setUserPassword(generatePassword())}
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                自動生成
+              </Button>
+            </div>
             {errors.userPassword && (
               <p className="text-xs text-destructive">{errors.userPassword}</p>
             )}
@@ -361,24 +388,18 @@ export function UserFormClient({ mode, userId }: Props) {
               <Label htmlFor="userPartnerId">
                 所属代理店 <span className="text-destructive">*</span>
               </Label>
-              <Select
-                value={userPartnerId ? String(userPartnerId) : ''}
-                onValueChange={(v) => setUserPartnerId(v ? Number(v) : null)}
-              >
-                <SelectTrigger
-                  id="userPartnerId"
-                  className={errors.userPartnerId ? 'border-destructive' : ''}
-                >
-                  <SelectValue placeholder="代理店を選択" />
-                </SelectTrigger>
-                <SelectContent>
-                  {partners.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.partnerName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EntitySelectField
+                id="userPartnerId"
+                value={userPartnerId}
+                onChange={(id) => setUserPartnerId(id)}
+                config={{
+                  endpoint: '/partners',
+                  labelField: 'partnerName',
+                  codeField: 'partnerCode',
+                  searchPlaceholder: '代理店を検索...',
+                }}
+                error={errors.userPartnerId}
+              />
               {errors.userPartnerId && (
                 <p className="text-xs text-destructive">{errors.userPartnerId}</p>
               )}
