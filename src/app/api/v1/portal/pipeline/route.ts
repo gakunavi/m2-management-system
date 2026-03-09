@@ -6,7 +6,7 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 import { getBusinessPartnerScope, getRevenueRecognition, getRevenueAmount } from '@/lib/revenue-helpers';
 
 // ============================================
-// GET /api/v1/portal/pipeline?businessId=1
+// GET /api/v1/portal/pipeline?businessId=1&month=2026-03
 // パートナーポータル用パイプライン集計
 // ============================================
 
@@ -29,6 +29,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const businessIdParam = searchParams.get('businessId');
     const businessId = businessIdParam ? parseInt(businessIdParam, 10) : null;
+    const monthParam = searchParams.get('month') ?? null;
+    const startMonthParam = searchParams.get('startMonth') ?? null;
+    const endMonthParam = searchParams.get('endMonth') ?? null;
+    const periodParam = searchParams.get('period') ?? null;
 
     // ============================================
     // スコープ構築
@@ -141,6 +145,18 @@ export async function GET(request: NextRequest) {
     const statusAgg = new Map<string, { projectCount: number; totalAmount: number }>();
 
     for (const p of projects) {
+      // 期間フィルター（period=all は全件通過）
+      if (periodParam !== 'all' && (monthParam || startMonthParam || endMonthParam)) {
+        const month = p.projectExpectedCloseMonth;
+        if (!month) continue;
+        if (monthParam) {
+          if (month !== monthParam) continue;
+        } else {
+          if (startMonthParam && month < startMonthParam) continue;
+          if (endMonthParam && month > endMonthParam) continue;
+        }
+      }
+
       const code = p.projectSalesStatus;
       const entry = statusAgg.get(code) ?? { projectCount: 0, totalAmount: 0 };
       entry.projectCount++;

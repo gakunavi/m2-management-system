@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -11,10 +11,10 @@ import {
 import type { PortalSummaryResponse } from '@/types/dashboard';
 
 // ============================================
-// GET /api/v1/portal/summary
+// GET /api/v1/portal/summary?month=2026-03
 // ============================================
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
@@ -31,6 +31,16 @@ export async function GET() {
     }
 
     // ============================================
+    // 期間パラメータ解析
+    // ============================================
+
+    const { searchParams } = request.nextUrl;
+    const monthParam = searchParams.get('month') ?? null;
+    const startMonthParam = searchParams.get('startMonth') ?? null;
+    const endMonthParam = searchParams.get('endMonth') ?? null;
+    const periodParam = searchParams.get('period') ?? null;
+
+    // ============================================
     // スコープ別プロジェクト取得
     // ============================================
 
@@ -39,8 +49,18 @@ export async function GET() {
       partnerId: number | null;
       projectAssignedUserId: number | null;
       projectSalesStatus: string;
+      projectExpectedCloseMonth: string | null;
       projectCustomData: unknown;
     }>;
+
+    const projectSelect = {
+      businessId: true as const,
+      partnerId: true as const,
+      projectAssignedUserId: true as const,
+      projectSalesStatus: true as const,
+      projectExpectedCloseMonth: true as const,
+      projectCustomData: true as const,
+    };
 
     if (user.role === 'partner_admin') {
       // partner_admin: 事業別階層で自社 + 下位代理店すべてのプロジェクト
@@ -51,13 +71,7 @@ export async function GET() {
           partnerId: { in: partnerIds },
           projectIsActive: true,
         },
-        select: {
-          businessId: true,
-          partnerId: true,
-          projectAssignedUserId: true,
-          projectSalesStatus: true,
-          projectCustomData: true,
-        },
+        select: projectSelect,
       });
     } else {
       // partner_staff: 自分にアサインされたプロジェクトのみ
@@ -66,13 +80,7 @@ export async function GET() {
           projectAssignedUserId: user.id,
           projectIsActive: true,
         },
-        select: {
-          businessId: true,
-          partnerId: true,
-          projectAssignedUserId: true,
-          projectSalesStatus: true,
-          projectCustomData: true,
-        },
+        select: projectSelect,
       });
     }
 
@@ -120,19 +128,32 @@ export async function GET() {
       const rr = getRevenueRecognition(biz.businessConfig);
       const bizProjects = projects.filter((p) => p.businessId === biz.id);
 
-      const projectCount = bizProjects.length;
-
+      let projectCount = 0;
       let totalAmount = 0;
       let wonProjectCount = 0;
 
       for (const project of bizProjects) {
+        // 期間フィルター（period=all は全件通過）
+        if (periodParam !== 'all' && (monthParam || startMonthParam || endMonthParam)) {
+          const month = project.projectExpectedCloseMonth;
+          if (!month) continue;
+          if (monthParam) {
+            if (month !== monthParam) continue;
+          } else {
+            if (startMonthParam && month < startMonthParam) continue;
+            if (endMonthParam && month > endMonthParam) continue;
+          }
+        }
+
+        projectCount++;
+
         // 売上計上ルールがある場合のみ金額と受注件数を集計
         if (rr) {
           if (project.projectSalesStatus === rr.statusCode) {
             totalAmount += getRevenueAmount(
               {
                 id: 0,
-                projectExpectedCloseMonth: null,
+                projectExpectedCloseMonth: project.projectExpectedCloseMonth,
                 projectCustomData: project.projectCustomData,
               },
               rr.amountField,
