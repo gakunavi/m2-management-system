@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { formatCurrency } from './chart-config';
+import { formatKpiValue } from './chart-config';
 import type { PipelineResponse } from '@/types/dashboard';
 
 interface Props {
@@ -18,14 +18,14 @@ interface Props {
   isLoading?: boolean;
 }
 
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { statusLabel: string; projectCount: number; totalAmount: number } }> }) {
+function CustomTooltip({ active, payload, kpiUnit }: { active?: boolean; payload?: Array<{ payload: { statusLabel: string; projectCount: number; totalAmount: number } }>; kpiUnit?: string }) {
   if (!active || !payload?.[0]) return null;
   const d = payload[0].payload;
   return (
     <div className="bg-card p-3 rounded-lg shadow-lg border text-sm">
       <p className="font-medium mb-1">{d.statusLabel}</p>
       <p>{d.projectCount}件</p>
-      <p>{formatCurrency(d.totalAmount)}</p>
+      <p>{formatKpiValue(d.totalAmount, kpiUnit)}</p>
     </div>
   );
 }
@@ -58,7 +58,7 @@ export const PipelineChart = memo(function PipelineChart({ data, isLoading }: Pr
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">パイプライン</h3>
         <span className="text-xs text-muted-foreground">
-          計 {data.total.projectCount}件 / {formatCurrency(data.total.totalAmount, true)}
+          計 {data.total.projectCount}件 / {formatKpiValue(data.total.totalAmount, data.kpiUnit, true)}
         </span>
       </div>
 
@@ -71,7 +71,7 @@ export const PipelineChart = memo(function PipelineChart({ data, isLoading }: Pr
             tick={{ fontSize: 12 }}
             width={80}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip kpiUnit={data.kpiUnit} />} />
           <Bar dataKey="projectCount" radius={[0, 4, 4, 0]} barSize={24}>
             {data.statuses.map((entry) => (
               <Cell key={entry.statusCode} fill={entry.statusColor} />
@@ -89,7 +89,7 @@ export const PipelineChart = memo(function PipelineChart({ data, isLoading }: Pr
               <span>{s.statusLabel}</span>
             </div>
             <div className="text-muted-foreground">
-              {s.projectCount}件 / {formatCurrency(s.totalAmount, true)}
+              {s.projectCount}件 / {formatKpiValue(s.totalAmount, data.kpiUnit, true)}
             </div>
           </div>
         ))}

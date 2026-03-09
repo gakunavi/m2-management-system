@@ -2,12 +2,13 @@
 
 import { memo } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { formatCurrency } from './chart-config';
+import { formatKpiValue } from './chart-config';
 import type { DashboardSummary } from '@/types/dashboard';
 
 interface Props {
   data: DashboardSummary | undefined;
   isLoading?: boolean;
+  kpiUnit?: string;
 }
 
 interface KpiCard {
@@ -24,11 +25,11 @@ const accentColors = [
   'border-l-success',
 ];
 
-function buildCards(data: DashboardSummary): KpiCard[] {
+function buildCards(data: DashboardSummary, kpiUnit?: string): KpiCard[] {
   return [
     {
       label: '売上実績',
-      value: formatCurrency(data.revenue.current, true),
+      value: formatKpiValue(data.revenue.current, kpiUnit, true),
       change: data.revenue.previous > 0
         ? `${data.revenue.changeRate > 0 ? '+' : ''}${data.revenue.changeRate.toFixed(1)}% 前月比`
         : '前月データなし',
@@ -67,7 +68,7 @@ function ChangeIcon({ type }: { type: 'positive' | 'negative' | 'neutral' }) {
   return <Minus className="h-3.5 w-3.5" />;
 }
 
-export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading }: Props) {
+export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading, kpiUnit }: Props) {
   if (isLoading || !data) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
@@ -82,7 +83,7 @@ export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading }
     );
   }
 
-  const cards = buildCards(data);
+  const cards = buildCards(data, kpiUnit);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">

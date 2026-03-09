@@ -314,11 +314,12 @@ export function RevenueRecognitionSettings({ entityId }: Props) {
                       <input
                         type="text"
                         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        placeholder="例: 円, 台, 件"
+                        placeholder="例: #円, ¥#, #台, #件"
                         value={kpi.unit}
                         onChange={(e) => handleUpdate(index, 'unit', e.target.value)}
                         disabled={!canEdit}
                       />
+                      <p className="text-xs text-muted-foreground mt-1"># が数値に置換されます（例: #円→1,000円、¥#→¥1,000）</p>
                     </div>
 
                     {/* 集計方法 */}

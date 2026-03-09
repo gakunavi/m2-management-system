@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { CHART_COLORS, CHART_DEFAULTS, formatCurrency, formatYAxis } from './chart-config';
+import { CHART_COLORS, CHART_DEFAULTS, formatKpiValue, formatKpiYAxis } from './chart-config';
 import type { RevenueTrendResponse } from '@/types/dashboard';
 
 interface Props {
@@ -26,14 +26,11 @@ interface Props {
 }
 
 function formatValue(value: number, unit?: string): string {
-  if (!unit || unit === '円') return formatCurrency(value);
-  return `${value.toLocaleString()}${unit}`;
+  return formatKpiValue(value, unit);
 }
 
 function formatYAxisValue(value: number, unit?: string): string {
-  if (!unit || unit === '円') return formatYAxis(value);
-  if (value >= 10_000) return `${Math.round(value / 10_000)}万`;
-  return String(value);
+  return formatKpiYAxis(value, unit);
 }
 
 function CustomTooltip({ active, payload, label, unit }: { active?: boolean; payload?: Array<{ value: number; dataKey: string }>; label?: string; unit?: string }) {

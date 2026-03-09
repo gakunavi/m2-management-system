@@ -126,6 +126,7 @@ export interface PipelineResponse {
     projectCount: number;
     totalAmount: number;
   };
+  kpiUnit?: string;
 }
 
 export interface PartnerRankingItem {
@@ -138,6 +139,7 @@ export interface PartnerRankingItem {
 
 export interface PartnerRankingResponse {
   rankings: PartnerRankingItem[];
+  kpiUnit?: string;
 }
 
 export interface ActivityItem {

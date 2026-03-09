@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { formatCurrency } from './chart-config';
+import { formatKpiValue } from './chart-config';
 import type { PartnerRankingResponse } from '@/types/dashboard';
 
 interface Props {
@@ -51,7 +51,7 @@ export const PartnerRanking = memo(function PartnerRanking({ data, isLoading }: 
                 <div className="flex items-center justify-between mb-0.5">
                   <span className="text-sm truncate">{item.partnerName}</span>
                   <span className="text-sm font-medium ml-2 shrink-0">
-                    {formatCurrency(item.totalAmount, true)}
+                    {formatKpiValue(item.totalAmount, data.kpiUnit, true)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

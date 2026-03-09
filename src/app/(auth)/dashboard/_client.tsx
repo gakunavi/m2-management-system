@@ -71,7 +71,7 @@ function CompanyDashboard() {
         onMonthChange={setSelectedMonth}
       />
 
-      <KpiSummaryCards data={summary} isLoading={summaryLoading} />
+      <KpiSummaryCards data={summary} isLoading={summaryLoading} kpiUnit={summary?.kpiSummaries?.[0]?.unit} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -86,6 +86,7 @@ function CompanyDashboard() {
           <BusinessSummaryList
             data={summary?.businessSummaries}
             isLoading={summaryLoading}
+            kpiUnit={summary?.kpiSummaries?.[0]?.unit}
           />
         </div>
       </div>
@@ -185,7 +186,7 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
       )}
 
       {/* KPIサマリーカード + 推移グラフを近接配置 */}
-      <KpiSummaryCards data={summary} isLoading={summaryLoading} />
+      <KpiSummaryCards data={summary} isLoading={summaryLoading} kpiUnit={currentKpi?.unit} />
 
       <RevenueTrendChart
         data={trend}

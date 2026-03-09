@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { rankings },
+      data: { rankings, kpiUnit: kpiDef?.unit },
     });
   } catch (error) {
     return handleApiError(error);

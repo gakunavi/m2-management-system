@@ -1,6 +1,6 @@
 'use client';
 
-import { formatCurrency } from '@/components/features/dashboard/chart-config';
+import { formatKpiValue } from '@/components/features/dashboard/chart-config';
 import type { ReportKpiSummary } from '@/types/report';
 
 interface Props {
@@ -9,8 +9,7 @@ interface Props {
 }
 
 function formatValue(value: number, unit: string): string {
-  if (unit === '円' || unit === '万円') return formatCurrency(value, true);
-  return `${value.toLocaleString()}${unit}`;
+  return formatKpiValue(value, unit, true);
 }
 
 export function ReportKpiSummaryCards({ data, isLoading }: Props) {

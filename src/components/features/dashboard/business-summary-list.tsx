@@ -1,15 +1,16 @@
 'use client';
 
-import { formatCurrency } from './chart-config';
+import { formatKpiValue } from './chart-config';
 import { useBusiness } from '@/hooks/use-business';
 import type { BusinessSummaryItem } from '@/types/dashboard';
 
 interface Props {
   data: BusinessSummaryItem[] | undefined;
   isLoading?: boolean;
+  kpiUnit?: string;
 }
 
-export function BusinessSummaryList({ data, isLoading }: Props) {
+export function BusinessSummaryList({ data, isLoading, kpiUnit }: Props) {
   const { switchBusiness } = useBusiness();
 
   if (isLoading || !data) {
@@ -56,7 +57,7 @@ export function BusinessSummaryList({ data, isLoading }: Props) {
 
               <div className="flex items-center justify-between text-sm mb-1">
                 <span>
-                  {formatCurrency(biz.actualAmount, true)} / {formatCurrency(biz.targetAmount, true)}
+                  {formatKpiValue(biz.actualAmount, kpiUnit, true)} / {formatKpiValue(biz.targetAmount, kpiUnit, true)}
                 </span>
                 <span className={rate !== null && rate >= 100 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
                   {rate !== null ? `${rate.toFixed(1)}%` : '-'}
