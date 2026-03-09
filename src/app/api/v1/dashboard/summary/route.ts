@@ -43,6 +43,26 @@ function calcAchievementRate(actual: number, target: number): number {
 }
 
 // ============================================
+// ヘルパー: YYYY-MM 範囲の月リストを生成
+// ============================================
+
+function generateMonthRange(start: string, end: string): string[] {
+  const months: string[] = [];
+  let [year, month] = start.split('-').map(Number);
+  const [endYear, endMonth] = end.split('-').map(Number);
+
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    months.push(`${year}-${String(month).padStart(2, '0')}`);
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+  return months;
+}
+
+// ============================================
 // GET /api/v1/dashboard/summary
 // ============================================
 
@@ -58,13 +78,48 @@ export async function GET(request: NextRequest) {
     const businessIdParam = searchParams.get('businessId');
     const monthParam = searchParams.get('month');
     const kpiKeyParam = searchParams.get('kpiKey') ?? null;
+    const startMonthParam = searchParams.get('startMonth') ?? null;
+    const endMonthParam = searchParams.get('endMonth') ?? null;
+    const periodParam = searchParams.get('period') ?? null;
 
-    // 月パラメータのバリデーション
-    const currentMonth = monthParam ?? getCurrentMonth();
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(currentMonth)) {
-      throw ApiError.badRequest('month は YYYY-MM 形式で指定してください');
+    // ============================================
+    // 期間モードの判定
+    // ============================================
+    // period=all → 全期間モード（前月比較なし）
+    // startMonth & endMonth → 範囲モード（前月比較なし）
+    // month 指定 or デフォルト → 単月モード（前月比較あり）
+
+    type PeriodMode = 'month' | 'range' | 'all';
+    let periodMode: PeriodMode;
+    let targetMonths: string[] | null = null; // null = 全期間（フィルターなし）
+    let currentMonth: string;
+    let previousMonth: string | null = null;
+
+    if (periodParam === 'all') {
+      // 全期間モード
+      periodMode = 'all';
+      currentMonth = getCurrentMonth(); // ラベル用
+      targetMonths = null;
+    } else if (startMonthParam && endMonthParam) {
+      // 範囲モード
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonthParam) ||
+          !/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonthParam)) {
+        throw ApiError.badRequest('startMonth/endMonth は YYYY-MM 形式で指定してください');
+      }
+      periodMode = 'range';
+      currentMonth = endMonthParam; // ラベル用
+      targetMonths = generateMonthRange(startMonthParam, endMonthParam);
+    } else {
+      // 単月モード（デフォルト: 当月）
+      const monthValue = monthParam ?? getCurrentMonth();
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthValue)) {
+        throw ApiError.badRequest('month は YYYY-MM 形式で指定してください');
+      }
+      periodMode = 'month';
+      currentMonth = monthValue;
+      previousMonth = getPreviousMonth(currentMonth);
+      targetMonths = [currentMonth, previousMonth];
     }
-    const previousMonth = getPreviousMonth(currentMonth);
 
     // ユーザーのアクセス可能な事業IDリストを取得
     const allowedIds = await getBusinessIdsForUser(prisma, user);
@@ -97,10 +152,8 @@ export async function GET(request: NextRequest) {
 
     // ============================================
     // KPI 定義ベースで売上・受注案件数を集計
-    // kpiKey 指定時はその KPI、未指定時はプライマリ KPI を使用
     // ============================================
 
-    // 各事業の KPI 定義を収集し、kpiKey でユニーク化して集計
     interface KpiAccumulator {
       kpiKey: string;
       label: string;
@@ -113,40 +166,100 @@ export async function GET(request: NextRequest) {
 
     const kpiAccMap = new Map<string, KpiAccumulator>();
 
-    // 各事業の KPI 実績を一括計算（N+1 クエリ回避: 事業ごとに 1 クエリ）
+    // 全期間モードの場合: 全案件から月一覧を動的に収集して集計
+    // 範囲/単月モード: 指定月リストで集計
     await Promise.all(
       businesses.map(async (biz) => {
         const kpiDefs = getKpiDefinitions(biz.businessConfig);
         if (kpiDefs.length === 0) return;
 
-        const batchResult = await calculateKpiBatchForBusiness(
-          prisma,
-          biz.id,
-          kpiDefs,
-          [currentMonth, previousMonth],
-        );
+        if (targetMonths) {
+          // 単月 or 範囲モード: 指定月リストで集計
+          const batchResult = await calculateKpiBatchForBusiness(
+            prisma,
+            biz.id,
+            kpiDefs,
+            targetMonths,
+          );
 
-        for (const kpi of kpiDefs) {
-          const monthMap = batchResult.get(kpi.key);
-          const currentActual = monthMap?.get(currentMonth) || { actualValue: 0, projectCount: 0 };
-          const previousActual = monthMap?.get(previousMonth) || { actualValue: 0, projectCount: 0 };
+          for (const kpi of kpiDefs) {
+            const monthMap = batchResult.get(kpi.key);
 
-          const existing = kpiAccMap.get(kpi.key);
-          if (existing) {
-            existing.currentValue += currentActual.actualValue;
-            existing.previousValue += previousActual.actualValue;
-            existing.currentProjectCount += currentActual.projectCount;
-            existing.previousProjectCount += previousActual.projectCount;
-          } else {
-            kpiAccMap.set(kpi.key, {
-              kpiKey: kpi.key,
-              label: kpi.label,
-              unit: kpi.unit,
-              currentValue: currentActual.actualValue,
-              previousValue: previousActual.actualValue,
-              currentProjectCount: currentActual.projectCount,
-              previousProjectCount: previousActual.projectCount,
-            });
+            let currentTotal = 0;
+            let currentCount = 0;
+            let previousTotal = 0;
+            let previousCount = 0;
+
+            if (periodMode === 'month' && previousMonth) {
+              // 単月モード: current vs previous
+              const currentActual = monthMap?.get(currentMonth) || { actualValue: 0, projectCount: 0 };
+              const previousActual = monthMap?.get(previousMonth) || { actualValue: 0, projectCount: 0 };
+              currentTotal = currentActual.actualValue;
+              currentCount = currentActual.projectCount;
+              previousTotal = previousActual.actualValue;
+              previousCount = previousActual.projectCount;
+            } else {
+              // 範囲モード: 全月を合算
+              if (monthMap) {
+                Array.from(monthMap.values()).forEach((actual) => {
+                  currentTotal += actual.actualValue;
+                  currentCount += actual.projectCount;
+                });
+              }
+            }
+
+            const existing = kpiAccMap.get(kpi.key);
+            if (existing) {
+              existing.currentValue += currentTotal;
+              existing.previousValue += previousTotal;
+              existing.currentProjectCount += currentCount;
+              existing.previousProjectCount += previousCount;
+            } else {
+              kpiAccMap.set(kpi.key, {
+                kpiKey: kpi.key,
+                label: kpi.label,
+                unit: kpi.unit,
+                currentValue: currentTotal,
+                previousValue: previousTotal,
+                currentProjectCount: currentCount,
+                previousProjectCount: previousCount,
+              });
+            }
+          }
+        } else {
+          // 全期間モード: 広い範囲で一括計算（2020-01 〜 2099-12）
+          const { calculateKpiMonthlyActuals } = await import('@/lib/revenue-helpers');
+          for (const kpi of kpiDefs) {
+            const monthlyActuals = await calculateKpiMonthlyActuals(
+              prisma,
+              biz.id,
+              kpi,
+              '2000-01',
+              '2099-12',
+            );
+
+            let totalValue = 0;
+            let totalCount = 0;
+            for (const ma of monthlyActuals) {
+              totalValue += ma.actualValue;
+              totalCount += ma.projectCount;
+            }
+
+            const existing = kpiAccMap.get(kpi.key);
+            if (existing) {
+              existing.currentValue += totalValue;
+              existing.currentProjectCount += totalCount;
+            } else {
+              kpiAccMap.set(kpi.key, {
+                kpiKey: kpi.key,
+                label: kpi.label,
+                unit: kpi.unit,
+                currentValue: totalValue,
+                previousValue: 0,
+                currentProjectCount: totalCount,
+                previousProjectCount: 0,
+              });
+            }
           }
         }
       }),
@@ -156,9 +269,14 @@ export async function GET(request: NextRequest) {
     // SalesTarget から目標値を取得
     // ============================================
 
-    const targetWhere: Record<string, unknown> = {
-      targetMonth: { in: [currentMonth, previousMonth] },
-    };
+    const targetWhere: Record<string, unknown> = {};
+    if (periodMode === 'month' && previousMonth) {
+      targetWhere.targetMonth = { in: [currentMonth, previousMonth] };
+    } else if (periodMode === 'range' && targetMonths) {
+      targetWhere.targetMonth = { in: targetMonths };
+    }
+    // 全期間モード: targetMonth 条件なし（全目標合算）
+
     if (targetBusinessId !== null) {
       targetWhere.businessId = targetBusinessId;
     } else if (allowedIds !== null) {
@@ -172,10 +290,15 @@ export async function GET(request: NextRequest) {
     for (const t of salesTargets) {
       if (!t.kpiKey) continue;
       const entry = kpiTargetMap.get(t.kpiKey) ?? { current: 0, previous: 0 };
-      if (t.targetMonth === currentMonth) {
+      if (periodMode === 'month') {
+        if (t.targetMonth === currentMonth) {
+          entry.current += Number(t.targetAmount);
+        } else if (t.targetMonth === previousMonth) {
+          entry.previous += Number(t.targetAmount);
+        }
+      } else {
+        // 範囲 or 全期間: 全て current に合算
         entry.current += Number(t.targetAmount);
-      } else if (t.targetMonth === previousMonth) {
-        entry.previous += Number(t.targetAmount);
       }
       kpiTargetMap.set(t.kpiKey, entry);
     }
@@ -184,10 +307,8 @@ export async function GET(request: NextRequest) {
     // メインカード用: 選択 KPI（または プライマリ KPI）の実績を使用
     // ============================================
 
-    // 選択 KPI の kpiKey を解決
     let resolvedKpiKey: string | null = null;
     if (kpiKeyParam) {
-      // 指定 KPI が存在するか確認
       for (const biz of businesses) {
         if (getKpiDefinition(biz.businessConfig, kpiKeyParam)) {
           resolvedKpiKey = kpiKeyParam;
@@ -196,7 +317,6 @@ export async function GET(request: NextRequest) {
       }
     }
     if (!resolvedKpiKey) {
-      // プライマリ KPI を使用
       for (const biz of businesses) {
         const primary = getPrimaryKpiDefinition(biz.businessConfig);
         if (primary) {
@@ -206,14 +326,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 選択 KPI の実績を取得
     const selectedKpiAcc = resolvedKpiKey ? kpiAccMap.get(resolvedKpiKey) : null;
     const currentRevenue = selectedKpiAcc?.currentValue ?? 0;
     const previousRevenue = selectedKpiAcc?.previousValue ?? 0;
     const currentWon = selectedKpiAcc?.currentProjectCount ?? 0;
     const previousWon = selectedKpiAcc?.previousProjectCount ?? 0;
 
-    // 選択 KPI の目標
     const selectedKpiTargets = resolvedKpiKey ? kpiTargetMap.get(resolvedKpiKey) : null;
     const currentTarget = selectedKpiTargets?.current ?? 0;
     const previousTarget = selectedKpiTargets?.previous ?? 0;
@@ -237,7 +355,9 @@ export async function GET(request: NextRequest) {
 
     const currentAchievementRate = calcAchievementRate(currentRevenue, currentTarget);
     const previousAchievementRate = calcAchievementRate(previousRevenue, previousTarget);
-    const achievementChangePoints = Math.round((currentAchievementRate - previousAchievementRate) * 10) / 10;
+    const achievementChangePoints = periodMode === 'month'
+      ? Math.round((currentAchievementRate - previousAchievementRate) * 10) / 10
+      : 0;
 
     // ============================================
     // kpiSummaries（KPI別集計）
@@ -252,8 +372,10 @@ export async function GET(request: NextRequest) {
         unit: acc.unit,
         current: acc.currentValue,
         previous: acc.previousValue,
-        changeRate: calcChangeRate(acc.currentValue, acc.previousValue),
-        changeType: resolveChangeType(acc.currentValue, acc.previousValue),
+        changeRate: periodMode === 'month' ? calcChangeRate(acc.currentValue, acc.previousValue) : 0,
+        changeType: periodMode === 'month'
+          ? resolveChangeType(acc.currentValue, acc.previousValue)
+          : 'neutral' as const,
         targetAmount,
         achievementRate: calcAchievementRate(acc.currentValue, targetAmount),
       };
@@ -266,12 +388,13 @@ export async function GET(request: NextRequest) {
     let businessSummaries: BusinessSummaryItem[] | undefined;
 
     if (targetBusinessId === null && resolvedKpiKey) {
-      // 事業別の目標月額マップ（選択KPIのみ）
+      // 事業別の目標合計マップ（選択KPIのみ）
       const bizTargetMap = new Map<number, number>();
       for (const t of salesTargets) {
-        if (t.targetMonth === currentMonth && t.kpiKey === resolvedKpiKey) {
-          bizTargetMap.set(t.businessId, (bizTargetMap.get(t.businessId) ?? 0) + Number(t.targetAmount));
-        }
+        if (t.kpiKey !== resolvedKpiKey) continue;
+        if (periodMode === 'month' && t.targetMonth !== currentMonth) continue;
+        // 範囲/全期間: 全対象月の目標を合算
+        bizTargetMap.set(t.businessId, (bizTargetMap.get(t.businessId) ?? 0) + Number(t.targetAmount));
       }
 
       // 事業ごとのKPI実績を個別に取得
@@ -284,16 +407,36 @@ export async function GET(request: NextRequest) {
           let projectCount = 0;
 
           if (kpiDef) {
-            const batchResult = await calculateKpiBatchForBusiness(
-              prisma,
-              biz.id,
-              [kpiDef],
-              [currentMonth],
-            );
-            const monthMap = batchResult.get(kpiDef.key);
-            const actual = monthMap?.get(currentMonth);
-            actualAmount = actual?.actualValue ?? 0;
-            projectCount = actual?.projectCount ?? 0;
+            if (targetMonths) {
+              const monthsForBiz = periodMode === 'month' ? [currentMonth] : targetMonths;
+              const batchResult = await calculateKpiBatchForBusiness(
+                prisma,
+                biz.id,
+                [kpiDef],
+                monthsForBiz,
+              );
+              const monthMap = batchResult.get(kpiDef.key);
+              if (monthMap) {
+                Array.from(monthMap.values()).forEach((actual) => {
+                  actualAmount += actual.actualValue;
+                  projectCount += actual.projectCount;
+                });
+              }
+            } else {
+              // 全期間モード
+              const { calculateKpiMonthlyActuals } = await import('@/lib/revenue-helpers');
+              const monthlyActuals = await calculateKpiMonthlyActuals(
+                prisma,
+                biz.id,
+                kpiDef,
+                '2000-01',
+                '2099-12',
+              );
+              for (const ma of monthlyActuals) {
+                actualAmount += ma.actualValue;
+                projectCount += ma.projectCount;
+              }
+            }
           }
 
           const targetAmount = bizTargetMap.get(biz.id) ?? 0;
@@ -320,14 +463,18 @@ export async function GET(request: NextRequest) {
       revenue: {
         current: currentRevenue,
         previous: previousRevenue,
-        changeRate: calcChangeRate(currentRevenue, previousRevenue),
-        changeType: resolveChangeType(currentRevenue, previousRevenue),
+        changeRate: periodMode === 'month' ? calcChangeRate(currentRevenue, previousRevenue) : 0,
+        changeType: periodMode === 'month'
+          ? resolveChangeType(currentRevenue, previousRevenue)
+          : 'neutral' as const,
       },
       achievementRate: {
         current: currentAchievementRate,
         previous: previousAchievementRate,
         changePoints: achievementChangePoints,
-        changeType: resolveChangeType(currentAchievementRate, previousAchievementRate),
+        changeType: periodMode === 'month'
+          ? resolveChangeType(currentAchievementRate, previousAchievementRate)
+          : 'neutral' as const,
       },
       totalProjects: {
         current: currentTotalProjects,
@@ -338,8 +485,10 @@ export async function GET(request: NextRequest) {
       wonProjects: {
         current: currentWon,
         previous: previousWon,
-        change: currentWon - previousWon,
-        changeType: resolveChangeType(currentWon, previousWon),
+        change: periodMode === 'month' ? currentWon - previousWon : 0,
+        changeType: periodMode === 'month'
+          ? resolveChangeType(currentWon, previousWon)
+          : 'neutral' as const,
       },
       ...(kpiSummaries.length > 0 && { kpiSummaries }),
       ...(businessSummaries !== undefined && { businessSummaries }),

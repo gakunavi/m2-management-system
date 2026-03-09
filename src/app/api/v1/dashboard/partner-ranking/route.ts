@@ -32,6 +32,9 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '10', 10)));
     const kpiKeyParam = searchParams.get('kpiKey') ?? null;
     const monthParam = searchParams.get('month') ?? null;
+    const startMonthParam = searchParams.get('startMonth') ?? null;
+    const endMonthParam = searchParams.get('endMonth') ?? null;
+    const periodParam = searchParams.get('period') ?? null;
 
     // スコープ確認
     const allowedIds = await getBusinessIdsForUser(prisma, user);
@@ -84,13 +87,19 @@ export async function GET(request: NextRequest) {
     const partnerAgg = new Map<number | null, { name: string; amount: number; count: number }>();
 
     for (const p of projects) {
-      // 月フィルター: 指定月のみ集計
-      if (monthParam) {
+      // 月フィルター（単月 / 範囲 / period=all は全件通過）
+      if (periodParam !== 'all' && (monthParam || startMonthParam || endMonthParam)) {
         const month = getRevenueMonth(
           { id: 0, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData },
           dateField,
         );
-        if (month !== monthParam) continue;
+        if (!month) continue;
+        if (monthParam) {
+          if (month !== monthParam) continue;
+        } else {
+          if (startMonthParam && month < startMonthParam) continue;
+          if (endMonthParam && month > endMonthParam) continue;
+        }
       }
 
       const partnerId = p.partnerId;

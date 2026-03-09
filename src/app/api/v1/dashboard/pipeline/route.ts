@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
     const businessId = businessIdParam ? parseInt(businessIdParam, 10) : null;
     const kpiKey = searchParams.get('kpiKey') ?? null;
     const monthParam = searchParams.get('month') ?? null;
+    const startMonthParam = searchParams.get('startMonth') ?? null;
+    const endMonthParam = searchParams.get('endMonth') ?? null;
+    const periodParam = searchParams.get('period') ?? null;
 
     const allowedIds = await getBusinessIdsForUser(prisma, user);
     if (businessId !== null && allowedIds !== null && !allowedIds.includes(businessId)) {
@@ -124,14 +127,20 @@ export async function GET(request: NextRequest) {
     // ステータス別に集計
     const statusAgg = new Map<string, { projectCount: number; totalAmount: number }>();
     for (const p of projects) {
-      // 月フィルター
-      if (monthParam) {
+      // 月フィルター（単月 / 範囲 / period=all は全件通過）
+      if (periodParam !== 'all' && (monthParam || startMonthParam || endMonthParam)) {
         const dateField = kpiDateFieldMap.get(p.businessId) ?? 'projectExpectedCloseMonth';
         const month = getRevenueMonth(
           { id: 0, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData },
           dateField,
         );
-        if (month !== monthParam) continue;
+        if (!month) continue;
+        if (monthParam) {
+          if (month !== monthParam) continue;
+        } else {
+          if (startMonthParam && month < startMonthParam) continue;
+          if (endMonthParam && month > endMonthParam) continue;
+        }
       }
 
       const code = p.projectSalesStatus;

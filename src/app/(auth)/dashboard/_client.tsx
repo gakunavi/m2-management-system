@@ -6,10 +6,15 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/hooks/use-auth';
 import { useBusiness } from '@/hooks/use-business';
-import { getCurrentFiscalYear, getCurrentMonth } from '@/lib/revenue-helpers';
+import { getCurrentFiscalYear } from '@/lib/revenue-helpers';
 import { PageHeader } from '@/components/layout/page-header';
 import { KpiSummaryCards } from '@/components/features/dashboard/kpi-summary-cards';
-import { DashboardMonthFilter } from '@/components/features/dashboard/dashboard-month-filter';
+import {
+  DashboardMonthFilter,
+  getDefaultPeriodFilter,
+  buildPeriodParams,
+  type PeriodFilter,
+} from '@/components/features/dashboard/dashboard-month-filter';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -43,13 +48,25 @@ interface BusinessData {
   } | null;
 }
 
+/** PeriodFilter を queryKey 用の安定キーに変換 */
+function periodQueryKey(filter: PeriodFilter): string {
+  switch (filter.mode) {
+    case 'month': return `month:${filter.month}`;
+    case 'all': return 'all';
+    case 'range': return `range:${filter.startMonth}:${filter.endMonth}`;
+  }
+}
+
 function CompanyDashboard() {
   const [trendYear, setTrendYear] = useState(getCurrentFiscalYear);
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(getDefaultPeriodFilter);
+
+  const periodParams = buildPeriodParams(periodFilter);
+  const periodKey = periodQueryKey(periodFilter);
 
   const { data: summary, isLoading: summaryLoading } = useQuery({
-    queryKey: ['dashboard', 'summary', selectedMonth],
-    queryFn: () => apiClient.get<DashboardSummary>(`/dashboard/summary?month=${selectedMonth}`),
+    queryKey: ['dashboard', 'summary', periodKey],
+    queryFn: () => apiClient.get<DashboardSummary>(`/dashboard/summary?_=1${periodParams}`),
   });
 
   const { data: trend, isLoading: trendLoading } = useQuery({
@@ -58,8 +75,8 @@ function CompanyDashboard() {
   });
 
   const { data: pipeline, isLoading: pipelineLoading } = useQuery({
-    queryKey: ['dashboard', 'pipeline', selectedMonth],
-    queryFn: () => apiClient.get<PipelineResponse>(`/dashboard/pipeline?month=${selectedMonth}`),
+    queryKey: ['dashboard', 'pipeline', periodKey],
+    queryFn: () => apiClient.get<PipelineResponse>(`/dashboard/pipeline?_=1${periodParams}`),
   });
 
   return (
@@ -67,8 +84,8 @@ function CompanyDashboard() {
       <AnnouncementBanner />
 
       <DashboardMonthFilter
-        selectedMonth={selectedMonth}
-        onMonthChange={setSelectedMonth}
+        value={periodFilter}
+        onChange={setPeriodFilter}
       />
 
       <KpiSummaryCards data={summary} isLoading={summaryLoading} kpiUnit={summary?.kpiSummaries?.[0]?.unit} />
@@ -99,7 +116,7 @@ function CompanyDashboard() {
 function BusinessDashboard({ businessId }: { businessId: number }) {
   const [trendYear, setTrendYear] = useState(getCurrentFiscalYear);
   const [selectedKpiKey, setSelectedKpiKey] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(getDefaultPeriodFilter);
 
   // 事業のKPI定義一覧を取得
   const { data: businessData } = useQuery({
@@ -122,13 +139,14 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
 
   // KPIパラメータ付きでAPIを呼ぶ
   const kpiParam = selectedKpiKey ? `&kpiKey=${selectedKpiKey}` : '';
-  const monthParam = `&month=${selectedMonth}`;
+  const periodParams = buildPeriodParams(periodFilter);
+  const periodKey = periodQueryKey(periodFilter);
 
   const { data: summary, isLoading: summaryLoading } = useQuery({
-    queryKey: ['dashboard', 'summary', businessId, selectedKpiKey, selectedMonth],
+    queryKey: ['dashboard', 'summary', businessId, selectedKpiKey, periodKey],
     queryFn: () =>
       apiClient.get<DashboardSummary>(
-        `/dashboard/summary?businessId=${businessId}${kpiParam}${monthParam}`,
+        `/dashboard/summary?businessId=${businessId}${kpiParam}${periodParams}`,
       ),
   });
 
@@ -142,19 +160,19 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
   });
 
   const { data: pipeline, isLoading: pipelineLoading } = useQuery({
-    queryKey: ['dashboard', 'pipeline', businessId, selectedKpiKey, selectedMonth],
+    queryKey: ['dashboard', 'pipeline', businessId, selectedKpiKey, periodKey],
     queryFn: () =>
       apiClient.get<PipelineResponse>(
-        `/dashboard/pipeline?businessId=${businessId}${kpiParam}${monthParam}`,
+        `/dashboard/pipeline?businessId=${businessId}${kpiParam}${periodParams}`,
       ),
     enabled: !!selectedKpiKey || kpiDefinitions.length === 0,
   });
 
   const { data: ranking, isLoading: rankingLoading } = useQuery({
-    queryKey: ['dashboard', 'partner-ranking', businessId, selectedKpiKey, selectedMonth],
+    queryKey: ['dashboard', 'partner-ranking', businessId, selectedKpiKey, periodKey],
     queryFn: () =>
       apiClient.get<PartnerRankingResponse>(
-        `/dashboard/partner-ranking?businessId=${businessId}${kpiParam}${monthParam}`,
+        `/dashboard/partner-ranking?businessId=${businessId}${kpiParam}${periodParams}`,
       ),
   });
 
@@ -170,10 +188,10 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
     <div className="space-y-6">
       <AnnouncementBanner businessId={businessId} />
 
-      {/* 月フィルター */}
+      {/* 期間フィルター */}
       <DashboardMonthFilter
-        selectedMonth={selectedMonth}
-        onMonthChange={setSelectedMonth}
+        value={periodFilter}
+        onChange={setPeriodFilter}
       />
 
       {/* KPIタブ切替 */}
