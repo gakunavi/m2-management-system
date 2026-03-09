@@ -1,6 +1,6 @@
 'use client';
 
-import { formatCurrency } from '@/components/features/dashboard/chart-config';
+import { formatKpiValue } from '@/components/features/dashboard/chart-config';
 import type { PortalBusinessSummary } from '@/types/dashboard';
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   selectedBusinessId: number | null;
   onBusinessClick: (businessId: number | null) => void;
   isLoading?: boolean;
+  kpiUnit?: string;
 }
 
 export function PortalSummaryCards({
@@ -17,6 +18,7 @@ export function PortalSummaryCards({
   selectedBusinessId,
   onBusinessClick,
   isLoading,
+  kpiUnit,
 }: Props) {
   if (isLoading || !businesses) {
     return (
@@ -45,7 +47,7 @@ export function PortalSummaryCards({
           onClick={() => onBusinessClick(null)}
         >
           <h3 className="text-sm font-medium text-muted-foreground mb-1">全事業合計</h3>
-          <p className="text-2xl font-bold">{formatCurrency(totals.totalAmount)}</p>
+          <p className="text-2xl font-bold">{formatKpiValue(totals.totalAmount, kpiUnit, true)}</p>
           <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
             <span>案件数: {totals.projectCount}件</span>
             <span>受注: {totals.wonProjectCount}件</span>
@@ -68,7 +70,7 @@ export function PortalSummaryCards({
             <h3 className="text-sm font-medium text-muted-foreground mb-1 truncate">
               {biz.businessName}
             </h3>
-            <p className="text-xl font-bold">{formatCurrency(biz.totalAmount)}</p>
+            <p className="text-xl font-bold">{formatKpiValue(biz.totalAmount, biz.kpiUnit ?? kpiUnit, true)}</p>
             <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
               <span>{biz.projectCount}件</span>
               <span>受注 {biz.wonProjectCount}件</span>

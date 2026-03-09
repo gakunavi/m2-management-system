@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { formatCurrency } from '@/components/features/dashboard/chart-config';
+import { formatKpiValue } from '@/components/features/dashboard/chart-config';
 
 interface PipelineStatus {
   statusCode: string;
@@ -20,16 +20,18 @@ interface PipelineStatus {
 }
 
 interface Props {
-  data: { statuses: PipelineStatus[] } | undefined;
+  data: { statuses: PipelineStatus[]; kpiUnit?: string } | undefined;
   isLoading?: boolean;
 }
 
 function CustomTooltip({
   active,
   payload,
+  kpiUnit,
 }: {
   active?: boolean;
   payload?: Array<{ payload: PipelineStatus }>;
+  kpiUnit?: string;
 }) {
   if (!active || !payload?.[0]) return null;
   const d = payload[0].payload;
@@ -37,7 +39,7 @@ function CustomTooltip({
     <div className="bg-card p-3 rounded-lg shadow-lg border text-sm">
       <p className="font-medium mb-1">{d.statusLabel}</p>
       <p>{d.projectCount}件</p>
-      <p>{formatCurrency(d.totalAmount)}</p>
+      <p>{formatKpiValue(d.totalAmount, kpiUnit)}</p>
     </div>
   );
 }
@@ -78,7 +80,7 @@ export function PortalPipeline({ data, isLoading }: Props) {
             tick={{ fontSize: 12 }}
             width={80}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip kpiUnit={data.kpiUnit} />} />
           <Bar dataKey="projectCount" radius={[0, 4, 4, 0]} barSize={24}>
             {data.statuses.map((entry) => (
               <Cell key={entry.statusCode} fill={entry.statusColor || '#6b7280'} />
@@ -98,7 +100,7 @@ export function PortalPipeline({ data, isLoading }: Props) {
               <span>{s.statusLabel}</span>
             </div>
             <div className="text-muted-foreground">
-              {s.projectCount}件 / {formatCurrency(s.totalAmount, true)}
+              {s.projectCount}件 / {formatKpiValue(s.totalAmount, data.kpiUnit, true)}
             </div>
           </div>
         ))}

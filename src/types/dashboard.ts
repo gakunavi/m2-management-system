@@ -165,6 +165,7 @@ export interface PortalBusinessSummary {
   totalAmount: number;
   projectCount: number;
   wonProjectCount: number;
+  kpiUnit?: string;
 }
 
 export interface PortalSummaryResponse {
@@ -174,6 +175,7 @@ export interface PortalSummaryResponse {
     projectCount: number;
     wonProjectCount: number;
   };
+  kpiUnit?: string;
 }
 
 export interface PortalProject {

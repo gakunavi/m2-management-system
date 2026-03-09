@@ -32,6 +32,7 @@ interface PipelineResponse {
     projectCount: number;
     totalAmount: number;
   }[];
+  kpiUnit?: string;
 }
 
 /** PeriodFilter を queryKey 用の安定キーに変換 */
@@ -82,6 +83,7 @@ export default function PortalClient() {
         selectedBusinessId={selectedBusinessId}
         onBusinessClick={switchBusiness}
         isLoading={summaryLoading}
+        kpiUnit={summary?.kpiUnit}
       />
 
       <PortalPipeline data={pipeline} isLoading={pipelineLoading} />

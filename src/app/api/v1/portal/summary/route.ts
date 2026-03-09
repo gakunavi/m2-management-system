@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import {
   getBusinessPartnerScope,
-  getRevenueRecognition,
   getRevenueAmount,
+  getPrimaryKpiDefinition,
 } from '@/lib/revenue-helpers';
 import type { PortalSummaryResponse } from '@/types/dashboard';
 
@@ -124,8 +124,21 @@ export async function GET(request: NextRequest) {
     // 事業ごとに集計
     // ============================================
 
+    // 最初に見つかった kpiUnit をレスポンスのデフォルトとして使用
+    let resolvedKpiUnit: string | undefined;
+
     const businessSummaries = businesses.map((biz) => {
-      const rr = getRevenueRecognition(biz.businessConfig);
+      const kpi = getPrimaryKpiDefinition(biz.businessConfig);
+      const bizKpiUnit = kpi?.unit ?? undefined;
+      if (bizKpiUnit && !resolvedKpiUnit) resolvedKpiUnit = bizKpiUnit;
+
+      // KPI ステータスフィルター（受注判定）
+      const statusFilters: string[] | null = kpi?.statusFilter
+        ? Array.isArray(kpi.statusFilter)
+          ? kpi.statusFilter
+          : [kpi.statusFilter]
+        : null;
+
       const bizProjects = projects.filter((p) => p.businessId === biz.id);
 
       let projectCount = 0;
@@ -147,19 +160,21 @@ export async function GET(request: NextRequest) {
 
         projectCount++;
 
-        // 売上計上ルールがある場合のみ金額と受注件数を集計
-        if (rr) {
-          if (project.projectSalesStatus === rr.statusCode) {
+        // KPI 定義ベースで金額と受注件数を集計
+        if (kpi && statusFilters && statusFilters.includes(project.projectSalesStatus)) {
+          if (kpi.aggregation === 'sum' && kpi.sourceField) {
             totalAmount += getRevenueAmount(
               {
                 id: 0,
                 projectExpectedCloseMonth: project.projectExpectedCloseMonth,
                 projectCustomData: project.projectCustomData,
               },
-              rr.amountField,
+              kpi.sourceField,
             );
-            wonProjectCount += 1;
+          } else if (kpi.aggregation === 'count') {
+            totalAmount += 1;
           }
+          wonProjectCount += 1;
         }
       }
 
@@ -169,6 +184,7 @@ export async function GET(request: NextRequest) {
         totalAmount,
         projectCount,
         wonProjectCount,
+        kpiUnit: bizKpiUnit,
       };
     });
 
@@ -192,6 +208,7 @@ export async function GET(request: NextRequest) {
     const response: PortalSummaryResponse = {
       businesses: businessSummaries,
       totals,
+      kpiUnit: resolvedKpiUnit,
     };
 
     return NextResponse.json({ success: true, data: response });

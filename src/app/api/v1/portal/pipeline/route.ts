@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessPartnerScope, getRevenueRecognition, getRevenueAmount } from '@/lib/revenue-helpers';
+import { getBusinessPartnerScope, getRevenueAmount, getPrimaryKpiDefinition } from '@/lib/revenue-helpers';
 
 // ============================================
 // GET /api/v1/portal/pipeline?businessId=1&month=2026-03
@@ -111,15 +111,28 @@ export async function GET(request: NextRequest) {
     ]);
 
     // ============================================
-    // 事業ごとの金額フィールドマップを構築
+    // 事業ごとの KPI 解決マップを構築
     // ============================================
 
-    const amountFieldMap = new Map<number, string>();
+    type KpiResolution =
+      | { type: 'sum'; sourceField: string }
+      | { type: 'count' }
+      | { type: 'none' };
+
+    const kpiResolutionMap = new Map<number, KpiResolution>();
+    let resolvedKpiUnit: string | undefined;
     for (const biz of businesses) {
-      const rr = getRevenueRecognition(biz.businessConfig);
-      if (rr) {
-        amountFieldMap.set(biz.id, rr.amountField);
+      const kpi = getPrimaryKpiDefinition(biz.businessConfig);
+      if (!kpi) {
+        kpiResolutionMap.set(biz.id, { type: 'none' });
+      } else if (kpi.aggregation === 'sum' && kpi.sourceField) {
+        kpiResolutionMap.set(biz.id, { type: 'sum', sourceField: kpi.sourceField });
+      } else if (kpi.aggregation === 'count') {
+        kpiResolutionMap.set(biz.id, { type: 'count' });
+      } else {
+        kpiResolutionMap.set(biz.id, { type: 'none' });
       }
+      if (kpi?.unit && !resolvedKpiUnit) resolvedKpiUnit = kpi.unit;
     }
 
     // ============================================
@@ -161,16 +174,18 @@ export async function GET(request: NextRequest) {
       const entry = statusAgg.get(code) ?? { projectCount: 0, totalAmount: 0 };
       entry.projectCount++;
 
-      const amountField = amountFieldMap.get(p.businessId);
-      if (amountField) {
+      const resolution = kpiResolutionMap.get(p.businessId) ?? { type: 'none' as const };
+      if (resolution.type === 'sum') {
         entry.totalAmount += getRevenueAmount(
           {
             id: p.id,
             projectExpectedCloseMonth: p.projectExpectedCloseMonth,
             projectCustomData: p.projectCustomData,
           },
-          amountField,
+          resolution.sourceField,
         );
+      } else if (resolution.type === 'count') {
+        entry.totalAmount += 1;
       }
 
       statusAgg.set(code, entry);
@@ -196,7 +211,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { statuses },
+      data: { statuses, kpiUnit: resolvedKpiUnit },
     });
   } catch (error) {
     return handleApiError(error);
