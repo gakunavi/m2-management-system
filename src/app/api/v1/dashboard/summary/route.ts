@@ -100,15 +100,23 @@ export async function GET(request: NextRequest) {
       periodMode = 'all';
       currentMonth = getCurrentMonth(); // ラベル用
       targetMonths = null;
-    } else if (startMonthParam && endMonthParam) {
-      // 範囲モード
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonthParam) ||
-          !/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonthParam)) {
-        throw ApiError.badRequest('startMonth/endMonth は YYYY-MM 形式で指定してください');
+    } else if (startMonthParam) {
+      // 範囲モード（endMonth 省略時 = startMonth 以降すべて）
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonthParam)) {
+        throw ApiError.badRequest('startMonth は YYYY-MM 形式で指定してください');
+      }
+      if (endMonthParam && !/^\d{4}-(0[1-9]|1[0-2])$/.test(endMonthParam)) {
+        throw ApiError.badRequest('endMonth は YYYY-MM 形式で指定してください');
       }
       periodMode = 'range';
-      currentMonth = endMonthParam; // ラベル用
-      targetMonths = generateMonthRange(startMonthParam, endMonthParam);
+      if (endMonthParam) {
+        currentMonth = endMonthParam; // ラベル用
+        targetMonths = generateMonthRange(startMonthParam, endMonthParam);
+      } else {
+        // endMonth 省略: startMonth 以降すべて → 広い範囲で計算
+        currentMonth = getCurrentMonth();
+        targetMonths = generateMonthRange(startMonthParam, '2099-12');
+      }
     } else {
       // 単月モード（デフォルト: 当月）
       const monthValue = monthParam ?? getCurrentMonth();

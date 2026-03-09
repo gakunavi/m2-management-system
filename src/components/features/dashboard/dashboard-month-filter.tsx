@@ -10,13 +10,13 @@ export type PeriodMode = 'month' | 'all' | 'range';
 export interface PeriodFilter {
   mode: PeriodMode;
   month: string;       // 'month' モード用
-  startMonth: string;  // 'range' モード用
-  endMonth: string;    // 'range' モード用
+  startMonth: string;  // 'range' モード用（必須）
+  endMonth: string;    // 'range' モード用（空文字 = 上限なし）
 }
 
 export function getDefaultPeriodFilter(): PeriodFilter {
   const m = getCurrentMonth();
-  return { mode: 'month', month: m, startMonth: m, endMonth: m };
+  return { mode: 'month', month: m, startMonth: m, endMonth: '' };
 }
 
 /** PeriodFilter → API クエリパラメータ文字列（先頭 & 付き） */
@@ -24,8 +24,13 @@ export function buildPeriodParams(filter: PeriodFilter): string {
   switch (filter.mode) {
     case 'month':
       return `&month=${filter.month}`;
-    case 'range':
-      return `&startMonth=${filter.startMonth}&endMonth=${filter.endMonth}`;
+    case 'range': {
+      let params = `&startMonth=${filter.startMonth}`;
+      if (filter.endMonth) {
+        params += `&endMonth=${filter.endMonth}`;
+      }
+      return params;
+    }
     case 'all':
       return '&period=all';
   }
@@ -64,8 +69,11 @@ export const DashboardMonthFilter = memo(function DashboardMonthFilter({
         return `${formatMonthLabel(value.month)}のデータを表示中`;
       case 'all':
         return '全期間のデータを表示中';
-      case 'range':
-        return `${formatMonthLabel(value.startMonth)} 〜 ${formatMonthLabel(value.endMonth)} のデータを表示中`;
+      case 'range': {
+        const start = formatMonthLabel(value.startMonth);
+        if (!value.endMonth) return `${start} 以降のデータを表示中`;
+        return `${start} 〜 ${formatMonthLabel(value.endMonth)} のデータを表示中`;
+      }
     }
   })();
 
@@ -127,7 +135,17 @@ export const DashboardMonthFilter = memo(function DashboardMonthFilter({
             className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
             value={value.endMonth}
             onChange={(e) => onChange({ ...value, endMonth: e.target.value })}
+            placeholder="未指定"
           />
+          {value.endMonth && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onChange({ ...value, endMonth: '' })}
+            >
+              終了月クリア
+            </Button>
+          )}
         </div>
       )}
 
