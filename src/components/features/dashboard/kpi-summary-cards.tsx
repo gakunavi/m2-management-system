@@ -9,6 +9,7 @@ interface Props {
   data: DashboardSummary | undefined;
   isLoading?: boolean;
   kpiUnit?: string;
+  hideAchievementRate?: boolean;
 }
 
 interface KpiCard {
@@ -25,8 +26,8 @@ const accentColors = [
   'border-l-success',
 ];
 
-function buildCards(data: DashboardSummary, kpiUnit?: string): KpiCard[] {
-  return [
+function buildCards(data: DashboardSummary, kpiUnit?: string, hideAchievementRate?: boolean): KpiCard[] {
+  const cards: KpiCard[] = [
     {
       label: '売上実績',
       value: formatKpiValue(data.revenue.current, kpiUnit, true),
@@ -35,12 +36,18 @@ function buildCards(data: DashboardSummary, kpiUnit?: string): KpiCard[] {
         : '前月データなし',
       changeType: data.revenue.changeType,
     },
-    {
+  ];
+
+  if (!hideAchievementRate) {
+    cards.push({
       label: '目標達成率',
       value: `${data.achievementRate.current.toFixed(1)}%`,
       change: `${data.achievementRate.changePoints > 0 ? '+' : ''}${data.achievementRate.changePoints.toFixed(1)}pt 前月比`,
       changeType: data.achievementRate.changeType,
-    },
+    });
+  }
+
+  cards.push(
     {
       label: '案件総数',
       value: `${data.totalProjects.current.toLocaleString()}件`,
@@ -53,7 +60,9 @@ function buildCards(data: DashboardSummary, kpiUnit?: string): KpiCard[] {
       change: `${data.wonProjects.change > 0 ? '+' : ''}${data.wonProjects.change}件 前月比`,
       changeType: data.wonProjects.changeType,
     },
-  ];
+  );
+
+  return cards;
 }
 
 const changeColors = {
@@ -68,11 +77,14 @@ function ChangeIcon({ type }: { type: 'positive' | 'negative' | 'neutral' }) {
   return <Minus className="h-3.5 w-3.5" />;
 }
 
-export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading, kpiUnit }: Props) {
+export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading, kpiUnit, hideAchievementRate }: Props) {
+  const cardCount = hideAchievementRate ? 3 : 4;
+  const gridCols = hideAchievementRate ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${gridCols}`}>
+        {Array.from({ length: cardCount }).map((_, i) => (
           <div key={i} className="rounded-lg border bg-card p-5 animate-pulse">
             <div className="h-4 w-20 bg-muted rounded mb-3" />
             <div className="h-7 w-32 bg-muted rounded mb-2" />
@@ -83,10 +95,10 @@ export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading, 
     );
   }
 
-  const cards = buildCards(data, kpiUnit);
+  const cards = buildCards(data, kpiUnit, hideAchievementRate);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${gridCols}`}>
       {cards.map((card, index) => (
         <div key={card.label} className={`rounded-lg border border-l-4 bg-card p-5 shadow-sm ${accentColors[index]}`}>
           <p className="text-sm text-muted-foreground">{card.label}</p>

@@ -3,10 +3,16 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessPartnerScope, getRevenueAmount, getPrimaryKpiDefinition } from '@/lib/revenue-helpers';
+import {
+  getBusinessPartnerScope,
+  getRevenueAmount,
+  getRevenueMonth,
+  getKpiDefinition,
+  getPrimaryKpiDefinition,
+} from '@/lib/revenue-helpers';
 
 // ============================================
-// GET /api/v1/portal/pipeline?businessId=1&month=2026-03
+// GET /api/v1/portal/pipeline?businessId=1&kpiKey=revenue&month=2026-03
 // パートナーポータル用パイプライン集計
 // ============================================
 
@@ -16,12 +22,9 @@ export async function GET(request: NextRequest) {
     if (!session?.user) throw ApiError.unauthorized();
 
     const user = session.user as { id: number; role: string; partnerId: number | null };
-
-    // partner_admin / partner_staff のみ許可
     if (!['partner_admin', 'partner_staff'].includes(user.role)) {
       throw ApiError.forbidden();
     }
-
     if (!user.partnerId) {
       throw ApiError.forbidden('代理店情報が設定されていません');
     }
@@ -29,6 +32,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const businessIdParam = searchParams.get('businessId');
     const businessId = businessIdParam ? parseInt(businessIdParam, 10) : null;
+    const kpiKey = searchParams.get('kpiKey') ?? null;
     const monthParam = searchParams.get('month') ?? null;
     const startMonthParam = searchParams.get('startMonth') ?? null;
     const endMonthParam = searchParams.get('endMonth') ?? null;
@@ -43,15 +47,12 @@ export async function GET(request: NextRequest) {
     };
 
     if (user.role === 'partner_admin') {
-      // partner_admin: 事業別階層で自代理店 + 下位代理店すべての案件
       const partnerIds = await getBusinessPartnerScope(prisma, user.partnerId, businessId ?? undefined);
       projectWhere.partnerId = { in: partnerIds };
     } else {
-      // partner_staff: 自分がアサインされた案件のみ
       projectWhere.projectAssignedUserId = user.id;
     }
 
-    // 事業フィルター（任意）
     if (businessId !== null) {
       projectWhere.businessId = businessId;
     }
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
     if (projects.length === 0) {
       return NextResponse.json({
         success: true,
-        data: { statuses: [] },
+        data: { statuses: [], total: { projectCount: 0, totalAmount: 0 } },
       });
     }
 
@@ -88,9 +89,6 @@ export async function GET(request: NextRequest) {
       businessId: { in: businessIds },
       statusIsActive: true,
     };
-    if (businessId !== null) {
-      statusDefWhere.businessId = businessId;
-    }
 
     const [businesses, statusDefs] = await Promise.all([
       prisma.business.findMany({
@@ -121,23 +119,29 @@ export async function GET(request: NextRequest) {
 
     const kpiResolutionMap = new Map<number, KpiResolution>();
     let resolvedKpiUnit: string | undefined;
+
+    const kpiDateFieldMap = new Map<number, string>();
+
     for (const biz of businesses) {
-      const kpi = getPrimaryKpiDefinition(biz.businessConfig);
-      if (!kpi) {
+      const kpiDef = kpiKey
+        ? getKpiDefinition(biz.businessConfig, kpiKey)
+        : getPrimaryKpiDefinition(biz.businessConfig);
+
+      if (!kpiDef) {
         kpiResolutionMap.set(biz.id, { type: 'none' });
-      } else if (kpi.aggregation === 'sum' && kpi.sourceField) {
-        kpiResolutionMap.set(biz.id, { type: 'sum', sourceField: kpi.sourceField });
-      } else if (kpi.aggregation === 'count') {
+      } else if (kpiDef.aggregation === 'sum' && kpiDef.sourceField) {
+        kpiResolutionMap.set(biz.id, { type: 'sum', sourceField: kpiDef.sourceField });
+      } else if (kpiDef.aggregation === 'count') {
         kpiResolutionMap.set(biz.id, { type: 'count' });
       } else {
         kpiResolutionMap.set(biz.id, { type: 'none' });
       }
-      if (kpi?.unit && !resolvedKpiUnit) resolvedKpiUnit = kpi.unit;
+      if (kpiDef && !resolvedKpiUnit) resolvedKpiUnit = kpiDef.unit;
+      kpiDateFieldMap.set(biz.id, kpiDef?.dateField ?? 'projectExpectedCloseMonth');
     }
 
     // ============================================
     // ステータス定義マップを構築
-    // 同一ステータスコードが複数事業にまたがる場合は最初の定義を使用
     // ============================================
 
     const statusInfoMap = new Map<string, { label: string; color: string; sortOrder: number }>();
@@ -158,9 +162,13 @@ export async function GET(request: NextRequest) {
     const statusAgg = new Map<string, { projectCount: number; totalAmount: number }>();
 
     for (const p of projects) {
-      // 期間フィルター（period=all は全件通過）
+      // 月フィルター（KPI dateField を使用）
       if (periodParam !== 'all' && (monthParam || startMonthParam || endMonthParam)) {
-        const month = p.projectExpectedCloseMonth;
+        const dateField = kpiDateFieldMap.get(p.businessId) ?? 'projectExpectedCloseMonth';
+        const month = getRevenueMonth(
+          { id: 0, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData },
+          dateField,
+        );
         if (!month) continue;
         if (monthParam) {
           if (month !== monthParam) continue;
@@ -209,9 +217,17 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => a.statusSortOrder - b.statusSortOrder);
 
+    const total = statuses.reduce(
+      (acc, s) => ({
+        projectCount: acc.projectCount + s.projectCount,
+        totalAmount: acc.totalAmount + s.totalAmount,
+      }),
+      { projectCount: 0, totalAmount: 0 },
+    );
+
     return NextResponse.json({
       success: true,
-      data: { statuses, kpiUnit: resolvedKpiUnit },
+      data: { statuses, total, kpiUnit: resolvedKpiUnit },
     });
   } catch (error) {
     return handleApiError(error);
