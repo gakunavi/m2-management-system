@@ -182,6 +182,7 @@ export interface PortalProject {
   projectId: number;
   projectNo: string;
   customerName: string;
+  partnerName: string;
   businessName: string;
   projectSalesStatus: string;
   projectSalesStatusLabel: string;

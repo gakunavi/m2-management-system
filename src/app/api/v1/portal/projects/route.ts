@@ -22,6 +22,7 @@ type SessionUser = { id: number; role: string; partnerId: number | null };
 type PortalProject = {
   projectNo: string;
   customerName: string;
+  partnerName: string;
   businessName: string;
   projectSalesStatus: string;
   projectSalesStatusLabel: string;
@@ -42,6 +43,7 @@ type SortOrder = 'asc' | 'desc';
 type OrderByClause =
   | { projectNo: SortOrder }
   | { customer: { customerName: SortOrder } }
+  | { partner: { partnerName: SortOrder } }
   | { business: { businessName: SortOrder } }
   | { projectSalesStatus: SortOrder }
   | { projectExpectedCloseMonth: SortOrder }
@@ -49,7 +51,7 @@ type OrderByClause =
   | { updatedAt: SortOrder };
 
 const VALID_SORT_FIELDS = [
-  'projectNo', 'customerName', 'businessName',
+  'projectNo', 'customerName', 'partnerName', 'businessName',
   'projectSalesStatus', 'projectExpectedCloseMonth', 'projectAssignedUserName',
   'updatedAt',
 ] as const;
@@ -68,6 +70,8 @@ function buildPortalOrderBy(sortBy: string, sortOrder: SortOrder): OrderByClause
       return { projectNo: sortOrder };
     case 'customerName':
       return { customer: { customerName: sortOrder } };
+    case 'partnerName':
+      return { partner: { partnerName: sortOrder } };
     case 'businessName':
       return { business: { businessName: sortOrder } };
     case 'projectSalesStatus':
@@ -206,6 +210,11 @@ export async function GET(request: NextRequest) {
               customerName: true,
             },
           },
+          partner: {
+            select: {
+              partnerName: true,
+            },
+          },
         },
       }),
     ]);
@@ -311,6 +320,7 @@ export async function GET(request: NextRequest) {
       return {
         projectNo: p.projectNo,
         customerName: p.customer?.customerName ?? '',
+        partnerName: p.partner?.partnerName ?? '',
         businessName: p.business?.businessName ?? '',
         projectSalesStatus: p.projectSalesStatus,
         projectSalesStatusLabel: statusDef?.label ?? p.projectSalesStatus,

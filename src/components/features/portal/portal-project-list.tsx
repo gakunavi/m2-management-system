@@ -83,6 +83,7 @@ interface UnifiedColumn {
 
 const BASE_FIXED_COLUMNS: UnifiedColumn[] = [
   { key: 'customerName', label: '顧客名', sortable: true, hideOnMobile: false },
+  { key: 'partnerName', label: '代理店名', sortable: true, hideOnMobile: false },
   { key: 'projectSalesStatus', label: 'ステータス', sortable: true, hideOnMobile: false },
   { key: 'projectExpectedCloseMonth', label: '予定月', sortable: true, hideOnMobile: false },
   { key: 'amount', label: '金額', sortable: false, hideOnMobile: false, hideWhenEmpty: true },
@@ -114,6 +115,8 @@ function renderCellValue(col: UnifiedColumn, project: PortalProject): React.Reac
   switch (col.key) {
     case 'customerName':
       return project.customerName;
+    case 'partnerName':
+      return project.partnerName || '-';
     case 'projectSalesStatus':
       return (
         <span
