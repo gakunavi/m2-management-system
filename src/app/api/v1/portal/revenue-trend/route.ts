@@ -128,7 +128,8 @@ export async function GET(request: NextRequest) {
 
     for (const p of projects) {
       const kpi = businessKpiMap.get(p.businessId);
-      if (!kpi || !kpi.statusFilters || !kpi.statusFilters.includes(p.projectSalesStatus)) continue;
+      if (!kpi) continue;
+      if (kpi.statusFilters && !kpi.statusFilters.includes(p.projectSalesStatus)) continue;
 
       const month = getRevenueMonth(
         { id: 0, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData },

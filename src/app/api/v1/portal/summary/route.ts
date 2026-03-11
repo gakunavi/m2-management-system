@@ -230,24 +230,30 @@ export async function GET(request: NextRequest) {
 
       if (isCurrent) {
         acc.currentTotal++;
-        if (kpi && statusFilters && statusFilters.includes(project.projectSalesStatus)) {
-          if (kpi.aggregation === 'sum' && kpi.sourceField) {
-            acc.currentAmount += getRevenueAmount(projectAsRevenue(project), kpi.sourceField);
-          } else if (kpi.aggregation === 'count') {
-            acc.currentAmount += 1;
+        if (kpi) {
+          const statusMatch = !statusFilters || statusFilters.includes(project.projectSalesStatus);
+          if (statusMatch) {
+            if (kpi.aggregation === 'sum' && kpi.sourceField) {
+              acc.currentAmount += getRevenueAmount(projectAsRevenue(project), kpi.sourceField);
+            } else if (kpi.aggregation === 'count') {
+              acc.currentAmount += 1;
+            }
+            acc.currentWon++;
           }
-          acc.currentWon++;
         }
       }
 
       if (isPrevious) {
-        if (kpi && statusFilters && statusFilters.includes(project.projectSalesStatus)) {
-          if (kpi.aggregation === 'sum' && kpi.sourceField) {
-            acc.previousAmount += getRevenueAmount(projectAsRevenue(project), kpi.sourceField);
-          } else if (kpi.aggregation === 'count') {
-            acc.previousAmount += 1;
+        if (kpi) {
+          const statusMatch = !statusFilters || statusFilters.includes(project.projectSalesStatus);
+          if (statusMatch) {
+            if (kpi.aggregation === 'sum' && kpi.sourceField) {
+              acc.previousAmount += getRevenueAmount(projectAsRevenue(project), kpi.sourceField);
+            } else if (kpi.aggregation === 'count') {
+              acc.previousAmount += 1;
+            }
+            acc.previousWon++;
           }
-          acc.previousWon++;
         }
       }
 
@@ -293,7 +299,7 @@ export async function GET(request: NextRequest) {
             let prev = 0;
             for (const p of projects) {
               if (p.businessId !== businessId) continue;
-              if (!sf || !sf.includes(p.projectSalesStatus)) continue;
+              if (sf && !sf.includes(p.projectSalesStatus)) continue;
 
               const isCur = matchesPeriod(p, df, periodMode, currentMonth, rangeStart, rangeEnd);
               const isPrev = periodMode === 'month' && previousMonth
