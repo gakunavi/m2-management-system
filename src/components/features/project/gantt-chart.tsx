@@ -213,7 +213,7 @@ export function GanttChart({
                 {todayPos !== null && (
                   <div
                     className="absolute top-0 bottom-0 w-px bg-red-400 z-20"
-                    style={{ left: `${todayPos}%` }}
+                    style={{ left: (todayPos / 100) * timelineWidth }}
                   >
                     <div className="absolute -top-0 left-1/2 -translate-x-1/2 bg-red-400 text-white text-[9px] px-1 rounded-b">
                       今日
@@ -243,10 +243,9 @@ export function GanttChart({
                             getBarColorClasses(bar.status),
                           )}
                           style={{
-                            left: `${pos.leftPercent}%`,
-                            width: `${pos.widthPercent}%`,
+                            left: (pos.leftPercent / 100) * timelineWidth,
+                            width: Math.max(4, (pos.widthPercent / 100) * timelineWidth),
                             height: ROW_HEIGHT - 16,
-                            minWidth: 4,
                           }}
                           onClick={() => onBarClick?.(bar)}
                           onMouseEnter={(e) => {
@@ -274,7 +273,7 @@ export function GanttChart({
                       return (
                         <div
                           className="absolute top-0 bottom-0 w-px border-l-2 border-dashed border-orange-400 z-10"
-                          style={{ left: `${pct}%` }}
+                          style={{ left: (pct / 100) * timelineWidth }}
                         />
                       );
                     })()}
