@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 
+export const dynamic = 'force-dynamic';
+
 // ============================================
 // GET /api/v1/projects/movements
 // 事業内の全案件ムーブメント一覧（マトリクス表用）
