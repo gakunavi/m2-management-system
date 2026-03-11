@@ -57,9 +57,14 @@ const VALID_SORT_FIELDS = [
 ] as const;
 type SortField = (typeof VALID_SORT_FIELDS)[number];
 
+/** ステータスソートはアプリ側で statusSortOrder を使う */
+function isStatusSort(sortBy: string): boolean {
+  return sortBy === 'projectSalesStatus';
+}
+
 function buildPortalOrderBy(sortBy: string, sortOrder: SortOrder): OrderByClause | null {
-  // カスタムフィールドソートの場合は DB orderBy なし
-  if (isCustomDataSort(sortBy)) return null;
+  // カスタムフィールド or ステータスソートの場合は DB orderBy なし（アプリ側ソート）
+  if (isCustomDataSort(sortBy) || isStatusSort(sortBy)) return null;
 
   const field = VALID_SORT_FIELDS.includes(sortBy as SortField)
     ? (sortBy as SortField)
@@ -118,8 +123,8 @@ export async function GET(request: NextRequest) {
     const sortOrderParam = searchParams.get('sortOrder') ?? 'desc';
     const sortOrder: SortOrder = sortOrderParam === 'asc' ? 'asc' : 'desc';
 
-    // カスタムフィールドソート判定
-    const isCustomSort = isCustomDataSort(sortByParam);
+    // アプリ側ソート判定（カスタムフィールド or ステータス）
+    const isCustomSort = isCustomDataSort(sortByParam) || isStatusSort(sortByParam);
 
     // WHERE 句構築
     const where: Record<string, unknown> = {
@@ -219,16 +224,41 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // カスタムフィールドソート時はアプリ側でソート＆スライス
-    const projects = isCustomSort
-      ? applyAppSortAndSlice(
+    // アプリ側ソート（カスタムフィールド or ステータス）
+    let projects = allProjects;
+    if (isCustomSort) {
+      if (isStatusSort(sortByParam)) {
+        // ステータスソート: statusSortOrder マップで優先順位順に並べ替え
+        const allBizIds = Array.from(new Set(allProjects.map((p) => p.businessId)));
+        const allStatusDefs = allBizIds.length > 0
+          ? await prisma.businessStatusDefinition.findMany({
+              where: { businessId: { in: allBizIds } },
+              select: { businessId: true, statusCode: true, statusSortOrder: true },
+            })
+          : [];
+        // businessId:statusCode → statusSortOrder のマップ
+        const sortOrderMap = new Map<string, number>();
+        for (const sd of allStatusDefs) {
+          sortOrderMap.set(`${sd.businessId}:${sd.statusCode}`, sd.statusSortOrder);
+        }
+        const direction = sortOrder === 'asc' ? 1 : -1;
+        const sorted = [...allProjects].sort((a, b) => {
+          const aOrder = sortOrderMap.get(`${a.businessId}:${a.projectSalesStatus}`) ?? 9999;
+          const bOrder = sortOrderMap.get(`${b.businessId}:${b.projectSalesStatus}`) ?? 9999;
+          return (aOrder - bOrder) * direction;
+        });
+        projects = sorted.slice(skip, skip + pageSize);
+      } else {
+        // カスタムフィールドソート
+        projects = applyAppSortAndSlice(
           allProjects,
           [{ field: sortByParam, direction: sortOrder }] as SortItem[],
           (p) => p.projectCustomData as Record<string, unknown> | null,
           skip,
           pageSize,
-        )
-      : allProjects;
+        );
+      }
+    }
 
     // ステータスラベル・色を一括取得（businessId:statusCode キーでマッピング）
     const uniqueBusinessIds = Array.from(new Set(projects.map((p) => p.businessId)));

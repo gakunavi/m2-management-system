@@ -21,10 +21,15 @@ import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
  * ソートフィールド → Prisma orderBy マッピング。
  * 直接フィールドとリレーション経由フィールドの両方に対応。
  */
+/** ステータスソートはアプリ側で statusSortOrder を使う */
+function isStatusSort(field: string): boolean {
+  return field === 'projectSalesStatus';
+}
+
 const SORT_FIELD_MAP: Record<string, (dir: SortDirection) => Record<string, unknown>> = {
   // 直接フィールド
   projectNo: (dir) => ({ projectNo: dir }),
-  projectSalesStatus: (dir) => ({ projectSalesStatus: dir }),
+  // projectSalesStatus はアプリ側ソート（statusSortOrder 使用）
   projectExpectedCloseMonth: (dir) => ({ projectExpectedCloseMonth: dir }),
   projectAssignedUserName: (dir) => ({ projectAssignedUserName: dir }),
   projectRenovationNumber: (dir) => ({ projectRenovationNumber: dir }),
@@ -53,10 +58,10 @@ function buildProjectOrderBy(
   defaultOrderBy: Record<string, unknown>[],
 ): Record<string, unknown>[] {
   const orderBy = sortItems
-    .filter((item) => !isCustomDataSort(item.field) && SORT_FIELD_MAP[item.field])
+    .filter((item) => !isCustomDataSort(item.field) && !isStatusSort(item.field) && SORT_FIELD_MAP[item.field])
     .map((item) => SORT_FIELD_MAP[item.field](item.direction));
 
-  if (orderBy.length === 0 && !sortItems.some((item) => isCustomDataSort(item.field))) {
+  if (orderBy.length === 0 && !sortItems.some((item) => isCustomDataSort(item.field) || isStatusSort(item.field))) {
     return defaultOrderBy;
   }
   return orderBy;
@@ -187,29 +192,59 @@ export async function GET(request: NextRequest) {
     const defaultOrderBy = [{ updatedAt: 'desc' as const }];
     const orderBy = buildProjectOrderBy(sortItems, defaultOrderBy);
     const originalSkip = (page - 1) * pageSize;
-    const { skip, take, needsAppSort } = getCustomSortPagination(sortItems, originalSkip, pageSize);
+    const hasStatusSort = sortItems.some((item) => isStatusSort(item.field));
+    const { skip, take, needsAppSort: needsCustomSort } = getCustomSortPagination(sortItems, originalSkip, pageSize);
+    // ステータスソートもアプリ側で処理（全件取得が必要）
+    const needsAppSort = needsCustomSort || hasStatusSort;
+    const actualSkip = needsAppSort ? 0 : skip;
+    const actualTake = needsAppSort ? undefined : take;
 
     const [total, allProjects] = await Promise.all([
       prisma.project.count({ where }),
       prisma.project.findMany({
         where,
         orderBy: orderBy.length > 0 ? orderBy : undefined,
-        skip,
-        take,
+        skip: actualSkip,
+        take: actualTake,
         include: PROJECT_INCLUDE,
       }),
     ]);
 
-    // カスタムフィールドソート時はアプリ側でソート＆スライス
-    const projects = needsAppSort
-      ? applyAppSortAndSlice(
+    // アプリ側ソート（カスタムフィールド or ステータス）
+    let projects = allProjects;
+    if (needsAppSort) {
+      if (hasStatusSort) {
+        // ステータスソート: statusSortOrder マップで優先順位順に並べ替え
+        const allBizIds = Array.from(new Set(allProjects.map((p) => p.businessId)));
+        const allStatusDefs = allBizIds.length > 0
+          ? await prisma.businessStatusDefinition.findMany({
+              where: { businessId: { in: allBizIds } },
+              select: { businessId: true, statusCode: true, statusSortOrder: true },
+            })
+          : [];
+        const sortOrderMap = new Map<string, number>();
+        for (const sd of allStatusDefs) {
+          sortOrderMap.set(`${sd.businessId}:${sd.statusCode}`, sd.statusSortOrder);
+        }
+        const statusSortItem = sortItems.find((item) => isStatusSort(item.field));
+        const direction = statusSortItem?.direction === 'asc' ? 1 : -1;
+        projects = [...allProjects].sort((a, b) => {
+          const aOrder = sortOrderMap.get(`${a.businessId}:${a.projectSalesStatus}`) ?? 9999;
+          const bOrder = sortOrderMap.get(`${b.businessId}:${b.projectSalesStatus}`) ?? 9999;
+          return (aOrder - bOrder) * direction;
+        });
+        projects = projects.slice(originalSkip, originalSkip + pageSize);
+      } else {
+        // カスタムフィールドソート
+        projects = applyAppSortAndSlice(
           allProjects,
           sortItems,
           (p) => p.projectCustomData as Record<string, unknown> | null,
           originalSkip,
           pageSize,
-        )
-      : allProjects;
+        );
+      }
+    }
 
     // ステータスラベル・色を一括取得してマッピング
     const statusCodes = Array.from(new Set(projects.map((p) => p.projectSalesStatus)));
