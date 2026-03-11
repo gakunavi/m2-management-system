@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { MOVEMENT_TEMPLATE_COLUMNS, parseCSVLine } from '@/lib/csv-helpers';
+import { syncMovementsForTemplate, deleteMovementsForTemplate } from '@/lib/project-helpers';
 
 // ============================================
 // POST /api/v1/businesses/:id/movement-templates/csv
@@ -157,7 +158,13 @@ export async function POST(
                   results.skipped++;
                   continue;
                 }
-                // 更新
+
+                // 更新前に現在の stepIsActive を取得して変更検知
+                const currentTemplate = await tx.movementTemplate.findUnique({
+                  where: { id: existing.id },
+                  select: { stepIsActive: true },
+                });
+
                 await tx.movementTemplate.update({
                   where: { id: existing.id },
                   data: {
@@ -169,10 +176,20 @@ export async function POST(
                     visibleToPartner,
                   },
                 });
+
+                // stepIsActive 変更時に ProjectMovement を同期
+                if (currentTemplate && currentTemplate.stepIsActive !== stepIsActive) {
+                  if (stepIsActive) {
+                    await syncMovementsForTemplate(tx, existing.id, businessId);
+                  } else {
+                    await deleteMovementsForTemplate(tx, existing.id);
+                  }
+                }
+
                 results.updated++;
               } else {
                 // 新規作成 — stepNumber を自動採番
-                await tx.movementTemplate.create({
+                const created = await tx.movementTemplate.create({
                   data: {
                     businessId,
                     stepNumber: nextStepNumber++,
@@ -185,6 +202,12 @@ export async function POST(
                     visibleToPartner,
                   },
                 });
+
+                // 有効なテンプレートの場合、既存全案件に ProjectMovement を同期
+                if (stepIsActive) {
+                  await syncMovementsForTemplate(tx, created.id, businessId);
+                }
+
                 results.created++;
               }
             } catch (err) {

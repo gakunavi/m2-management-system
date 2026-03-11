@@ -15,10 +15,30 @@ export interface MovementTemplate {
   visibleToPartner: boolean;
 }
 
+interface SyncResult {
+  created: number;
+  deleted: number;
+}
+
 export function useMovementTemplates(businessId: number) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const queryKey = ['movement-templates', businessId];
+
+  /** テンプレート変更後にムーブメント関連キャッシュも無効化 */
+  const invalidateMovementCaches = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey[0] as string;
+        return (
+          key === 'project-movements' ||                // 案件詳細ムーブメントタブ
+          key === 'project-movements-overview' ||        // 管理画面ムーブメント一覧
+          key === 'portal-movements-overview'            // ポータルムーブメント一覧
+        );
+      },
+    });
+  };
 
   const { data, isLoading } = useQuery({
     queryKey,
@@ -29,7 +49,7 @@ export function useMovementTemplates(businessId: number) {
   const create = async (formData: Record<string, unknown>) => {
     try {
       await apiClient.create(`/businesses/${businessId}/movement-templates`, formData);
-      queryClient.invalidateQueries({ queryKey });
+      invalidateMovementCaches();
       toast({ message: 'テンプレートを追加しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '追加に失敗しました';
@@ -41,7 +61,7 @@ export function useMovementTemplates(businessId: number) {
   const update = async (id: string | number, formData: Record<string, unknown>) => {
     try {
       await apiClient.patch(`/businesses/${businessId}/movement-templates/${id}`, formData);
-      queryClient.invalidateQueries({ queryKey });
+      invalidateMovementCaches();
       toast({ message: 'テンプレートを更新しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '更新に失敗しました';
@@ -53,7 +73,7 @@ export function useMovementTemplates(businessId: number) {
   const remove = async (id: string | number) => {
     try {
       await apiClient.remove(`/businesses/${businessId}/movement-templates`, id);
-      queryClient.invalidateQueries({ queryKey });
+      invalidateMovementCaches();
       toast({ message: 'テンプレートを削除しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '削除に失敗しました';
@@ -73,6 +93,21 @@ export function useMovementTemplates(businessId: number) {
     }
   };
 
+  const sync = async (): Promise<SyncResult> => {
+    try {
+      const result = await apiClient.create<SyncResult>(
+        `/businesses/${businessId}/movement-templates/sync`,
+        {},
+      );
+      invalidateMovementCaches();
+      return result;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '同期に失敗しました';
+      toast({ title: 'エラー', message: msg, type: 'error' });
+      throw error;
+    }
+  };
+
   return {
     items: data ?? [],
     isLoading,
@@ -80,5 +115,6 @@ export function useMovementTemplates(businessId: number) {
     update,
     remove,
     reorder,
+    sync,
   };
 }

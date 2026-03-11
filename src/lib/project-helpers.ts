@@ -36,6 +36,46 @@ export async function generateProjectNo(
 }
 
 /**
+ * テンプレート追加・有効化時に既存全案件へ ProjectMovement を一括追加する。
+ * skipDuplicates で冪等性を確保。
+ */
+export async function syncMovementsForTemplate(
+  tx: PrismaTransactionClient,
+  templateId: number,
+  businessId: number,
+): Promise<number> {
+  const projects = await tx.project.findMany({
+    where: { businessId },
+    select: { id: true },
+  });
+  if (projects.length === 0) return 0;
+
+  const result = await tx.projectMovement.createMany({
+    data: projects.map((p) => ({
+      projectId: p.id,
+      templateId,
+      movementStatus: 'pending',
+    })),
+    skipDuplicates: true,
+  });
+  return result.count;
+}
+
+/**
+ * テンプレート削除・無効化時に関連する全 ProjectMovement を削除する。
+ * FK制約回避のためテンプレート削除前に呼び出す。
+ */
+export async function deleteMovementsForTemplate(
+  tx: PrismaTransactionClient,
+  templateId: number,
+): Promise<number> {
+  const result = await tx.projectMovement.deleteMany({
+    where: { templateId },
+  });
+  return result.count;
+}
+
+/**
  * 案件作成時にムーブメントレコードを自動生成する。
  * 案件作成APIの $transaction 内で呼び出す。
  */

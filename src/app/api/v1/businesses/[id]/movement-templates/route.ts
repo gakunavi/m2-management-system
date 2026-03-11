@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { syncMovementsForTemplate } from '@/lib/project-helpers';
 
 const createSchema = z.object({
   stepCode: z.string().min(1).max(50).regex(/^[a-zA-Z0-9_]+$/, '英数字とアンダースコアのみ使用できます'),
@@ -85,25 +86,32 @@ export async function POST(
       }
     }
 
-    // 最大 stepNumber + 1
-    const maxStep = await prisma.movementTemplate.aggregate({
-      where: { businessId },
-      _max: { stepNumber: true },
-    });
-    const nextStepNumber = (maxStep._max.stepNumber ?? 0) + 1;
+    const created = await prisma.$transaction(async (tx) => {
+      // 最大 stepNumber + 1
+      const maxStep = await tx.movementTemplate.aggregate({
+        where: { businessId },
+        _max: { stepNumber: true },
+      });
+      const nextStepNumber = (maxStep._max.stepNumber ?? 0) + 1;
 
-    const created = await prisma.movementTemplate.create({
-      data: {
-        businessId,
-        stepNumber: nextStepNumber,
-        stepCode: data.stepCode,
-        stepName: data.stepName,
-        stepDescription: data.stepDescription ?? null,
-        stepIsSalesLinked: data.stepIsSalesLinked,
-        stepLinkedStatusCode: data.stepLinkedStatusCode ?? null,
-        visibleToPartner: data.visibleToPartner,
-        stepIsActive: true,
-      },
+      const template = await tx.movementTemplate.create({
+        data: {
+          businessId,
+          stepNumber: nextStepNumber,
+          stepCode: data.stepCode,
+          stepName: data.stepName,
+          stepDescription: data.stepDescription ?? null,
+          stepIsSalesLinked: data.stepIsSalesLinked,
+          stepLinkedStatusCode: data.stepLinkedStatusCode ?? null,
+          visibleToPartner: data.visibleToPartner,
+          stepIsActive: true,
+        },
+      });
+
+      // 既存全案件に ProjectMovement を同期
+      await syncMovementsForTemplate(tx, template.id, businessId);
+
+      return template;
     });
 
     return NextResponse.json({ success: true, data: created }, { status: 201 });
