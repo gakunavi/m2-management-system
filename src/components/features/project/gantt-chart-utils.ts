@@ -175,41 +175,101 @@ export function getDateRange(rows: GanttRow[]): { minDate: Date; maxDate: Date }
   return { minDate, maxDate };
 }
 
-/** タイムライン全体のピクセル幅に対するバーの left% と width% を計算 */
+/**
+ * カラム配列に基づいてバーの left% と width% を計算。
+ * 月ビューでは各月の日数が異なるが同じピクセル幅なので、
+ * カラム単位で位置を計算する必要がある。
+ */
 export function calcBarPosition(
   bar: GanttBar,
-  timelineStart: Date,
-  timelineEnd: Date
+  _timelineStart: Date,
+  _timelineEnd: Date,
+  columns?: TimelineColumn[]
 ): { leftPercent: number; widthPercent: number } | null {
   if (!bar.startDate) return null;
 
-  const totalMs = timelineEnd.getTime() - timelineStart.getTime();
-  if (totalMs <= 0) return null;
-
-  const startMs = bar.startDate.getTime() - timelineStart.getTime();
-
-  let endMs: number;
+  let barEnd: Date;
   if (bar.endDate) {
-    endMs = bar.endDate.getTime() - timelineStart.getTime();
+    barEnd = bar.endDate;
   } else if (bar.status === 'started') {
-    endMs = today().getTime() - timelineStart.getTime();
+    barEnd = today();
   } else {
-    // 日付1日分のバー
-    endMs = startMs + 86400000;
+    barEnd = new Date(bar.startDate.getTime() + 86400000);
   }
 
   // start == end の場合、最低1日分を保証
-  if (endMs <= startMs) {
-    endMs = startMs + 86400000;
+  if (barEnd.getTime() <= bar.startDate.getTime()) {
+    barEnd = new Date(bar.startDate.getTime() + 86400000);
   }
 
-  const leftPercent = (startMs / totalMs) * 100;
-  const widthPercent = ((endMs - startMs) / totalMs) * 100;
+  // カラム配列がない場合は従来の時間ベース計算にフォールバック
+  if (!columns || columns.length === 0) {
+    const totalMs = _timelineEnd.getTime() - _timelineStart.getTime();
+    if (totalMs <= 0) return null;
+    const startMs = bar.startDate.getTime() - _timelineStart.getTime();
+    const endMs = barEnd.getTime() - _timelineStart.getTime();
+    const leftPercent = (startMs / totalMs) * 100;
+    const widthPercent = ((endMs - startMs) / totalMs) * 100;
+    return {
+      leftPercent: Math.max(0, leftPercent),
+      widthPercent: Math.max(0.5, Math.min(widthPercent, 100 - leftPercent)),
+    };
+  }
+
+  // カラムベースの位置計算
+  const numCols = columns.length;
+  const leftPos = dateToColumnPosition(bar.startDate, columns, numCols);
+  const rightPos = dateToColumnPosition(barEnd, columns, numCols);
+
+  const leftPercent = (leftPos / numCols) * 100;
+  const widthPercent = ((rightPos - leftPos) / numCols) * 100;
 
   return {
     leftPercent: Math.max(0, leftPercent),
     widthPercent: Math.max(0.5, Math.min(widthPercent, 100 - leftPercent)),
   };
+}
+
+/**
+ * 日付をカラム配列内の位置（カラムインデックス + カラム内の割合）に変換。
+ * 例: 2カラム目の50%地点 → 1.5
+ */
+function dateToColumnPosition(
+  date: Date,
+  columns: TimelineColumn[],
+  numCols: number,
+): number {
+  const t = date.getTime();
+
+  // タイムライン開始前
+  if (t <= columns[0].startDate.getTime()) return 0;
+  // タイムライン終了後
+  if (t >= columns[numCols - 1].endDate.getTime()) return numCols;
+
+  for (let i = 0; i < numCols; i++) {
+    const colStart = columns[i].startDate.getTime();
+    const colEnd = columns[i].endDate.getTime();
+    if (t >= colStart && t <= colEnd) {
+      const colSpan = colEnd - colStart;
+      const frac = colSpan > 0 ? (t - colStart) / colSpan : 0;
+      return i + frac;
+    }
+  }
+
+  return numCols;
+}
+
+/** 日付をカラム配列に基づいてパーセンテージ位置に変換（今日線・目標線用） */
+export function dateToPercent(
+  date: Date,
+  columns: TimelineColumn[],
+): number | null {
+  const numCols = columns.length;
+  if (numCols === 0) return null;
+  const pos = dateToColumnPosition(date, columns, numCols);
+  const pct = (pos / numCols) * 100;
+  if (pct < 0 || pct > 100) return null;
+  return pct;
 }
 
 // ---------- データ変換 ----------

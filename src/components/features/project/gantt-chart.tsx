@@ -12,6 +12,7 @@ import {
   buildMonthColumns,
   buildWeekColumns,
   calcBarPosition,
+  dateToPercent,
   getBarColorClasses,
   getStatusLabel,
   formatDate,
@@ -63,16 +64,12 @@ export function GanttChart({
   const timelineStart = columns.length > 0 ? columns[0].startDate : minDate;
   const timelineEnd = columns.length > 0 ? columns[columns.length - 1].endDate : maxDate;
 
-  // 今日線の位置
+  // 今日線の位置（カラムベース）
   const todayPos = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    const totalMs = timelineEnd.getTime() - timelineStart.getTime();
-    if (totalMs <= 0) return null;
-    const pct = ((now.getTime() - timelineStart.getTime()) / totalMs) * 100;
-    if (pct < 0 || pct > 100) return null;
-    return pct;
-  }, [timelineStart, timelineEnd]);
+    return dateToPercent(now, columns);
+  }, [columns]);
 
   // 初期表示・ビューモード変更時に今日付近へスクロール
   useEffect(() => {
@@ -235,7 +232,7 @@ export function GanttChart({
                     style={{ height: ROW_HEIGHT }}
                   >
                     {row.bars.map((bar) => {
-                      const pos = calcBarPosition(bar, timelineStart, timelineEnd);
+                      const pos = calcBarPosition(bar, timelineStart, timelineEnd, columns);
                       if (!pos) return null;
 
                       return (
@@ -271,12 +268,9 @@ export function GanttChart({
                     {/* 受注予定月の目標線 */}
                     {row.expectedCloseMonth && (() => {
                       const [y, m] = row.expectedCloseMonth.split('-').map(Number);
-                      // 月末日を算出
-                      const closeDate = new Date(y, m, 0);
-                      const totalMs = timelineEnd.getTime() - timelineStart.getTime();
-                      if (totalMs <= 0) return null;
-                      const pct = ((closeDate.getTime() - timelineStart.getTime()) / totalMs) * 100;
-                      if (pct < 0 || pct > 100) return null;
+                      const closeDate = new Date(y, m, 0); // 月末日
+                      const pct = dateToPercent(closeDate, columns);
+                      if (pct === null) return null;
                       return (
                         <div
                           className="absolute top-0 bottom-0 w-px border-l-2 border-dashed border-orange-400 z-10"
