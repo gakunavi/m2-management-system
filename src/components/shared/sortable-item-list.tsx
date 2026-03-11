@@ -148,7 +148,12 @@ export function SortableItemList<T extends { id: string | number }>({
     setEditItem(item);
     const initData: Record<string, unknown> = {};
     formFields.forEach((f) => {
-      initData[f.key] = (item as Record<string, unknown>)[f.key] ?? (f.type === 'checkbox' ? false : '');
+      let value = (item as Record<string, unknown>)[f.key];
+      // textarea に配列が入る場合（例: select型フィールドの options）は改行区切り文字列に変換
+      if (f.type === 'textarea' && Array.isArray(value)) {
+        value = value.join('\n');
+      }
+      initData[f.key] = value ?? (f.type === 'checkbox' ? false : '');
     });
     setFormData(initData);
     setModalOpen(true);

@@ -60,7 +60,9 @@ export function useProjectFieldDefinitions(businessId: number) {
       required: fieldType === 'formula' ? false : ((formData.required as boolean) ?? false),
       description: (formData.description as string) || undefined,
       options: fieldType === 'select' && formData.options
-        ? (formData.options as string).split('\n').map((s) => s.trim()).filter(Boolean)
+        ? Array.isArray(formData.options)
+          ? formData.options.map(String).filter(Boolean)
+          : (formData.options as string).split('\n').map((s) => s.trim()).filter(Boolean)
         : undefined,
       formula: fieldType === 'formula' && formData.formula
         ? (formData.formula as string).trim()
@@ -87,7 +89,9 @@ export function useProjectFieldDefinitions(businessId: number) {
           required: f.type === 'formula' ? false : ((formData.required as boolean) ?? false),
           description: (formData.description as string) || undefined,
           options: f.type === 'select' && formData.options
-            ? (formData.options as string).split('\n').map((s) => s.trim()).filter(Boolean)
+            ? Array.isArray(formData.options)
+              ? formData.options.map(String).filter(Boolean)
+              : (formData.options as string).split('\n').map((s) => s.trim()).filter(Boolean)
             : f.options,
           formula: f.type === 'formula' && formData.formula
             ? (formData.formula as string).trim()
