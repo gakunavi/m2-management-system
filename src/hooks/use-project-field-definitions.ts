@@ -32,7 +32,17 @@ export function useProjectFieldDefinitions(businessId: number) {
         businessConfig: { projectFields: newFields },
         version: businessData.version,
       });
-      queryClient.invalidateQueries({ queryKey });
+      // 同じ /businesses/{id} を参照する全クエリを無効化
+      // useProjectConfig は ['business-config', id] を使うため predicate で両方対応
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const k = query.queryKey;
+          return (
+            (k[0] === 'business' && k[1] === businessId) ||
+            (k[0] === 'business-config' && k[1] === businessId)
+          );
+        },
+      });
       toast({ message: 'フィールド定義を保存しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '保存に失敗しました';

@@ -23,6 +23,8 @@ interface Props {
   isLoading?: boolean;
   kpiLabel?: string;
   kpiUnit?: string;
+  /** 目標線を非表示にする（ポータル用） */
+  hideTarget?: boolean;
 }
 
 function formatValue(value: number, unit?: string): string {
@@ -33,12 +35,13 @@ function formatYAxisValue(value: number, unit?: string): string {
   return formatKpiYAxis(value, unit);
 }
 
-function CustomTooltip({ active, payload, label, unit }: { active?: boolean; payload?: Array<{ value: number; dataKey: string }>; label?: string; unit?: string }) {
+function CustomTooltip({ active, payload, label, unit, hideTarget }: { active?: boolean; payload?: Array<{ value: number; dataKey: string }>; label?: string; unit?: string; hideTarget?: boolean }) {
   if (!active || !payload) return null;
+  const filtered = hideTarget ? payload.filter((e) => e.dataKey !== 'targetAmount') : payload;
   return (
     <div className="bg-card p-3 rounded-lg shadow-lg border text-sm">
       <p className="font-medium mb-1">{label}</p>
-      {payload.map((entry) => (
+      {filtered.map((entry) => (
         <p key={entry.dataKey} className={entry.dataKey === 'actualAmount' ? 'text-blue-600' : 'text-gray-500'}>
           {entry.dataKey === 'actualAmount' ? '実績' : '目標'}: {formatValue(entry.value, unit)}
         </p>
@@ -47,7 +50,7 @@ function CustomTooltip({ active, payload, label, unit }: { active?: boolean; pay
   );
 }
 
-export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabel, kpiUnit }: Props) {
+export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabel, kpiUnit, hideTarget }: Props) {
   // APIレスポンスの kpiLabel を優先、なければ props、なければデフォルト
   const chartLabel = data?.kpiLabel ?? kpiLabel ?? '売上';
   const chartUnit = data?.kpiUnit ?? kpiUnit;
@@ -78,19 +81,23 @@ export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabe
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} />
             <YAxis tickFormatter={(v: number) => formatYAxisValue(v, chartUnit)} tick={{ fontSize: 12 }} width={60} />
-            <Tooltip content={<CustomTooltip unit={chartUnit} />} />
-            <Legend
-              formatter={(value: string) => (value === 'actualAmount' ? '実績' : '目標')}
-              wrapperStyle={{ fontSize: '12px' }}
-            />
+            <Tooltip content={<CustomTooltip unit={chartUnit} hideTarget={hideTarget} />} />
+            {!hideTarget && (
+              <Legend
+                formatter={(value: string) => (value === 'actualAmount' ? '実績' : '目標')}
+                wrapperStyle={{ fontSize: '12px' }}
+              />
+            )}
             <Bar dataKey="actualAmount" fill={CHART_COLORS.primary} barSize={CHART_DEFAULTS.barSize} radius={[4, 4, 0, 0]} />
-            <Line
-              dataKey="targetAmount"
-              stroke={CHART_COLORS.secondary}
-              strokeWidth={CHART_DEFAULTS.lineStrokeWidth}
-              strokeDasharray="5 5"
-              dot={{ r: 3 }}
-            />
+            {!hideTarget && (
+              <Line
+                dataKey="targetAmount"
+                stroke={CHART_COLORS.secondary}
+                strokeWidth={CHART_DEFAULTS.lineStrokeWidth}
+                strokeDasharray="5 5"
+                dot={{ r: 3 }}
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
         </div>

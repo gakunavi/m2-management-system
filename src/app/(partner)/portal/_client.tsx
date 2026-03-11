@@ -107,6 +107,7 @@ function PortalCompanyDashboard() {
             year={trendYear}
             onYearChange={setTrendYear}
             isLoading={trendLoading}
+            hideTarget
           />
         </div>
         <div>
@@ -224,6 +225,7 @@ function PortalBusinessDashboard({ businessId }: { businessId: number }) {
         isLoading={trendLoading}
         kpiLabel={currentKpi?.label}
         kpiUnit={currentKpi?.unit}
+        hideTarget
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
