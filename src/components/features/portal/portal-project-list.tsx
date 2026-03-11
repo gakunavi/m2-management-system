@@ -88,7 +88,6 @@ const BASE_FIXED_COLUMNS: UnifiedColumn[] = [
   { key: 'projectExpectedCloseMonth', label: '予定月', sortable: true, hideOnMobile: false },
   { key: 'amount', label: '金額', sortable: false, hideOnMobile: false, hideWhenEmpty: true },
   { key: 'projectAssignedUserName', label: '担当者', sortable: true, hideOnMobile: true },
-  { key: 'updatedAt', label: '更新日', sortable: true, hideOnMobile: true },
 ];
 
 // ============================================
