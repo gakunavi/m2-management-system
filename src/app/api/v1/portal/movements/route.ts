@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
         projectSalesStatus: true,
         projectExpectedCloseMonth: true,
         projectAssignedUserName: true,
+        projectNotes: true,
         customer: { select: { customerName: true } },
         movements: {
           where: { templateId: { in: visibleTemplateIds } },
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
         projectSalesStatusColor: status?.color ?? null,
         projectExpectedCloseMonth: p.projectExpectedCloseMonth,
         projectAssignedUserName: p.projectAssignedUserName,
+        projectNotes: p.projectNotes,
         customerName: p.customer?.customerName ?? null,
         movements: p.movements.map((m) => ({
           id: m.id,

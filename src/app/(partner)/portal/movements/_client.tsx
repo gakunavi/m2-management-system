@@ -140,6 +140,11 @@ export function PortalMovementsClient() {
                   <div className="text-sm font-medium truncate" title={project.customerName ?? ''}>
                     {project.customerName ?? '顧客未設定'}
                   </div>
+                  {project.projectNotes && (
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate" title={project.projectNotes}>
+                      ニーズ：{project.projectNotes}
+                    </div>
+                  )}
                   {project.projectExpectedCloseMonth && (
                     <div className="text-xs text-muted-foreground mt-0.5">
                       受注予定月：{project.projectExpectedCloseMonth}

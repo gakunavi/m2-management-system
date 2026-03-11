@@ -22,6 +22,7 @@ export interface ProjectRow {
   projectSalesStatusColor: string | null;
   projectExpectedCloseMonth: string | null;
   projectAssignedUserName: string | null;
+  projectNotes: string | null;
   version: number;
   customerName: string | null;
   partnerName: string | null;

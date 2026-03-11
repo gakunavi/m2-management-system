@@ -219,6 +219,11 @@ export function MovementsClient() {
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">
                         代理店：{project.partnerName ?? 'なし'}
                       </div>
+                      {project.projectNotes && (
+                        <div className="text-xs text-muted-foreground mt-0.5 truncate" title={project.projectNotes}>
+                          ニーズ：{project.projectNotes}
+                        </div>
+                      )}
                       {project.projectExpectedCloseMonth && (
                         <div className="text-xs text-muted-foreground mt-0.5">
                           受注予定月：{project.projectExpectedCloseMonth}
