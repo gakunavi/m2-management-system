@@ -170,6 +170,20 @@ export async function PATCH(
     if (newCustomData !== undefined) {
       const existingCustomData = (existing.projectCustomData ?? {}) as Record<string, unknown>;
       mergedCustomData = { ...existingCustomData, ...newCustomData };
+
+      // formula フィールドの計算結果を永続化（ポータル・ダッシュボード等で正確な値を読めるようにする）
+      const bizForFormula = await prisma.business.findUnique({
+        where: { id: existing.businessId },
+        select: { businessConfig: true },
+      });
+      const formulaBizConfig = bizForFormula?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const formulaFields = formulaBizConfig?.projectFields ?? [];
+      if (formulaFields.some((f) => f.type === 'formula')) {
+        const formulaResults = computeAllFormulas(formulaFields, mergedCustomData);
+        for (const [k, v] of Object.entries(formulaResults)) {
+          mergedCustomData[k] = v;
+        }
+      }
     }
 
     const updated = await prisma.project.update({

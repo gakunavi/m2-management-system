@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 
+export const dynamic = 'force-dynamic';
+
 // ============================================
 // GET /api/v1/portal/movements
 // 代理店ポータル向けムーブメント一覧（visibleToPartner=true のみ）

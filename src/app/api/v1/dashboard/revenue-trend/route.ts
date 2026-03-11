@@ -14,6 +14,7 @@ import {
   getPrimaryKpiDefinition,
   calculateKpiMonthlyActuals,
 } from '@/lib/revenue-helpers';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // GET /api/v1/dashboard/revenue-trend?year=2025&businessId=1&kpiKey=revenue
@@ -86,7 +87,11 @@ export async function GET(request: NextRequest) {
       resolvedKpiLabel = kpiDef.label;
       resolvedKpiUnit = kpiDef.unit;
 
-      const actuals = await calculateKpiMonthlyActuals(prisma, biz.id, kpiDef, startMonth, endMonth);
+      const bizConfig = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const projFields = bizConfig?.projectFields ?? [];
+      const hasFormula = projFields.some((f) => f.type === 'formula');
+
+      const actuals = await calculateKpiMonthlyActuals(prisma, biz.id, kpiDef, startMonth, endMonth, undefined, hasFormula ? projFields : undefined);
       for (const actual of actuals) {
         monthlyTotals.set(actual.month, (monthlyTotals.get(actual.month) ?? 0) + actual.actualValue);
       }

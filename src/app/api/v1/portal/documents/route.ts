@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 
+export const dynamic = 'force-dynamic';
+
 const VALID_DOCUMENT_TYPES = ['material', 'invoice'];
 
 // ============================================

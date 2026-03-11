@@ -13,7 +13,9 @@ import {
   getPrimaryKpiDefinition,
   getRevenueAmount,
   getRevenueMonth,
+  injectFormulaValues,
 } from '@/lib/revenue-helpers';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // GET /api/v1/portal/revenue-trend?year=2025&businessId=1&kpiKey=revenue
@@ -81,6 +83,16 @@ export async function GET(request: NextRequest) {
       where: { id: { in: Array.from(businessIdSet) }, businessIsActive: true },
       select: { id: true, businessConfig: true },
     });
+
+    // formula フィールドの再計算
+    for (const biz of businesses) {
+      const config = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const fields = config?.projectFields ?? [];
+      if (fields.some((f) => f.type === 'formula')) {
+        const bizProjects = projects.filter((p) => p.businessId === biz.id);
+        injectFormulaValues(bizProjects, fields);
+      }
+    }
 
     const businessKpiMap = new Map<number, {
       statusFilters: string[] | null;

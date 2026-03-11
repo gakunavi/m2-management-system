@@ -9,7 +9,9 @@ import {
   getKpiDefinitions,
   getRevenueMonth,
   getRevenueAmount,
+  injectFormulaValues,
 } from '@/lib/revenue-helpers';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import type {
   PartnerMonthlyReportResponse,
   ReportKpiSummary,
@@ -87,6 +89,13 @@ export async function GET(request: NextRequest) {
         customer: { select: { customerName: true } },
       },
     });
+
+    // formula フィールドの再計算
+    const bizConfig = business.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+    const projectFields = bizConfig?.projectFields ?? [];
+    if (projectFields.some((f) => f.type === 'formula')) {
+      injectFormulaValues(projects, projectFields);
+    }
 
     // KPI サマリー計算（該当月のみ）
     const kpiSummaries: ReportKpiSummary[] = kpiDefinitions.map((kpi) => {

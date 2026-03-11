@@ -6,7 +6,8 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 
 export const dynamic = 'force-dynamic';
 
-import { getBusinessIdsForUser, getRevenueAmount, getRevenueMonth, getKpiDefinition, getPrimaryKpiDefinition } from '@/lib/revenue-helpers';
+import { getBusinessIdsForUser, getRevenueAmount, getRevenueMonth, getKpiDefinition, getPrimaryKpiDefinition, injectFormulaValues } from '@/lib/revenue-helpers';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // GET /api/v1/dashboard/pipeline?businessId=1&kpiKey=revenue&month=2026-03
@@ -126,6 +127,16 @@ export async function GET(request: NextRequest) {
         projectCustomData: true,
       },
     });
+
+    // formula フィールドの再計算
+    for (const biz of businesses) {
+      const config = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const fields = config?.projectFields ?? [];
+      if (fields.some((f) => f.type === 'formula')) {
+        const bizProjects = projects.filter((p) => p.businessId === biz.id);
+        injectFormulaValues(bizProjects, fields);
+      }
+    }
 
     // ステータス別に集計
     const statusAgg = new Map<string, { projectCount: number; totalAmount: number }>();

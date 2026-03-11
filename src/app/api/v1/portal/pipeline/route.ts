@@ -11,7 +11,9 @@ import {
   getRevenueMonth,
   getKpiDefinition,
   getPrimaryKpiDefinition,
+  injectFormulaValues,
 } from '@/lib/revenue-helpers';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // GET /api/v1/portal/pipeline?businessId=1&kpiKey=revenue&month=2026-03
@@ -109,6 +111,19 @@ export async function GET(request: NextRequest) {
         },
       }),
     ]);
+
+    // ============================================
+    // formula フィールドの再計算
+    // ============================================
+
+    for (const biz of businesses) {
+      const config = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const fields = config?.projectFields ?? [];
+      if (fields.some((f) => f.type === 'formula')) {
+        const bizProjects = projects.filter((p) => p.businessId === biz.id);
+        injectFormulaValues(bizProjects, fields);
+      }
+    }
 
     // ============================================
     // 事業ごとの KPI 解決マップを構築

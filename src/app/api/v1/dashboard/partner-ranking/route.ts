@@ -12,7 +12,9 @@ import {
   getRevenueMonth,
   getKpiDefinition,
   getPrimaryKpiDefinition,
+  injectFormulaValues,
 } from '@/lib/revenue-helpers';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // GET /api/v1/dashboard/partner-ranking?businessId=1&kpiKey=revenue&month=2026-03&limit=10
@@ -85,6 +87,13 @@ export async function GET(request: NextRequest) {
         partner: { select: { id: true, partnerName: true } },
       },
     });
+
+    // formula フィールドの再計算
+    const bizConfig = business.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+    const projectFields = bizConfig?.projectFields ?? [];
+    if (projectFields.some((f) => f.type === 'formula')) {
+      injectFormulaValues(projects, projectFields);
+    }
 
     // 代理店別に集計
     const partnerAgg = new Map<number | null, { name: string; amount: number; count: number }>();

@@ -1,5 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import type { RevenueRecognition, KpiDefinition } from '@/types/dashboard';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
+import { computeAllFormulas } from '@/lib/formula-evaluator';
 
 // ============================================
 // 年度ヘルパー
@@ -361,6 +363,29 @@ export function getPrimaryKpiDefinition(
 }
 
 // ============================================
+// formula フィールド再計算ヘルパー
+// ============================================
+
+/**
+ * プロジェクト配列の projectCustomData に formula 計算結果を注入する。
+ * customData をその場で上書きするため、後続の getRevenueAmount で正しい値を読める。
+ */
+export function injectFormulaValues(
+  projects: { projectCustomData: unknown }[],
+  projectFields: ProjectFieldDefinition[],
+): void {
+  if (!projectFields.some((f) => f.type === 'formula')) return;
+  for (const p of projects) {
+    const customData = (p.projectCustomData ?? {}) as Record<string, unknown>;
+    const formulaResults = computeAllFormulas(projectFields, customData);
+    for (const [k, v] of Object.entries(formulaResults)) {
+      customData[k] = v;
+    }
+    p.projectCustomData = customData;
+  }
+}
+
+// ============================================
 // KPI 実績集計（汎用）
 // ============================================
 
@@ -382,6 +407,7 @@ export async function calculateKpiMonthlyActuals(
   startMonth: string,
   endMonth: string,
   partnerIds?: number[],
+  projectFields?: ProjectFieldDefinition[],
 ): Promise<KpiMonthlyActual[]> {
   const where: Record<string, unknown> = {
     businessId,
@@ -406,6 +432,11 @@ export async function calculateKpiMonthlyActuals(
       projectCustomData: true,
     },
   });
+
+  // formula フィールドの再計算
+  if (projectFields) {
+    injectFormulaValues(projects, projectFields);
+  }
 
   const monthMap = new Map<string, { value: number; count: number }>();
 
@@ -465,6 +496,7 @@ export async function calculateKpiBatchForBusiness(
   businessId: number,
   kpis: KpiDefinition[],
   targetMonths: string[],
+  projectFields?: ProjectFieldDefinition[],
 ): Promise<Map<string, Map<string, { actualValue: number; projectCount: number }>>> {
   // 全アクティブ案件を 1 クエリで取得
   const projects = await prisma.project.findMany({
@@ -479,6 +511,11 @@ export async function calculateKpiBatchForBusiness(
       projectCustomData: true,
     },
   });
+
+  // formula フィールドの再計算
+  if (projectFields) {
+    injectFormulaValues(projects, projectFields);
+  }
 
   const result = new Map<string, Map<string, { actualValue: number; projectCount: number }>>();
 

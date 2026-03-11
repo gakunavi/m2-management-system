@@ -3,7 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessPartnerScope, getRevenueRecognition, getRevenueAmount } from '@/lib/revenue-helpers';
+import { getBusinessPartnerScope, getRevenueRecognition, getRevenueAmount, injectFormulaValues } from '@/lib/revenue-helpers';
+
+export const dynamic = 'force-dynamic';
 import {
   isCustomDataSort,
   applyAppSortAndSlice,
@@ -247,8 +249,9 @@ export async function GET(request: NextRequest) {
       ]),
     );
 
-    // 事業ごとの代理店表示フィールドを収集（全件から計算 — カスタムソート時も正しいフィールド定義を返す）
+    // 事業ごとの全フィールド定義 + 代理店表示フィールドを収集
     const partnerFieldsMap = new Map<number, ProjectFieldDefinition[]>();
+    const allBusinessFieldsMap = new Map<number, ProjectFieldDefinition[]>();
     const businessConfigMap = new Map<number, unknown>();
     const sourceForFieldDefs = isCustomSort ? allProjects : projects;
     for (const p of sourceForFieldDefs) {
@@ -256,8 +259,17 @@ export async function GET(request: NextRequest) {
         businessConfigMap.set(p.businessId, p.business.businessConfig);
         const config = p.business.businessConfig as Record<string, unknown>;
         const allFields = (config?.projectFields ?? []) as ProjectFieldDefinition[];
+        allBusinessFieldsMap.set(p.businessId, allFields);
         const visibleFields = allFields.filter((f) => f.visibleToPartner);
         partnerFieldsMap.set(p.businessId, visibleFields);
+      }
+    }
+
+    // formula フィールドの再計算（全フィールド定義を使って計算）
+    for (const [bizId, fields] of Array.from(allBusinessFieldsMap)) {
+      if (fields.some((f: ProjectFieldDefinition) => f.type === 'formula')) {
+        const bizProjects = projects.filter((p) => p.businessId === bizId);
+        injectFormulaValues(bizProjects, fields);
       }
     }
 

@@ -403,6 +403,14 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // formula フィールドの計算結果を注入
+          if (projectFields.some((f) => f.type === 'formula')) {
+            const formulaResults = computeAllFormulas(projectFields, customData);
+            for (const [k, v] of Object.entries(formulaResults)) {
+              customData[k] = v;
+            }
+          }
+
           const baseData = {
             projectSalesStatus: salesStatus,
             partnerId,
@@ -465,6 +473,14 @@ export async function POST(request: NextRequest) {
               // 既存のcustomDataとマージ（CSVにないフィールドは既存値を保持）
               const existingCustomData = (existingProject.projectCustomData as Record<string, unknown>) ?? {};
               const mergedCustomData = { ...existingCustomData, ...customData };
+
+              // マージ後の formula 再計算
+              if (projectFields.some((f) => f.type === 'formula')) {
+                const formulaResults = computeAllFormulas(projectFields, mergedCustomData);
+                for (const [k, v] of Object.entries(formulaResults)) {
+                  mergedCustomData[k] = v;
+                }
+              }
 
               const statusChanged = existingProject.projectSalesStatus !== salesStatus;
               await tx.project.update({

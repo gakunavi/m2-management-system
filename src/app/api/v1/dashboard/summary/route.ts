@@ -16,6 +16,7 @@ import {
   calculateKpiBatchForBusiness,
 } from '@/lib/revenue-helpers';
 import type { DashboardSummary, BusinessSummaryItem, KpiSummaryItem } from '@/types/dashboard';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // ヘルパー: changeType 判定
@@ -184,6 +185,11 @@ export async function GET(request: NextRequest) {
         const kpiDefs = getKpiDefinitions(biz.businessConfig);
         if (kpiDefs.length === 0) return;
 
+        // formula フィールド再計算用
+        const bizConfig = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+        const projFields = bizConfig?.projectFields ?? [];
+        const hasFormula = projFields.some((f) => f.type === 'formula');
+
         if (targetMonths) {
           // 単月 or 範囲モード: 指定月リストで集計
           const batchResult = await calculateKpiBatchForBusiness(
@@ -191,6 +197,7 @@ export async function GET(request: NextRequest) {
             biz.id,
             kpiDefs,
             targetMonths,
+            hasFormula ? projFields : undefined,
           );
 
           for (const kpi of kpiDefs) {
@@ -247,6 +254,8 @@ export async function GET(request: NextRequest) {
               kpi,
               '2000-01',
               '2099-12',
+              undefined,
+              hasFormula ? projFields : undefined,
             );
 
             let totalValue = 0;
@@ -414,6 +423,11 @@ export async function GET(request: NextRequest) {
           const kpiDefs = getKpiDefinitions(biz.businessConfig);
           const kpiDef = kpiDefs.find((k) => k.key === resolvedKpiKey);
 
+          // formula フィールド再計算用
+          const bc = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+          const pf = bc?.projectFields ?? [];
+          const hf = pf.some((f) => f.type === 'formula');
+
           let actualAmount = 0;
           let projectCount = 0;
 
@@ -425,6 +439,7 @@ export async function GET(request: NextRequest) {
                 biz.id,
                 [kpiDef],
                 monthsForBiz,
+                hf ? pf : undefined,
               );
               const monthMap = batchResult.get(kpiDef.key);
               if (monthMap) {
@@ -442,6 +457,8 @@ export async function GET(request: NextRequest) {
                 kpiDef,
                 '2000-01',
                 '2099-12',
+                undefined,
+                hf ? pf : undefined,
               );
               for (const ma of monthlyActuals) {
                 actualAmount += ma.actualValue;

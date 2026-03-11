@@ -321,6 +321,15 @@ export async function POST(request: NextRequest) {
     });
     if (!statusDef) throw ApiError.badRequest('指定された営業ステータスが見つかりません');
 
+    // formula フィールドの計算結果を永続化
+    const bizConfig = business?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+    const projectFields = bizConfig?.projectFields ?? [];
+    let customDataForCreate = (data.projectCustomData as Record<string, unknown>) ?? {};
+    if (projectFields.some((f) => f.type === 'formula')) {
+      const formulaResults = computeAllFormulas(projectFields, customDataForCreate);
+      customDataForCreate = { ...customDataForCreate, ...formulaResults };
+    }
+
     // トランザクションで採番 + 作成 + ムーブメント生成
     const project = await prisma.$transaction(async (tx) => {
       const projectNo = await generateProjectNo(tx, data.businessId);
@@ -337,7 +346,7 @@ export async function POST(request: NextRequest) {
           projectAssignedUserId: data.projectAssignedUserId ?? null,
           projectAssignedUserName: data.projectAssignedUserName || null,
           projectNotes: data.projectNotes || null,
-          projectCustomData: (data.projectCustomData as object) ?? {},
+          projectCustomData: customDataForCreate as object,
           createdBy: user.id,
           updatedBy: user.id,
         },

@@ -14,8 +14,10 @@ import {
   getKpiDefinitions,
   getPrimaryKpiDefinition,
   getKpiDefinition,
+  injectFormulaValues,
 } from '@/lib/revenue-helpers';
 import type { DashboardSummary, KpiSummaryItem, KpiDefinition, PortalBusinessSummary } from '@/types/dashboard';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
 // ヘルパー
@@ -168,6 +170,19 @@ export async function GET(request: NextRequest) {
       select: { id: true, businessName: true, businessConfig: true },
       orderBy: { businessSortOrder: 'asc' },
     });
+
+    // ============================================
+    // formula フィールドの再計算（DB 上の古い値を補正）
+    // ============================================
+
+    for (const biz of businesses) {
+      const config = biz.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const fields = config?.projectFields ?? [];
+      if (fields.some((f) => f.type === 'formula')) {
+        const bizProjects = projects.filter((p) => p.businessId === biz.id);
+        injectFormulaValues(bizProjects, fields);
+      }
+    }
 
     // ============================================
     // KPI定義の解決
