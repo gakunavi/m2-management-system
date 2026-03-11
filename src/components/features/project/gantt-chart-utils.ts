@@ -34,7 +34,10 @@ export interface GanttRow {
 
 function parseDate(iso: string | null): Date | null {
   if (!iso) return null;
-  return new Date(iso);
+  const d = new Date(iso);
+  // UTC→ローカル変換後の時刻差をなくすためローカル深夜0時に正規化
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function today(): Date {
@@ -72,7 +75,7 @@ export function buildMonthColumns(
   while (cur <= end) {
     const y = cur.getFullYear();
     const m = cur.getMonth();
-    const monthEnd = new Date(y, m + 1, 0);
+    const monthEnd = new Date(y, m + 1, 0, 23, 59, 59, 999);
     cols.push({
       label: `${y}/${String(m + 1).padStart(2, '0')}`,
       startDate: new Date(y, m, 1),
@@ -99,6 +102,7 @@ export function buildWeekColumns(
   while (cur <= maxDate) {
     const weekEnd = new Date(cur);
     weekEnd.setDate(weekEnd.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
     cols.push({
       label: `${cur.getMonth() + 1}/${cur.getDate()}〜`,
       startDate: new Date(cur),
