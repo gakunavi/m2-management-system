@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+
+export const dynamic = 'force-dynamic';
+
 import { getBusinessIdsForUser, getRevenueAmount, getRevenueMonth, getKpiDefinition, getPrimaryKpiDefinition } from '@/lib/revenue-helpers';
 
 // ============================================
