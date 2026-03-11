@@ -265,6 +265,7 @@ export function SpreadsheetTable({
           columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
           sortState: preferences?.sortState ?? [],
           columnPinning: { left: next },
+          pageSize: preferences?.pageSize,
         });
         return next;
       });
@@ -409,6 +410,7 @@ export function SpreadsheetTable({
         columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
         sortState: preferences?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
+        pageSize: preferences?.pageSize,
       });
     },
     onColumnOrderChange: (updater) => {
@@ -420,6 +422,7 @@ export function SpreadsheetTable({
         columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
         sortState: preferences?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
+        pageSize: preferences?.pageSize,
       });
     },
     onColumnSizingChange: (updater) => {
@@ -431,6 +434,7 @@ export function SpreadsheetTable({
         columnWidths: next,
         sortState: preferences?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
+        pageSize: preferences?.pageSize,
       });
     },
     getCoreRowModel: getCoreRowModel(),
@@ -451,8 +455,9 @@ export function SpreadsheetTable({
       columnWidths: defaultColumnSizing,
       sortState: [],
       columnPinning: { left: [] },
+      pageSize: preferences?.pageSize,
     });
-  }, [defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences]);
+  }, [defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences, preferences?.pageSize]);
 
   // ============================================
   // ドラッグ＆ドロップ（列並べ替え）

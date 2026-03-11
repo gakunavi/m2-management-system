@@ -25,6 +25,7 @@ const columnSettingsSchema = z.object({
   columnPinning: z
     .object({ left: z.array(z.string()) })
     .optional(),
+  pageSize: z.number().int().min(1).max(200).optional(),
 });
 
 const putSchema = z.object({

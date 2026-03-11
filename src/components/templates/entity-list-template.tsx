@@ -97,6 +97,26 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   const [renameTarget, setRenameTarget] = useState<SavedTableView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SavedTableView | null>(null);
 
+  // 初回ロード: 保存済み pageSize をグローバル設定から復元
+  const pageSizeAppliedRef = useRef(false);
+  useEffect(() => {
+    if (pageSizeAppliedRef.current || !preferences?.pageSize) return;
+    pageSizeAppliedRef.current = true;
+    setPageSize(preferences.pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferences?.pageSize]);
+
+  // 「すべて」タブの設定を退避する Ref（ビュー切替前に保存）
+  const basePrefsRef = useRef<PersistedColumnSettings | null>(null);
+
+  // 初回プリファレンスロード時に「すべて」のベース状態を保存
+  const baseCapturedRef = useRef(false);
+  useEffect(() => {
+    if (baseCapturedRef.current || !preferences) return;
+    baseCapturedRef.current = true;
+    basePrefsRef.current = { ...preferences };
+  }, [preferences]);
+
   // デフォルトビューの自動適用（初回ロード時のみ）
   const defaultAppliedRef = useRef(false);
   useEffect(() => {
@@ -128,33 +148,46 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   const applyViewState = useCallback(
     (view: SavedTableView) => {
       const s = view.settings as SavedViewSettings;
-      // ビューに columnPinning がない場合は現在の設定を維持
-      const mergedSettings = {
+      // ビューに columnPinning がない場合はピンなし（他ビューのピンを引き継がない）
+      const mergedSettings: PersistedColumnSettings = {
         ...s.columnSettings,
-        columnPinning: s.columnSettings.columnPinning ?? preferences?.columnPinning,
+        columnPinning: s.columnSettings.columnPinning ?? { left: [] },
+        pageSize: s.pageSize ?? s.columnSettings.pageSize,
       };
       savePreferences(mergedSettings);
       setSearchQuery(s.searchQuery);
-      setPageSize(s.pageSize);
+      if (s.pageSize) setPageSize(s.pageSize);
       setFilters(s.filters);
       setSortItems(s.sortItems);
     },
-    [savePreferences, setSearchQuery, setPageSize, setFilters, setSortItems, preferences?.columnPinning],
+    [savePreferences, setSearchQuery, setPageSize, setFilters, setSortItems],
   );
 
   /** タブ切替 */
   const handleSelectView = useCallback(
     (id: number | null) => {
+      // 「すべて」からビューに切り替える場合、現在の状態を退避
+      if (activeViewId === null && id !== null && preferences) {
+        basePrefsRef.current = { ...preferences };
+      }
+
       setActiveViewId(id);
+
       if (id === null) {
-        // 「すべて」: フィルタのみリセット
+        // 「すべて」に切替: 退避した状態を復元 + フィルタリセット
+        if (basePrefsRef.current) {
+          savePreferences(basePrefsRef.current);
+          if (basePrefsRef.current.pageSize) {
+            setPageSize(basePrefsRef.current.pageSize);
+          }
+        }
         clearFilters();
         return;
       }
       const view = views.find((v) => v.id === id);
       if (view) applyViewState(view);
     },
-    [views, applyViewState, clearFilters],
+    [activeViewId, views, applyViewState, clearFilters, preferences, savePreferences, setPageSize],
   );
 
   /** ビュー保存 */
@@ -197,6 +230,39 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       }
     },
     [savePreferences, activeViewId, views, updateViewSettings],
+  );
+
+  /** 表示件数変更時のラッパー: グローバル設定 + アクティブビューに保存 */
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      setPageSize(size);
+      // グローバル設定に pageSize を保存
+      const updatedPrefs: PersistedColumnSettings = {
+        columnOrder: preferences?.columnOrder ?? [],
+        columnVisibility: preferences?.columnVisibility ?? {},
+        columnWidths: preferences?.columnWidths ?? {},
+        sortState: preferences?.sortState ?? [],
+        columnPinning: preferences?.columnPinning,
+        pageSize: size,
+      };
+      savePreferences(updatedPrefs);
+      // 「すべて」タブのベース状態も更新
+      if (activeViewId === null && basePrefsRef.current) {
+        basePrefsRef.current = { ...basePrefsRef.current, pageSize: size };
+      }
+      // アクティブビューにも反映
+      if (activeViewId !== null) {
+        const view = views.find((v) => v.id === activeViewId);
+        if (view) {
+          updateViewSettings(activeViewId, {
+            ...(view.settings as SavedViewSettings),
+            columnSettings: updatedPrefs,
+            pageSize: size,
+          });
+        }
+      }
+    },
+    [setPageSize, preferences, savePreferences, activeViewId, views, updateViewSettings],
   );
 
   // ============================================
@@ -387,7 +453,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               pageSize={pagination.pageSize}
               total={pagination.total}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={handlePageSizeChange}
             />
           </>
         )
@@ -434,7 +500,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
                 pageSize={pagination.pageSize}
                 total={pagination.total}
                 onPageChange={setPage}
-                onPageSizeChange={setPageSize}
+                onPageSizeChange={handlePageSizeChange}
               />
             </>
           )}

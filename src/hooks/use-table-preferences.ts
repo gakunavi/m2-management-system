@@ -48,6 +48,23 @@ export function useTablePreferences(tableKey: string) {
 
   const savePreferences = useCallback(
     (settings: PersistedColumnSettings) => {
+      // 楽観的キャッシュ更新（デバウンスを待たず即時反映）
+      queryClient.setQueryData(
+        ['table-preferences', tableKey],
+        (old: UserTablePreferenceData | null | undefined) => {
+          if (!old) {
+            return {
+              id: 0,
+              userId: 0,
+              tableKey,
+              settings,
+              updatedAt: new Date().toISOString(),
+            } satisfies UserTablePreferenceData;
+          }
+          return { ...old, settings };
+        },
+      );
+
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -55,7 +72,7 @@ export function useTablePreferences(tableKey: string) {
         saveMutation.mutate(settings);
       }, 1000);
     },
-    [saveMutation],
+    [saveMutation, queryClient, tableKey],
   );
 
   return {

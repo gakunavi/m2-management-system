@@ -109,6 +109,8 @@ export type PersistedColumnSettings = {
   sortState: { field: string; direction: 'asc' | 'desc' }[];
   /** 左固定列の列IDリスト（Excel風の列固定） */
   columnPinning?: { left: string[] };
+  /** 1ページあたりの表示件数 */
+  pageSize?: number;
 };
 
 // ============================================
