@@ -59,16 +59,20 @@ export function GanttChart({
   const colWidth = viewMode === 'Day' ? COL_WIDTH_DAY : viewMode === 'Week' ? COL_WIDTH_WEEK : COL_WIDTH_MONTH;
   const timelineWidth = columns.length * colWidth;
 
+  // カラムの実際の開始・終了日（週/月はスナップされるため minDate/maxDate と異なる）
+  const timelineStart = columns.length > 0 ? columns[0].startDate : minDate;
+  const timelineEnd = columns.length > 0 ? columns[columns.length - 1].endDate : maxDate;
+
   // 今日線の位置
   const todayPos = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    const totalMs = maxDate.getTime() - minDate.getTime();
+    const totalMs = timelineEnd.getTime() - timelineStart.getTime();
     if (totalMs <= 0) return null;
-    const pct = ((now.getTime() - minDate.getTime()) / totalMs) * 100;
+    const pct = ((now.getTime() - timelineStart.getTime()) / totalMs) * 100;
     if (pct < 0 || pct > 100) return null;
     return pct;
-  }, [minDate, maxDate]);
+  }, [timelineStart, timelineEnd]);
 
   // 初期表示・ビューモード変更時に今日付近へスクロール
   useEffect(() => {
@@ -231,7 +235,7 @@ export function GanttChart({
                     style={{ height: ROW_HEIGHT }}
                   >
                     {row.bars.map((bar) => {
-                      const pos = calcBarPosition(bar, minDate, maxDate);
+                      const pos = calcBarPosition(bar, timelineStart, timelineEnd);
                       if (!pos) return null;
 
                       return (
@@ -269,9 +273,9 @@ export function GanttChart({
                       const [y, m] = row.expectedCloseMonth.split('-').map(Number);
                       // 月末日を算出
                       const closeDate = new Date(y, m, 0);
-                      const totalMs = maxDate.getTime() - minDate.getTime();
+                      const totalMs = timelineEnd.getTime() - timelineStart.getTime();
                       if (totalMs <= 0) return null;
-                      const pct = ((closeDate.getTime() - minDate.getTime()) / totalMs) * 100;
+                      const pct = ((closeDate.getTime() - timelineStart.getTime()) / totalMs) * 100;
                       if (pct < 0 || pct > 100) return null;
                       return (
                         <div
