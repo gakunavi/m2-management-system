@@ -23,6 +23,7 @@ export interface ProjectRow {
   projectExpectedCloseMonth: string | null;
   projectAssignedUserName: string | null;
   projectNotes: string | null;
+  projectNeeds: string | null;
   version: number;
   customerName: string | null;
   partnerName: string | null;

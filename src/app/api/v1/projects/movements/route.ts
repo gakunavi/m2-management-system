@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
         projectExpectedCloseMonth: true,
         projectAssignedUserName: true,
         projectNotes: true,
+        projectCustomData: true,
         version: true,
         customer: { select: { id: true, customerName: true } },
         partner: { select: { id: true, partnerName: true } },
@@ -104,6 +105,17 @@ export async function GET(request: NextRequest) {
       allStatusDefs.map((s) => [s.statusCode, { label: s.statusLabel, color: s.statusColor }]),
     );
 
+    // 事業設定（カスタムフィールド定義）
+    const business = await prisma.business.findUnique({
+      where: { id: bizId },
+      select: { businessConfig: true },
+    });
+    const businessConfig = (business?.businessConfig ?? {}) as Record<string, unknown>;
+    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string }>;
+    // 「ニーズ」フィールドのキーを特定
+    const needsField = projectFields.find((f) => f.label === 'ニーズ');
+    const needsKey = needsField?.key ?? null;
+
     // ムーブメントテンプレート一覧（列ヘッダー用）
     const templates = await prisma.movementTemplate.findMany({
       where: { businessId: bizId, stepIsActive: true },
@@ -123,6 +135,7 @@ export async function GET(request: NextRequest) {
         projectExpectedCloseMonth: p.projectExpectedCloseMonth,
         projectAssignedUserName: p.projectAssignedUserName,
         projectNotes: p.projectNotes,
+        projectNeeds: needsKey ? String((p.projectCustomData as Record<string, unknown>)?.[needsKey] ?? '') || null : null,
         version: p.version,
         customerName: p.customer?.customerName ?? null,
         partnerName: p.partner?.partnerName ?? null,
