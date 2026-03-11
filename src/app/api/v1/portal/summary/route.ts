@@ -14,6 +14,7 @@ import {
   getKpiDefinitions,
   getPrimaryKpiDefinition,
   getKpiDefinition,
+  getActiveFieldKeys,
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
 import type { DashboardSummary, KpiSummaryItem, KpiDefinition, PortalBusinessSummary } from '@/types/dashboard';
@@ -189,6 +190,12 @@ export async function GET(request: NextRequest) {
     // ============================================
 
     let resolvedKpiKey: string | null = null;
+    // 事業ごとのアクティブフィールドキー
+    const bizActiveKeysMap = new Map<number, Set<string>>();
+    for (const biz of businesses) {
+      bizActiveKeysMap.set(biz.id, getActiveFieldKeys(biz.businessConfig));
+    }
+
     const businessKpiMap = new Map<number, { kpi: KpiDefinition | null; dateField: string; statusFilters: string[] | null }>();
 
     for (const biz of businesses) {
@@ -196,13 +203,19 @@ export async function GET(request: NextRequest) {
         ? getKpiDefinition(biz.businessConfig, kpiKeyParam)
         : getPrimaryKpiDefinition(biz.businessConfig);
 
-      const statusFilters = kpi?.statusFilter
-        ? Array.isArray(kpi.statusFilter) ? kpi.statusFilter : [kpi.statusFilter]
+      // sourceField が削除済みならKPIを無効化
+      const activeKeys = bizActiveKeysMap.get(biz.id)!;
+      const validKpi = kpi && kpi.aggregation === 'sum' && kpi.sourceField && !activeKeys.has(kpi.sourceField)
+        ? null
+        : kpi;
+
+      const statusFilters = validKpi?.statusFilter
+        ? Array.isArray(validKpi.statusFilter) ? validKpi.statusFilter : [validKpi.statusFilter]
         : null;
 
       businessKpiMap.set(biz.id, {
-        kpi,
-        dateField: kpi?.dateField ?? 'projectExpectedCloseMonth',
+        kpi: validKpi,
+        dateField: validKpi?.dateField ?? 'projectExpectedCloseMonth',
         statusFilters,
       });
 
@@ -304,7 +317,10 @@ export async function GET(request: NextRequest) {
     if (businessId !== null) {
       const biz = businesses.find((b) => b.id === businessId);
       if (biz) {
-        const allKpis = getKpiDefinitions(biz.businessConfig);
+        const activeKeys = bizActiveKeysMap.get(businessId) ?? new Set<string>();
+        const allKpis = getKpiDefinitions(biz.businessConfig).filter(
+          (k) => !(k.aggregation === 'sum' && k.sourceField && !activeKeys.has(k.sourceField)),
+        );
         if (allKpis.length > 0) {
           kpiSummaries = allKpis.map((kpi) => {
             const sf = kpi.statusFilter

@@ -9,6 +9,7 @@ import {
   getKpiDefinitions,
   getRevenueMonth,
   getRevenueAmount,
+  getActiveFieldKeys,
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
@@ -59,8 +60,11 @@ export async function GET(request: NextRequest) {
     });
     if (!business || !business.businessIsActive) throw ApiError.notFound('事業が見つかりません');
 
-    // KPI定義取得
-    const kpiDefinitions = getKpiDefinitions(business.businessConfig);
+    // KPI定義取得（削除済みフィールドを参照する KPI を除外）
+    const activeKeys = getActiveFieldKeys(business.businessConfig);
+    const kpiDefinitions = getKpiDefinitions(business.businessConfig).filter(
+      (k) => !(k.aggregation === 'sum' && k.sourceField && !activeKeys.has(k.sourceField)),
+    );
 
     // ステータス定義取得
     const statusDefs = await prisma.businessStatusDefinition.findMany({

@@ -13,6 +13,7 @@ import {
   getKpiDefinitions,
   getPrimaryKpiDefinition,
   getKpiDefinition,
+  getActiveFieldKeys,
   calculateKpiBatchForBusiness,
 } from '@/lib/revenue-helpers';
 import type { DashboardSummary, BusinessSummaryItem, KpiSummaryItem } from '@/types/dashboard';
@@ -182,7 +183,11 @@ export async function GET(request: NextRequest) {
     // 範囲/単月モード: 指定月リストで集計
     await Promise.all(
       businesses.map(async (biz) => {
-        const kpiDefs = getKpiDefinitions(biz.businessConfig);
+        // 削除済みフィールドを参照する KPI を除外
+        const activeKeys = getActiveFieldKeys(biz.businessConfig);
+        const kpiDefs = getKpiDefinitions(biz.businessConfig).filter(
+          (k) => !(k.aggregation === 'sum' && k.sourceField && !activeKeys.has(k.sourceField)),
+        );
         if (kpiDefs.length === 0) return;
 
         // formula フィールド再計算用
@@ -420,7 +425,11 @@ export async function GET(request: NextRequest) {
       // 事業ごとのKPI実績を個別に取得
       businessSummaries = await Promise.all(
         businesses.map(async (biz) => {
-          const kpiDefs = getKpiDefinitions(biz.businessConfig);
+          // 削除済みフィールドを参照する KPI を除外
+          const ak = getActiveFieldKeys(biz.businessConfig);
+          const kpiDefs = getKpiDefinitions(biz.businessConfig).filter(
+            (k) => !(k.aggregation === 'sum' && k.sourceField && !ak.has(k.sourceField)),
+          );
           const kpiDef = kpiDefs.find((k) => k.key === resolvedKpiKey);
 
           // formula フィールド再計算用

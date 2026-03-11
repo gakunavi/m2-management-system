@@ -188,23 +188,20 @@ function SortableHeader({ id, label, sortable, sortBy, sortOrder, onSort, sortKe
       ref={setNodeRef}
       style={style}
       className={`px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap ${
-        hideOnMobile ? 'hidden sm:table-cell' : ''
-      }`}
+        sortable ? 'cursor-pointer hover:text-foreground' : ''
+      } ${hideOnMobile ? 'hidden sm:table-cell' : ''}`}
+      onClick={() => sortable && onSort(sortKey)}
     >
-      <span className="inline-flex items-center gap-1 group">
+      <span className="inline-flex items-center gap-1 group select-none">
         <span
           {...attributes}
           {...listeners}
           className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          onClick={(e) => e.stopPropagation()}
         >
           <GripVertical className="h-3.5 w-3.5" />
         </span>
-        <span
-          className={sortable ? 'cursor-pointer hover:text-foreground select-none' : ''}
-          onClick={() => sortable && onSort(sortKey)}
-        >
-          {label}
-        </span>
+        <span>{label}</span>
         {sortable && sortBy === sortKey ? (
           sortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
         ) : sortable ? (

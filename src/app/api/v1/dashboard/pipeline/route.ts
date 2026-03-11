@@ -6,7 +6,7 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 
 export const dynamic = 'force-dynamic';
 
-import { getBusinessIdsForUser, getRevenueAmount, getRevenueMonth, getKpiDefinition, getPrimaryKpiDefinition, injectFormulaValues } from '@/lib/revenue-helpers';
+import { getBusinessIdsForUser, getRevenueAmount, getRevenueMonth, getKpiDefinition, getPrimaryKpiDefinition, getActiveFieldKeys, injectFormulaValues } from '@/lib/revenue-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
@@ -89,9 +89,12 @@ export async function GET(request: NextRequest) {
         ? getKpiDefinition(biz.businessConfig, kpiKey)
         : getPrimaryKpiDefinition(biz.businessConfig);
 
+      // sourceField が削除済みフィールドを参照していないか検証
+      const activeKeys = getActiveFieldKeys(biz.businessConfig);
+
       if (!kpi) {
         kpiResolutionMap.set(biz.id, { type: 'none' });
-      } else if (kpi.aggregation === 'sum' && kpi.sourceField) {
+      } else if (kpi.aggregation === 'sum' && kpi.sourceField && activeKeys.has(kpi.sourceField)) {
         kpiResolutionMap.set(biz.id, { type: 'sum', sourceField: kpi.sourceField });
       } else if (kpi.aggregation === 'count') {
         kpiResolutionMap.set(biz.id, { type: 'count' });

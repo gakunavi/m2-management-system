@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessPartnerScope, getRevenueRecognition, getRevenueAmount, injectFormulaValues } from '@/lib/revenue-helpers';
+import { getBusinessPartnerScope, getRevenueRecognition, getRevenueAmount, getActiveFieldKeys, injectFormulaValues } from '@/lib/revenue-helpers';
 
 export const dynamic = 'force-dynamic';
 import {
@@ -284,7 +284,12 @@ export async function GET(request: NextRequest) {
 
       // 事業設定から売上計上ルールを取得して金額フィールドを決定
       const revenueRecognition = getRevenueRecognition(p.business?.businessConfig ?? null);
-      const amount = revenueRecognition
+      // amountField が現在のフィールド定義に存在する場合のみ金額を計算
+      const activeKeys = getActiveFieldKeys(p.business?.businessConfig ?? null);
+      const amountFieldExists = revenueRecognition
+        ? activeKeys.has(revenueRecognition.amountField)
+        : false;
+      const amount = revenueRecognition && amountFieldExists
         ? getRevenueAmount(
             {
               id: p.id,

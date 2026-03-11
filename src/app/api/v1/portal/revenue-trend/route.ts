@@ -13,6 +13,7 @@ import {
   getPrimaryKpiDefinition,
   getRevenueAmount,
   getRevenueMonth,
+  getActiveFieldKeys,
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
@@ -115,6 +116,12 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
+      // sourceField が削除済みフィールドを参照していないか検証
+      const activeKeys = getActiveFieldKeys(biz.businessConfig);
+      const validSourceField = kpiDef.aggregation === 'sum' && kpiDef.sourceField && activeKeys.has(kpiDef.sourceField)
+        ? kpiDef.sourceField
+        : null;
+
       resolvedKpiKey = kpiDef.key;
       resolvedKpiLabel = kpiDef.label;
       resolvedKpiUnit = kpiDef.unit;
@@ -125,9 +132,9 @@ export async function GET(request: NextRequest) {
 
       businessKpiMap.set(biz.id, {
         statusFilters,
-        sourceField: kpiDef.aggregation === 'sum' ? kpiDef.sourceField : null,
+        sourceField: validSourceField,
         dateField: kpiDef.dateField ?? 'projectExpectedCloseMonth',
-        aggregation: kpiDef.aggregation,
+        aggregation: validSourceField ? kpiDef.aggregation : (kpiDef.aggregation === 'count' ? 'count' : null),
       });
     }
 

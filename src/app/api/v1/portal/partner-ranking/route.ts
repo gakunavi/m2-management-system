@@ -11,6 +11,7 @@ import {
   getRevenueMonth,
   getKpiDefinition,
   getPrimaryKpiDefinition,
+  getActiveFieldKeys,
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
@@ -63,7 +64,9 @@ export async function GET(request: NextRequest) {
     const statusFilters: string[] | null = kpiDef?.statusFilter
       ? Array.isArray(kpiDef.statusFilter) ? kpiDef.statusFilter : [kpiDef.statusFilter]
       : null;
-    const sourceField = kpiDef?.aggregation === 'sum' && kpiDef?.sourceField
+    // sourceField が削除済みフィールドを参照していないか検証
+    const activeKeys = getActiveFieldKeys(business.businessConfig);
+    const sourceField = kpiDef?.aggregation === 'sum' && kpiDef?.sourceField && activeKeys.has(kpiDef.sourceField)
       ? kpiDef.sourceField
       : null;
     const dateField = kpiDef?.dateField ?? 'projectExpectedCloseMonth';

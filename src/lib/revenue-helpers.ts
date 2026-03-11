@@ -105,6 +105,16 @@ export function getRevenueAmount(
   return typeof value === 'number' ? value : 0;
 }
 
+/**
+ * businessConfig.projectFields からアクティブなフィールドキーの Set を取得
+ * 削除済みフィールドをKPI/金額計算から除外するために使用
+ */
+export function getActiveFieldKeys(businessConfig: unknown): Set<string> {
+  const config = businessConfig as Record<string, unknown> | null;
+  const fields = (config?.projectFields ?? []) as ProjectFieldDefinition[];
+  return new Set(fields.map((f) => f.key));
+}
+
 // ============================================
 // 売上実績集計
 // ============================================
