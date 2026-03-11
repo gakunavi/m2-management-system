@@ -1,6 +1,6 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getCurrentMonth } from '@/lib/revenue-helpers';
@@ -52,11 +52,82 @@ function formatMonthLabel(ym: string): string {
   return `${y}年${parseInt(m, 10)}月`;
 }
 
+/** 年の選択肢を生成（現在年 ± 3年） */
+function getYearOptions(): number[] {
+  const currentYear = new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = currentYear - 3; y <= currentYear + 3; y++) {
+    years.push(y);
+  }
+  return years;
+}
+
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
+
+/** YYYY-MM 形式から { year, month } に分解 */
+function parseYearMonth(ym: string): { year: string; month: string } {
+  const [y, m] = ym.split('-');
+  return { year: y, month: String(parseInt(m, 10)) };
+}
+
+/** year, month → YYYY-MM 形式に結合 */
+function toYearMonth(year: string, month: string): string {
+  return `${year}-${month.padStart(2, '0')}`;
+}
+
+// ============================================
+// 年月セレクトコンポーネント
+// ============================================
+
+function YearMonthSelect({
+  value,
+  onChange,
+  yearOptions,
+}: {
+  value: string;
+  onChange: (ym: string) => void;
+  yearOptions: number[];
+}) {
+  const parsed = useMemo(() => parseYearMonth(value || getCurrentMonth()), [value]);
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <select
+        className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+        value={parsed.year}
+        onChange={(e) => onChange(toYearMonth(e.target.value, parsed.month))}
+      >
+        {yearOptions.map((y) => (
+          <option key={y} value={String(y)}>
+            {y}年
+          </option>
+        ))}
+      </select>
+      <select
+        className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+        value={parsed.month}
+        onChange={(e) => onChange(toYearMonth(parsed.year, e.target.value))}
+      >
+        {MONTH_OPTIONS.map((m) => (
+          <option key={m} value={String(m)}>
+            {m}月
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ============================================
+// メインコンポーネント
+// ============================================
+
 export const DashboardMonthFilter = memo(function DashboardMonthFilter({
   value,
   onChange,
 }: Props) {
   const currentMonth = getCurrentMonth();
+  const yearOptions = useMemo(() => getYearOptions(), []);
 
   const handleModeChange = (mode: PeriodMode) => {
     if (mode === value.mode) return;
@@ -102,11 +173,10 @@ export const DashboardMonthFilter = memo(function DashboardMonthFilter({
       {/* 単月ピッカー */}
       {value.mode === 'month' && (
         <>
-          <input
-            type="month"
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+          <YearMonthSelect
             value={value.month}
-            onChange={(e) => onChange({ ...value, month: e.target.value })}
+            onChange={(ym) => onChange({ ...value, month: ym })}
+            yearOptions={yearOptions}
           />
           {value.month !== currentMonth && (
             <Button
@@ -123,19 +193,16 @@ export const DashboardMonthFilter = memo(function DashboardMonthFilter({
       {/* 期間指定ピッカー */}
       {value.mode === 'range' && (
         <div className="flex items-center gap-1.5">
-          <input
-            type="month"
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+          <YearMonthSelect
             value={value.startMonth}
-            onChange={(e) => onChange({ ...value, startMonth: e.target.value })}
+            onChange={(ym) => onChange({ ...value, startMonth: ym })}
+            yearOptions={yearOptions}
           />
           <span className="text-sm text-muted-foreground">〜</span>
-          <input
-            type="month"
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-            value={value.endMonth}
-            onChange={(e) => onChange({ ...value, endMonth: e.target.value })}
-            placeholder="未指定"
+          <YearMonthSelect
+            value={value.endMonth || currentMonth}
+            onChange={(ym) => onChange({ ...value, endMonth: ym })}
+            yearOptions={yearOptions}
           />
           {value.endMonth && (
             <Button

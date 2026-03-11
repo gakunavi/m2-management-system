@@ -37,7 +37,6 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { formatCurrency } from '@/components/features/dashboard/chart-config';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import type { PortalProject, PortalFieldDefinition } from '@/types/dashboard';
 
@@ -86,7 +85,6 @@ const BASE_FIXED_COLUMNS: UnifiedColumn[] = [
   { key: 'partnerName', label: '代理店名', sortable: true, hideOnMobile: false },
   { key: 'projectSalesStatus', label: 'ステータス', sortable: true, hideOnMobile: false },
   { key: 'projectExpectedCloseMonth', label: '予定月', sortable: true, hideOnMobile: false },
-  { key: 'amount', label: '金額', sortable: false, hideOnMobile: false, hideWhenEmpty: true },
   { key: 'projectAssignedUserName', label: '担当者', sortable: true, hideOnMobile: true },
 ];
 
@@ -136,12 +134,6 @@ function renderCellValue(col: UnifiedColumn, project: PortalProject): React.Reac
       );
     case 'projectExpectedCloseMonth':
       return <span className="text-muted-foreground">{project.projectExpectedCloseMonth ?? '-'}</span>;
-    case 'amount':
-      return (
-        <span className="text-right block">
-          {project.amount !== null ? formatCurrency(project.amount, true) : '-'}
-        </span>
-      );
     case 'projectAssignedUserName':
       return <span className="text-muted-foreground">{project.projectAssignedUserName ?? '-'}</span>;
     case 'updatedAt':
@@ -303,12 +295,7 @@ export function PortalProjectList({
 
   // ---- 全カラム定義を構築 ----
   const allColumns = useMemo<UnifiedColumn[]>(() => {
-    // 金額列: 全プロジェクトに金額が無い場合は除外
-    const hasAnyAmount = projects?.some((p) => p.amount !== null && p.amount !== undefined) ?? false;
-    const fixedCols = BASE_FIXED_COLUMNS.filter((col) => {
-      if (col.hideWhenEmpty && !hasAnyAmount) return false;
-      return true;
-    });
+    const fixedCols = [...BASE_FIXED_COLUMNS];
 
     const customCols: UnifiedColumn[] = fieldDefinitions.map((fd) => ({
       key: `customData_${fd.key}`,
