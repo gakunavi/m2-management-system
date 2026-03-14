@@ -28,7 +28,16 @@ export function ColumnSettingsPanel({
   pinnedCols = [],
   onTogglePin,
 }: ColumnSettingsPanelProps) {
-  const columns = table.getAllColumns().filter((col) => col.getCanHide());
+  // テーブルの現在の columnOrder に合わせて列設定パネルの表示順序を統一
+  const columnOrder = table.getState().columnOrder;
+  const allColumns = table.getAllColumns().filter((col) => col.getCanHide());
+  const columns = columnOrder.length > 0
+    ? [...allColumns].sort((a, b) => {
+        const ai = columnOrder.indexOf(a.id);
+        const bi = columnOrder.indexOf(b.id);
+        return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+      })
+    : allColumns;
 
   return (
     <DropdownMenu>

@@ -69,20 +69,27 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
   // 5. 動的 listConfig
   const listConfig = useMemo<EntityListConfig>(() => {
     const dynamicColumns = buildDynamicColumns(projectFields);
+
+    // 固定列の後、システム列（updatedAt/createdAt）の前にカスタムフィールドを挿入する
+    // 列順: 主要固定 → 参照用固定 → カスタムフィールド → システム固定
+    const DYNAMIC_INSERT_BEFORE = 'updatedAt';
+    const fixedColumns = projectListConfig.columns.map((col) => {
+      if (col.key === 'projectSalesStatus') {
+        return { ...col, edit: { type: 'select' as const, options: statusOptions } };
+      }
+      return col;
+    });
+    const insertIndex = fixedColumns.findIndex((c) => c.key === DYNAMIC_INSERT_BEFORE);
+    const spliceAt = insertIndex >= 0 ? insertIndex : fixedColumns.length;
+    const mergedColumns = [
+      ...fixedColumns.slice(0, spliceAt),
+      ...dynamicColumns,
+      ...fixedColumns.slice(spliceAt),
+    ];
+
     return {
       ...projectListConfig,
-      columns: [
-        ...projectListConfig.columns.map((col) => {
-          if (col.key === 'projectSalesStatus') {
-            return {
-              ...col,
-              edit: { type: 'select' as const, options: statusOptions },
-            };
-          }
-          return col;
-        }),
-        ...dynamicColumns,
-      ],
+      columns: mergedColumns,
       filters: projectListConfig.filters.map((f) => {
         if (f.key === 'projectSalesStatus' && f.type === 'multi-select') {
           return { ...f, options: statusOptions } as typeof f;
