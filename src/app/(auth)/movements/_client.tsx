@@ -9,6 +9,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
+import { ExpectedCloseMonthFilter } from '@/components/features/project/expected-close-month-filter';
 import { MovementEditModal } from '@/components/features/project/movement-edit-modal';
 import { SalesStatusEditModal } from '@/components/features/project/sales-status-edit-modal';
 import { GanttChart, type ViewMode as GanttViewMode } from '@/components/features/project/gantt-chart';
@@ -59,6 +60,8 @@ export function MovementsClient() {
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Day');
   const [statusSort, setStatusSort] = useState<SortDirection>(null);
   const [monthSort, setMonthSort] = useState<SortDirection>(null);
+  const [expectedMonthFrom, setExpectedMonthFrom] = useState<string | null>(null);
+  const [expectedMonthTo, setExpectedMonthTo] = useState<string | null>(null);
   const prevBusinessIdRef = useRef<number | null>(null);
 
   // 事業未選択時はダッシュボードへリダイレクト（hydration完了後に判定）
@@ -72,6 +75,8 @@ export function MovementsClient() {
   useEffect(() => {
     if (selectedBusinessId && prevBusinessIdRef.current !== selectedBusinessId) {
       setSelectedStatuses(null);
+      setExpectedMonthFrom(null);
+      setExpectedMonthTo(null);
       prevBusinessIdRef.current = selectedBusinessId;
     }
   }, [selectedBusinessId]);
@@ -89,12 +94,14 @@ export function MovementsClient() {
   }, [allStatusDefs, selectedStatuses]);
 
   const { data, isLoading, error } = useQuery<MovementOverviewResponse>({
-    queryKey: ['project-movements-overview', selectedBusinessId, selectedStatuses],
+    queryKey: ['project-movements-overview', selectedBusinessId, selectedStatuses, expectedMonthFrom, expectedMonthTo],
     queryFn: async () => {
       const params = new URLSearchParams({ businessId: String(selectedBusinessId) });
       if (selectedStatuses && selectedStatuses.length > 0) {
         params.set('statuses', selectedStatuses.join(','));
       }
+      if (expectedMonthFrom) params.set('expectedCloseMonthFrom', expectedMonthFrom);
+      if (expectedMonthTo) params.set('expectedCloseMonthTo', expectedMonthTo);
       const res = await fetch(`/api/v1/projects/movements?${params.toString()}`);
       if (!res.ok) throw new Error('取得に失敗しました');
       return res.json() as Promise<MovementOverviewResponse>;
@@ -211,16 +218,24 @@ export function MovementsClient() {
         </div>
       </div>
 
-      {/* 営業ステータスフィルター */}
-      {statusDefinitions.length > 0 && (
-        <div className="bg-card rounded-lg border p-3 sm:p-4">
+      {/* フィルター */}
+      <div className="bg-card rounded-lg border p-3 sm:p-4 space-y-4">
+        {statusDefinitions.length > 0 && (
           <SalesStatusFilter
             statusDefinitions={statusDefinitions}
             selectedStatuses={selectedStatuses ?? []}
             onStatusChange={setSelectedStatuses}
           />
-        </div>
-      )}
+        )}
+        <ExpectedCloseMonthFilter
+          monthFrom={expectedMonthFrom}
+          monthTo={expectedMonthTo}
+          onChange={(from, to) => {
+            setExpectedMonthFrom(from);
+            setExpectedMonthTo(to);
+          }}
+        />
+      </div>
 
       {/* ビューの切替 */}
       {viewMode === 'matrix' ? (

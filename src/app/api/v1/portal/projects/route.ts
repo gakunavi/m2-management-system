@@ -167,6 +167,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 受注予定月フィルター
+    const monthFrom = searchParams.get('expectedCloseMonthFrom');
+    const monthTo = searchParams.get('expectedCloseMonthTo');
+    if (monthFrom || monthTo) {
+      where.projectExpectedCloseMonth = {};
+      if (monthFrom) {
+        (where.projectExpectedCloseMonth as Record<string, string>).gte = monthFrom;
+      }
+      if (monthTo) {
+        (where.projectExpectedCloseMonth as Record<string, string>).lte = monthTo;
+      }
+    }
+
     const orderBy = buildPortalOrderBy(sortByParam, sortOrder);
     const skip = (page - 1) * pageSize;
 

@@ -4,6 +4,7 @@ import { useMemo, Suspense, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { EntityListTemplate } from '@/components/templates/entity-list-template';
 import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
+import { ExpectedCloseMonthFilter } from '@/components/features/project/expected-close-month-filter';
 import { useProjectConfig } from '@/hooks/use-project-config';
 import { useBusiness } from '@/hooks/use-business';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -20,20 +21,31 @@ export function ProjectListClient() {
     }
   }, [hasHydrated, selectedBusinessId, router]);
 
-  // renderBeforeTable で SalesStatusFilter を描画
+  // renderBeforeTable で SalesStatusFilter + ExpectedCloseMonthFilter を描画
   const renderBeforeTable = useCallback(
     ({ filters, setFilter }: { filters: Record<string, string>; setFilter: (key: string, value: string) => void }) => {
-      if (statusDefinitions.length === 0) return null;
       const selectedStatuses = filters.projectSalesStatus
         ? filters.projectSalesStatus.split(',').filter(Boolean)
         : [];
+      const monthFrom = filters.expectedCloseMonthFrom || null;
+      const monthTo = filters.expectedCloseMonthTo || null;
       return (
-        <div className="bg-card rounded-lg border p-4">
-          <SalesStatusFilter
-            statusDefinitions={statusDefinitions}
-            selectedStatuses={selectedStatuses}
-            onStatusChange={(statuses) => {
-              setFilter('projectSalesStatus', statuses.join(','));
+        <div className="bg-card rounded-lg border p-4 space-y-4">
+          {statusDefinitions.length > 0 && (
+            <SalesStatusFilter
+              statusDefinitions={statusDefinitions}
+              selectedStatuses={selectedStatuses}
+              onStatusChange={(statuses) => {
+                setFilter('projectSalesStatus', statuses.join(','));
+              }}
+            />
+          )}
+          <ExpectedCloseMonthFilter
+            monthFrom={monthFrom}
+            monthTo={monthTo}
+            onChange={(from, to) => {
+              setFilter('expectedCloseMonthFrom', from ?? '');
+              setFilter('expectedCloseMonthTo', to ?? '');
             }}
           />
         </div>

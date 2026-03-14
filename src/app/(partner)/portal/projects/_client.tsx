@@ -7,6 +7,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { PageHeader } from '@/components/layout/page-header';
 import { SearchInput } from '@/components/form/search-input';
 import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
+import { ExpectedCloseMonthFilter } from '@/components/features/project/expected-close-month-filter';
 import { PortalProjectList } from '@/components/features/portal/portal-project-list';
 import type { PortalProject, PortalFieldDefinition } from '@/types/dashboard';
 
@@ -34,6 +35,8 @@ export function PortalProjectsClient() {
   const [sortBy, setSortBy] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [expectedMonthFrom, setExpectedMonthFrom] = useState<string | null>(null);
+  const [expectedMonthTo, setExpectedMonthTo] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -48,12 +51,18 @@ export function PortalProjectsClient() {
   if (selectedStatuses.length > 0) {
     projectParams.set('statuses', selectedStatuses.join(','));
   }
+  if (expectedMonthFrom) {
+    projectParams.set('expectedCloseMonthFrom', expectedMonthFrom);
+  }
+  if (expectedMonthTo) {
+    projectParams.set('expectedCloseMonthTo', expectedMonthTo);
+  }
   if (debouncedSearch) {
     projectParams.set('search', debouncedSearch);
   }
 
   const { data: projectsResponse, isLoading } = useQuery({
-    queryKey: ['portal', 'projects', selectedBusinessId, page, sortBy, sortOrder, selectedStatuses, debouncedSearch],
+    queryKey: ['portal', 'projects', selectedBusinessId, page, sortBy, sortOrder, selectedStatuses, expectedMonthFrom, expectedMonthTo, debouncedSearch],
     queryFn: async () => {
       const res = await fetch(`/api/v1/portal/projects?${projectParams.toString()}`, {
         credentials: 'include',
@@ -85,6 +94,12 @@ export function PortalProjectsClient() {
     setPage(1);
   };
 
+  const handleMonthChange = (from: string | null, to: string | null) => {
+    setExpectedMonthFrom(from);
+    setExpectedMonthTo(to);
+    setPage(1);
+  };
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     setPage(1);
@@ -102,15 +117,20 @@ export function PortalProjectsClient() {
         />
       </div>
 
-      {statusDefinitions.length > 0 && (
-        <div className="bg-card rounded-lg border p-4">
+      <div className="bg-card rounded-lg border p-4 space-y-4">
+        {statusDefinitions.length > 0 && (
           <SalesStatusFilter
             statusDefinitions={statusDefinitions}
             selectedStatuses={selectedStatuses}
             onStatusChange={handleStatusChange}
           />
-        </div>
-      )}
+        )}
+        <ExpectedCloseMonthFilter
+          monthFrom={expectedMonthFrom}
+          monthTo={expectedMonthTo}
+          onChange={handleMonthChange}
+        />
+      </div>
 
       <PortalProjectList
         projects={projectsResponse?.data}

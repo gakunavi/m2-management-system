@@ -184,6 +184,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 受注予定月フィルター
+    const monthFrom = searchParams.get('filter[expectedCloseMonthFrom]');
+    const monthTo = searchParams.get('filter[expectedCloseMonthTo]');
+    if (monthFrom || monthTo) {
+      where.projectExpectedCloseMonth = {};
+      if (monthFrom) {
+        (where.projectExpectedCloseMonth as Record<string, string>).gte = monthFrom;
+      }
+      if (monthTo) {
+        (where.projectExpectedCloseMonth as Record<string, string>).lte = monthTo;
+      }
+    }
+
     // 担当者フィルター
     if (assignedUserFilter) {
       where.projectAssignedUserId = parseInt(assignedUserFilter, 10);
