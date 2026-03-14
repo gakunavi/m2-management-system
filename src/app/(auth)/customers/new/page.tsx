@@ -1,16 +1,8 @@
-'use client';
+import type { Metadata } from 'next';
+import { CustomerNewClient } from './_client';
 
-import { EntityFormTemplate } from '@/components/templates/entity-form-template';
-import { customerFormConfig } from '@/config/entities/customer';
+export const metadata: Metadata = { title: '顧客マスタ - 新規登録' };
 
 export default function CustomerNewPage() {
-  return (
-    <EntityFormTemplate
-      config={customerFormConfig}
-      breadcrumbs={[
-        { label: '顧客マスタ一覧', href: '/customers' },
-        { label: '新規登録' },
-      ]}
-    />
-  );
+  return <CustomerNewClient />;
 }

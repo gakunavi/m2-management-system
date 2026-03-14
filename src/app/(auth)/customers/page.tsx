@@ -1,21 +1,8 @@
-'use client';
+import type { Metadata } from 'next';
+import { CustomersClient } from './_client';
 
-import { Suspense } from 'react';
-import { EntityListTemplate } from '@/components/templates/entity-list-template';
-import { customerListConfig } from '@/config/entities/customer';
-import { useBusinessColumns } from '@/hooks/use-business-columns';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-
-function CustomersPageContent() {
-  const { config } = useBusinessColumns(customerListConfig, 'customer');
-
-  return <EntityListTemplate config={config} />;
-}
+export const metadata: Metadata = { title: '顧客マスタ' };
 
 export default function CustomersPage() {
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <CustomersPageContent />
-    </Suspense>
-  );
+  return <CustomersClient />;
 }

@@ -1,4 +1,9 @@
+import type { Metadata } from 'next';
 import { InquiryDetailClient } from './_client';
+
+export const metadata: Metadata = {
+  title: '問い合わせ - 詳細',
+};
 
 export default async function InquiryDetailPage({
   params,

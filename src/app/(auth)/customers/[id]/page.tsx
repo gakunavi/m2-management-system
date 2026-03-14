@@ -1,4 +1,9 @@
+import type { Metadata } from 'next';
 import { CustomerDetailClient } from './_client';
+
+export const metadata: Metadata = {
+  title: '顧客マスタ - 詳細',
+};
 
 export default async function CustomerDetailPage({
   params,

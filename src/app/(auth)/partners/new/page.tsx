@@ -1,16 +1,8 @@
-'use client';
+import type { Metadata } from 'next';
+import { PartnerNewClient } from './_client';
 
-import { EntityFormTemplate } from '@/components/templates/entity-form-template';
-import { partnerFormConfig } from '@/config/entities/partner';
+export const metadata: Metadata = { title: '代理店マスタ - 新規登録' };
 
 export default function PartnerNewPage() {
-  return (
-    <EntityFormTemplate
-      config={partnerFormConfig}
-      breadcrumbs={[
-        { label: '代理店マスタ一覧', href: '/partners' },
-        { label: '新規登録' },
-      ]}
-    />
-  );
+  return <PartnerNewClient />;
 }

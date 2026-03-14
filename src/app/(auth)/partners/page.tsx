@@ -1,21 +1,8 @@
-'use client';
+import type { Metadata } from 'next';
+import { PartnersClient } from './_client';
 
-import { Suspense } from 'react';
-import { EntityListTemplate } from '@/components/templates/entity-list-template';
-import { partnerListConfig } from '@/config/entities/partner';
-import { useBusinessColumns } from '@/hooks/use-business-columns';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-
-function PartnersPageContent() {
-  const { config } = useBusinessColumns(partnerListConfig, 'partner');
-
-  return <EntityListTemplate config={config} />;
-}
+export const metadata: Metadata = { title: '代理店マスタ' };
 
 export default function PartnersPage() {
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <PartnersPageContent />
-    </Suspense>
-  );
+  return <PartnersClient />;
 }

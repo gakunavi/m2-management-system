@@ -6,7 +6,10 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'M²管理システム',
+  title: {
+    default: 'M²管理システム',
+    template: '%s | M²管理システム',
+  },
   description: '統合管理システム',
 };
 
