@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, CheckCircle, Circle, Play, SkipForward, LayoutGrid, GanttChartSquare } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, CheckCircle, Circle, Play, SkipForward, LayoutGrid, GanttChartSquare } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -47,6 +47,8 @@ type ModalState =
   | { type: 'salesStatus'; project: ProjectRow };
 
 type ViewMode = 'matrix' | 'gantt';
+type SortKey = 'salesStatus' | 'expectedCloseMonth' | null;
+type SortOrder = 'asc' | 'desc';
 
 export function MovementsClient() {
   const router = useRouter();
@@ -56,6 +58,8 @@ export function MovementsClient() {
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
   const [viewMode, setViewMode] = useState<ViewMode>('matrix');
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Day');
+  const [sortKey, setSortKey] = useState<SortKey>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const prevBusinessIdRef = useRef<number | null>(null);
 
   // 事業未選択時はダッシュボードへリダイレクト（hydration完了後に判定）
@@ -101,7 +105,48 @@ export function MovementsClient() {
 
   const templates = data?.meta?.templates ?? [];
   const statusDefinitions = data?.meta?.statusDefinitions ?? [];
-  const projects = data?.data ?? [];
+  const rawProjects = data?.data ?? [];
+
+  // ソート切替ハンドラ
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      if (sortOrder === 'asc') {
+        setSortOrder('desc');
+      } else {
+        // 3回目のクリックでソート解除
+        setSortKey(null);
+        setSortOrder('asc');
+      }
+    } else {
+      setSortKey(key);
+      setSortOrder('asc');
+    }
+  };
+
+  // ステータスのソート順マップ（statusSortOrder基準）
+  const statusSortMap = useMemo(() => {
+    const map = new Map<string, number>();
+    allStatusDefs.forEach((s) => map.set(s.statusCode, s.statusSortOrder));
+    return map;
+  }, [allStatusDefs]);
+
+  // ソート済み案件リスト
+  const projects = useMemo(() => {
+    if (!sortKey) return rawProjects;
+    return [...rawProjects].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'salesStatus') {
+        const aOrder = statusSortMap.get(a.projectSalesStatus) ?? Infinity;
+        const bOrder = statusSortMap.get(b.projectSalesStatus) ?? Infinity;
+        cmp = aOrder - bOrder;
+      } else if (sortKey === 'expectedCloseMonth') {
+        const aVal = a.projectExpectedCloseMonth ?? '';
+        const bVal = b.projectExpectedCloseMonth ?? '';
+        cmp = aVal.localeCompare(bVal) || (aVal === '' ? 1 : 0) - (bVal === '' ? 1 : 0);
+      }
+      return sortOrder === 'desc' ? -cmp : cmp;
+    });
+  }, [rawProjects, sortKey, sortOrder, statusSortMap]);
 
   // テーブル幅の計算（案件情報 + ステップ数 * セル幅 + 営業ステータス）
   const minWidth = useMemo(() => 200 + templates.length * 120 + 100, [templates.length]);
@@ -209,11 +254,32 @@ export function MovementsClient() {
               <div style={{ minWidth: `${minWidth}px` }}>
                 {/* ヘッダー行 */}
                 <div className="bg-muted/50 border-b flex">
-                  <div className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted/50 z-10">
-                    案件情報
+                  <div
+                    className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted/50 z-10 cursor-pointer select-none hover:bg-muted/70 transition-colors"
+                    onClick={() => handleSort('expectedCloseMonth')}
+                  >
+                    <span className="flex items-center gap-1">
+                      案件情報
+                      <span className="text-xs text-muted-foreground">/ 受注予定月</span>
+                      {sortKey === 'expectedCloseMonth' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                      ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/50" />
+                      )}
+                    </span>
                   </div>
-                  <div className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium">
-                    営業ステータス
+                  <div
+                    className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium cursor-pointer select-none hover:bg-muted/70 transition-colors"
+                    onClick={() => handleSort('salesStatus')}
+                  >
+                    <span className="flex items-center justify-center gap-1">
+                      営業ステータス
+                      {sortKey === 'salesStatus' ? (
+                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
+                      )}
+                    </span>
                   </div>
                   {templates.map((t) => (
                     <div
