@@ -141,7 +141,7 @@ function PortalBusinessDashboard({ businessId }: { businessId: number }) {
   const [trendYear, setTrendYear] = useState(getCurrentFiscalYear);
   const [selectedKpiKey, setSelectedKpiKey] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(getDefaultPeriodFilter);
-  const [rankingMode, setRankingMode] = useState<'staff' | 'subordinate'>('staff');
+  const [rankingMode, setRankingMode] = useState<'staff' | 'subordinate'>('subordinate');
 
   // 単月モード時はグラフの年度を指定月の年度に自動連動
   const isMonthMode = periodFilter.mode === 'month';

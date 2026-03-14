@@ -24,16 +24,6 @@ export function PortalPartnerRanking({ data, isLoading, mode, onModeChange, hasS
           <div className="flex gap-1 p-0.5 bg-muted rounded-md">
             <button
               className={`px-2 py-1 text-xs rounded transition-colors ${
-                mode === 'staff'
-                  ? 'bg-background shadow-sm font-medium'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              onClick={() => onModeChange('staff')}
-            >
-              自社スタッフ
-            </button>
-            <button
-              className={`px-2 py-1 text-xs rounded transition-colors ${
                 mode === 'subordinate'
                   ? 'bg-background shadow-sm font-medium'
                   : 'text-muted-foreground hover:text-foreground'
@@ -41,6 +31,16 @@ export function PortalPartnerRanking({ data, isLoading, mode, onModeChange, hasS
               onClick={() => onModeChange('subordinate')}
             >
               下位代理店
+            </button>
+            <button
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                mode === 'staff'
+                  ? 'bg-background shadow-sm font-medium'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => onModeChange('staff')}
+            >
+              自社スタッフ
             </button>
           </div>
         )}
