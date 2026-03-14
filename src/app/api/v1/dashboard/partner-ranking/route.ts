@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { rankings, kpiUnit: kpiDef?.unit },
+      data: { rankings, kpiUnit: kpiDef?.unit, kpiLabel: kpiDef?.label },
     });
   } catch (error) {
     return handleApiError(error);

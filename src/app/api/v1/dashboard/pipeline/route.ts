@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
 
     const kpiResolutionMap = new Map<number, KpiResolution>();
     let resolvedKpiUnit: string | undefined;
+    let resolvedKpiLabel: string | undefined;
     for (const biz of businesses) {
       const kpi = kpiKey
         ? getKpiDefinition(biz.businessConfig, kpiKey)
@@ -102,6 +103,7 @@ export async function GET(request: NextRequest) {
         kpiResolutionMap.set(biz.id, { type: 'none' });
       }
       if (kpi && !resolvedKpiUnit) resolvedKpiUnit = kpi.unit;
+      if (kpi && !resolvedKpiLabel) resolvedKpiLabel = kpi.label;
     }
 
     // 事業ごとの dateField を解決（月フィルター用）
@@ -202,7 +204,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { statuses, total, kpiUnit: resolvedKpiUnit },
+      data: { statuses, total, kpiUnit: resolvedKpiUnit, kpiLabel: resolvedKpiLabel },
     });
   } catch (error) {
     return handleApiError(error);

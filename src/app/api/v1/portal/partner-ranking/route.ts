@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: { rankings, kpiUnit: kpiDef?.unit, mode },
+        data: { rankings, kpiUnit: kpiDef?.unit, kpiLabel: kpiDef?.label, mode },
       });
     }
 
@@ -207,7 +207,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { rankings, kpiUnit: kpiDef?.unit, mode },
+      data: { rankings, kpiUnit: kpiDef?.unit, kpiLabel: kpiDef?.label, mode },
     });
   } catch (error) {
     return handleApiError(error);

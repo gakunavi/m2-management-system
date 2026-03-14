@@ -31,6 +31,9 @@ function CustomTooltip({ active, payload, kpiUnit }: { active?: boolean; payload
 }
 
 export const PipelineChart = memo(function PipelineChart({ data, isLoading }: Props) {
+  const chartLabel = data?.kpiLabel ?? '売上';
+  const title = `パイプライン — ${chartLabel}`;
+
   if (isLoading || !data) {
     return (
       <div className="rounded-lg border bg-card p-5">
@@ -45,7 +48,7 @@ export const PipelineChart = memo(function PipelineChart({ data, isLoading }: Pr
   if (data.statuses.length === 0) {
     return (
       <div className="rounded-lg border bg-card p-5">
-        <h3 className="font-semibold mb-4">パイプライン</h3>
+        <h3 className="font-semibold mb-4">{title}</h3>
         <div className="h-60 flex items-center justify-center text-muted-foreground text-sm">
           データがありません
         </div>
@@ -56,7 +59,7 @@ export const PipelineChart = memo(function PipelineChart({ data, isLoading }: Pr
   return (
     <div className="rounded-lg border bg-card p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">パイプライン</h3>
+        <h3 className="font-semibold">{title}</h3>
         <span className="text-xs text-muted-foreground">
           計 {data.total.projectCount}件 / {formatKpiValue(data.total.totalAmount, data.kpiUnit, true)}
         </span>

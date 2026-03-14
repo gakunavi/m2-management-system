@@ -12,7 +12,9 @@ interface Props {
 }
 
 export function PortalPartnerRanking({ data, isLoading, mode, onModeChange, hasSubordinates }: Props) {
-  const title = mode === 'staff' ? 'スタッフ別ランキング' : '代理店別ランキング';
+  const chartLabel = data?.kpiLabel ? ` — ${data.kpiLabel}` : '';
+  const baseTitle = mode === 'staff' ? 'スタッフ別ランキング' : '代理店別ランキング';
+  const title = `${baseTitle}${chartLabel}`;
 
   return (
     <div className="rounded-lg border bg-card p-5">

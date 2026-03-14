@@ -137,6 +137,7 @@ export async function GET(request: NextRequest) {
 
     const kpiResolutionMap = new Map<number, KpiResolution>();
     let resolvedKpiUnit: string | undefined;
+    let resolvedKpiLabel: string | undefined;
 
     const kpiDateFieldMap = new Map<number, string>();
 
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
         kpiResolutionMap.set(biz.id, { type: 'none' });
       }
       if (kpiDef && !resolvedKpiUnit) resolvedKpiUnit = kpiDef.unit;
+      if (kpiDef && !resolvedKpiLabel) resolvedKpiLabel = kpiDef.label;
       kpiDateFieldMap.set(biz.id, kpiDef?.dateField ?? 'projectExpectedCloseMonth');
     }
 
@@ -248,7 +250,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { statuses, total, kpiUnit: resolvedKpiUnit },
+      data: { statuses, total, kpiUnit: resolvedKpiUnit, kpiLabel: resolvedKpiLabel },
     });
   } catch (error) {
     return handleApiError(error);

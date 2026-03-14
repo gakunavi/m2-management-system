@@ -27,9 +27,13 @@ const accentColors = [
 ];
 
 function buildCards(data: DashboardSummary, kpiUnit?: string, hideAchievementRate?: boolean): KpiCard[] {
+  // KPIサマリーからラベルを取得（あれば）、なければデフォルト「売上」
+  const primaryKpi = data.kpiSummaries?.[0];
+  const revenueLabel = primaryKpi?.label ? `${primaryKpi.label}実績` : '売上実績';
+
   const cards: KpiCard[] = [
     {
-      label: '売上実績',
+      label: revenueLabel,
       value: formatKpiValue(data.revenue.current, kpiUnit, true),
       change: data.revenue.previous > 0
         ? `${data.revenue.changeRate > 0 ? '+' : ''}${data.revenue.changeRate.toFixed(1)}% 前月比`

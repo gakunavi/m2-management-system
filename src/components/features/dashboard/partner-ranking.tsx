@@ -10,6 +10,9 @@ interface Props {
 }
 
 export const PartnerRanking = memo(function PartnerRanking({ data, isLoading }: Props) {
+  const chartLabel = data?.kpiLabel ?? '売上';
+  const title = `代理店別ランキング — ${chartLabel}`;
+
   if (isLoading || !data) {
     return (
       <div className="rounded-lg border bg-card p-5">
@@ -24,7 +27,7 @@ export const PartnerRanking = memo(function PartnerRanking({ data, isLoading }: 
   if (data.rankings.length === 0) {
     return (
       <div className="rounded-lg border bg-card p-5">
-        <h3 className="font-semibold mb-4">代理店別ランキング</h3>
+        <h3 className="font-semibold mb-4">{title}</h3>
         <div className="h-60 flex items-center justify-center text-muted-foreground text-sm">
           データがありません
         </div>
@@ -36,7 +39,7 @@ export const PartnerRanking = memo(function PartnerRanking({ data, isLoading }: 
 
   return (
     <div className="rounded-lg border bg-card p-5">
-      <h3 className="font-semibold mb-4">代理店別ランキング</h3>
+      <h3 className="font-semibold mb-4">{title}</h3>
 
       <div className="space-y-2.5">
         {data.rankings.map((item) => {
