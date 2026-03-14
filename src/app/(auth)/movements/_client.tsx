@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, CheckCircle, Circle, Play, SkipForward, LayoutGrid, GanttChartSquare } from 'lucide-react';
@@ -22,6 +22,7 @@ import type {
   MovementOverviewResponse,
 } from '@/types/movement';
 import { useBusiness } from '@/hooks/use-business';
+import { useStatusDefinitions } from '@/hooks/use-status-definitions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import type { MovementStatus } from '@/lib/validations/movement';
@@ -51,10 +52,11 @@ export function MovementsClient() {
   const router = useRouter();
   const { toast } = useToast();
   const { selectedBusinessId, hasHydrated } = useBusiness();
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[] | null>(null);
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
   const [viewMode, setViewMode] = useState<ViewMode>('matrix');
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Day');
+  const prevBusinessIdRef = useRef<number | null>(null);
 
   // 事業未選択時はダッシュボードへリダイレクト（hydration完了後に判定）
   useEffect(() => {
@@ -63,18 +65,38 @@ export function MovementsClient() {
     }
   }, [hasHydrated, selectedBusinessId, router]);
 
+  // 事業切替時にフィルターをリセット
+  useEffect(() => {
+    if (selectedBusinessId && prevBusinessIdRef.current !== selectedBusinessId) {
+      setSelectedStatuses(null);
+      prevBusinessIdRef.current = selectedBusinessId;
+    }
+  }, [selectedBusinessId]);
+
+  // ステータス定義を先に取得してデフォルトフィルターを設定（失注・最終を除外）
+  const { items: allStatusDefs } = useStatusDefinitions(selectedBusinessId ?? 0);
+
+  useEffect(() => {
+    if (allStatusDefs.length > 0 && selectedStatuses === null) {
+      const activeStatuses = allStatusDefs
+        .filter((s) => s.statusIsActive && !s.statusIsFinal && !s.statusIsLost)
+        .map((s) => s.statusCode);
+      setSelectedStatuses(activeStatuses);
+    }
+  }, [allStatusDefs, selectedStatuses]);
+
   const { data, isLoading, error } = useQuery<MovementOverviewResponse>({
     queryKey: ['project-movements-overview', selectedBusinessId, selectedStatuses],
     queryFn: async () => {
       const params = new URLSearchParams({ businessId: String(selectedBusinessId) });
-      if (selectedStatuses.length > 0) {
+      if (selectedStatuses && selectedStatuses.length > 0) {
         params.set('statuses', selectedStatuses.join(','));
       }
       const res = await fetch(`/api/v1/projects/movements?${params.toString()}`);
       if (!res.ok) throw new Error('取得に失敗しました');
       return res.json() as Promise<MovementOverviewResponse>;
     },
-    enabled: !!selectedBusinessId,
+    enabled: !!selectedBusinessId && selectedStatuses !== null,
   });
 
   const templates = data?.meta?.templates ?? [];
@@ -149,7 +171,7 @@ export function MovementsClient() {
         <div className="bg-card rounded-lg border p-3 sm:p-4">
           <SalesStatusFilter
             statusDefinitions={statusDefinitions}
-            selectedStatuses={selectedStatuses}
+            selectedStatuses={selectedStatuses ?? []}
             onStatusChange={setSelectedStatuses}
           />
         </div>

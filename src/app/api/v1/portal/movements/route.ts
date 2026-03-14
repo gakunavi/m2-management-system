@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
     // ステータス定義
     const allStatusDefs = await prisma.businessStatusDefinition.findMany({
       where: { businessId: bizId, statusIsActive: true },
-      select: { statusCode: true, statusLabel: true, statusColor: true, statusSortOrder: true },
+      select: { statusCode: true, statusLabel: true, statusColor: true, statusSortOrder: true, statusIsFinal: true, statusIsLost: true },
       orderBy: { statusSortOrder: 'asc' },
     });
     const statusMap = new Map(
@@ -157,6 +157,8 @@ export async function GET(request: NextRequest) {
           statusCode: s.statusCode,
           statusLabel: s.statusLabel,
           statusColor: s.statusColor,
+          statusIsFinal: s.statusIsFinal,
+          statusIsLost: s.statusIsLost,
         })),
       },
     });

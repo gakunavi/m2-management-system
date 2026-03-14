@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, CheckCircle, Circle, Play, SkipForward } from 'lucide-react';
@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
 import type { MovementOverviewResponse, MovementItem } from '@/types/movement';
 import { useBusiness } from '@/hooks/use-business';
+import { useStatusDefinitions } from '@/hooks/use-status-definitions';
 import { cn } from '@/lib/utils';
 import type { MovementStatus } from '@/lib/validations/movement';
 
@@ -29,7 +30,8 @@ function formatCompactDate(iso: string | null): string {
 export function PortalMovementsClient() {
   const router = useRouter();
   const { selectedBusinessId, hasHydrated } = useBusiness();
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[] | null>(null);
+  const prevBusinessIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (hasHydrated && !selectedBusinessId) {
@@ -37,18 +39,38 @@ export function PortalMovementsClient() {
     }
   }, [hasHydrated, selectedBusinessId, router]);
 
+  // 事業切替時にフィルターをリセット
+  useEffect(() => {
+    if (selectedBusinessId && prevBusinessIdRef.current !== selectedBusinessId) {
+      setSelectedStatuses(null);
+      prevBusinessIdRef.current = selectedBusinessId;
+    }
+  }, [selectedBusinessId]);
+
+  // ステータス定義を先に取得してデフォルトフィルターを設定（失注・最終を除外）
+  const { items: allStatusDefs } = useStatusDefinitions(selectedBusinessId ?? 0);
+
+  useEffect(() => {
+    if (allStatusDefs.length > 0 && selectedStatuses === null) {
+      const activeStatuses = allStatusDefs
+        .filter((s) => s.statusIsActive && !s.statusIsFinal && !s.statusIsLost)
+        .map((s) => s.statusCode);
+      setSelectedStatuses(activeStatuses);
+    }
+  }, [allStatusDefs, selectedStatuses]);
+
   const { data, isLoading, error } = useQuery<MovementOverviewResponse>({
     queryKey: ['portal-movements-overview', selectedBusinessId, selectedStatuses],
     queryFn: async () => {
       const params = new URLSearchParams({ businessId: String(selectedBusinessId) });
-      if (selectedStatuses.length > 0) {
+      if (selectedStatuses && selectedStatuses.length > 0) {
         params.set('statuses', selectedStatuses.join(','));
       }
       const res = await fetch(`/api/v1/portal/movements?${params.toString()}`);
       if (!res.ok) throw new Error('取得に失敗しました');
       return res.json() as Promise<MovementOverviewResponse>;
     },
-    enabled: !!selectedBusinessId,
+    enabled: !!selectedBusinessId && selectedStatuses !== null,
   });
 
   const templates = data?.meta?.templates ?? [];
@@ -79,7 +101,7 @@ export function PortalMovementsClient() {
         <div className="bg-card rounded-lg border p-3 sm:p-4">
           <SalesStatusFilter
             statusDefinitions={statusDefinitions}
-            selectedStatuses={selectedStatuses}
+            selectedStatuses={selectedStatuses ?? []}
             onStatusChange={setSelectedStatuses}
           />
         </div>

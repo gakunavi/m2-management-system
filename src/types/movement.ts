@@ -34,6 +34,8 @@ export interface StatusDef {
   statusCode: string;
   statusLabel: string;
   statusColor: string | null;
+  statusIsFinal?: boolean;
+  statusIsLost?: boolean;
 }
 
 export interface TemplateHeader {
