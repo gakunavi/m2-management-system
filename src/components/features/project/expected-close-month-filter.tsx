@@ -11,27 +11,19 @@ interface Props {
   onChange: (from: string | null, to: string | null) => void;
 }
 
-export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props) {
-  const mode: FilterMode = !monthFrom && !monthTo
-    ? 'all'
-    : monthFrom && monthTo && monthFrom !== monthTo
-      ? 'range'
-      : 'single';
+function detectInitialMode(from: string | null, to: string | null): FilterMode {
+  if (!from && !to) return 'all';
+  if (from && to && from !== to) return 'range';
+  return 'single';
+}
 
-  const [showRange, setShowRange] = useState(mode === 'range');
+export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props) {
+  const [mode, setMode] = useState<FilterMode>(() => detectInitialMode(monthFrom, monthTo));
 
   const handleModeChange = (newMode: FilterMode) => {
+    setMode(newMode);
     if (newMode === 'all') {
       onChange(null, null);
-      setShowRange(false);
-    } else if (newMode === 'single') {
-      setShowRange(false);
-      // Keep monthFrom if set, clear monthTo
-      onChange(monthFrom, null);
-    } else {
-      setShowRange(true);
-      // Keep monthFrom if set
-      onChange(monthFrom, monthTo);
     }
   };
 
@@ -78,33 +70,32 @@ export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props
         </button>
 
         {/* 月選択UI */}
-        {mode !== 'all' && (
+        {mode === 'single' && (
+          <input
+            type="month"
+            value={monthFrom ?? ''}
+            onChange={(e) => {
+              const val = e.target.value || null;
+              onChange(val, val);
+            }}
+            className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        )}
+        {mode === 'range' && (
           <div className="flex items-center gap-2">
             <input
               type="month"
               value={monthFrom ?? ''}
-              onChange={(e) => {
-                const val = e.target.value || null;
-                if (showRange) {
-                  onChange(val, monthTo);
-                } else {
-                  // 単月: from と to を同じ値に
-                  onChange(val, val);
-                }
-              }}
+              onChange={(e) => onChange(e.target.value || null, monthTo)}
               className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
-            {showRange && (
-              <>
-                <span className="text-xs text-muted-foreground">〜</span>
-                <input
-                  type="month"
-                  value={monthTo ?? ''}
-                  onChange={(e) => onChange(monthFrom, e.target.value || null)}
-                  className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-              </>
-            )}
+            <span className="text-xs text-muted-foreground">〜</span>
+            <input
+              type="month"
+              value={monthTo ?? ''}
+              onChange={(e) => onChange(monthFrom, e.target.value || null)}
+              className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
           </div>
         )}
       </div>
