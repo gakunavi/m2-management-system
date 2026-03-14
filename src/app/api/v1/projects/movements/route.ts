@@ -163,6 +163,7 @@ export async function GET(request: NextRequest) {
           statusCode: s.statusCode,
           statusLabel: s.statusLabel,
           statusColor: s.statusColor,
+          statusSortOrder: s.statusSortOrder,
           statusIsFinal: s.statusIsFinal,
           statusIsLost: s.statusIsLost,
         })),

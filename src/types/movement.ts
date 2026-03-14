@@ -34,6 +34,7 @@ export interface StatusDef {
   statusCode: string;
   statusLabel: string;
   statusColor: string | null;
+  statusSortOrder?: number;
   statusIsFinal?: boolean;
   statusIsLost?: boolean;
 }

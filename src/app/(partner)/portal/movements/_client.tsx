@@ -86,12 +86,16 @@ export function PortalMovementsClient() {
     setter((prev) => (prev === null ? 'asc' : prev === 'asc' ? 'desc' : null));
   };
 
-  // ステータスのソート順マップ
+  // ステータスのソート順マップ（statusDefinitionsから構築、fallbackでallStatusDefs）
   const statusSortMap = useMemo(() => {
     const map = new Map<string, number>();
-    allStatusDefs.forEach((s) => map.set(s.statusCode, s.statusSortOrder));
+    if (statusDefinitions.length > 0) {
+      statusDefinitions.forEach((s, i) => map.set(s.statusCode, s.statusSortOrder ?? i));
+    } else {
+      allStatusDefs.forEach((s) => map.set(s.statusCode, s.statusSortOrder));
+    }
     return map;
-  }, [allStatusDefs]);
+  }, [statusDefinitions, allStatusDefs]);
 
   // ソート済み案件リスト（両方独立に適用、営業ステータス→受注予定月の順で比較）
   const projects = useMemo(() => {
@@ -117,7 +121,7 @@ export function PortalMovementsClient() {
     });
   }, [rawProjects, statusSort, monthSort, statusSortMap]);
 
-  const minWidth = useMemo(() => 200 + templates.length * 120 + 100, [templates.length]);
+  const minWidth = useMemo(() => 200 + templates.length * 120 + 140, [templates.length]);
 
   if (!hasHydrated || !selectedBusinessId) return <LoadingSpinner />;
   if (isLoading) return <LoadingSpinner />;
@@ -177,7 +181,7 @@ export function PortalMovementsClient() {
             {/* ヘッダー行 */}
             <div className="bg-muted border-b flex">
               <div
-                className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted z-10 cursor-pointer select-none hover:bg-muted/70 transition-colors"
+                className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted z-20 cursor-pointer select-none hover:brightness-95 transition-all"
                 onClick={() => toggleSort(setMonthSort)}
               >
                 <span className="flex items-center gap-1">
@@ -193,7 +197,7 @@ export function PortalMovementsClient() {
                 </span>
               </div>
               <div
-                className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium cursor-pointer select-none hover:bg-muted/70 transition-colors"
+                className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium sticky left-[200px] sm:left-[280px] bg-muted z-20 cursor-pointer select-none hover:brightness-95 transition-all"
                 onClick={() => toggleSort(setStatusSort)}
               >
                 <span className="flex items-center justify-center gap-1 whitespace-nowrap">
@@ -223,7 +227,7 @@ export function PortalMovementsClient() {
                 key={project.id}
                 className="border-b flex hover:bg-accent/30 transition-colors"
               >
-                <div className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 bg-card z-10">
+                <div className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 bg-card z-10 hover:brightness-95 transition-all">
                   <div className="text-sm font-medium truncate" title={project.customerName ?? ''}>
                     {project.customerName ?? '顧客未設定'}
                   </div>
@@ -239,7 +243,7 @@ export function PortalMovementsClient() {
                   )}
                 </div>
 
-                <div className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r flex items-center justify-center">
+                <div className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex items-center justify-center sticky left-[200px] sm:left-[280px] bg-card z-10">
                   {project.projectSalesStatusLabel ? (
                     <StatusBadge
                       label={project.projectSalesStatusLabel}
