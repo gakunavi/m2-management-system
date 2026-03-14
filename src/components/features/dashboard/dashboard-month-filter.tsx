@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo, useCallback } from 'react';
+import { memo, useMemo } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getCurrentMonth } from '@/lib/revenue-helpers';
