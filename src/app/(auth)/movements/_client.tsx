@@ -47,8 +47,7 @@ type ModalState =
   | { type: 'salesStatus'; project: ProjectRow };
 
 type ViewMode = 'matrix' | 'gantt';
-type SortKey = 'salesStatus' | 'expectedCloseMonth' | null;
-type SortOrder = 'asc' | 'desc';
+type SortDirection = 'asc' | 'desc' | null;
 
 export function MovementsClient() {
   const router = useRouter();
@@ -58,8 +57,8 @@ export function MovementsClient() {
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
   const [viewMode, setViewMode] = useState<ViewMode>('matrix');
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Day');
-  const [sortKey, setSortKey] = useState<SortKey>(null);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [statusSort, setStatusSort] = useState<SortDirection>(null);
+  const [monthSort, setMonthSort] = useState<SortDirection>(null);
   const prevBusinessIdRef = useRef<number | null>(null);
 
   // 事業未選択時はダッシュボードへリダイレクト（hydration完了後に判定）
@@ -107,20 +106,9 @@ export function MovementsClient() {
   const statusDefinitions = data?.meta?.statusDefinitions ?? [];
   const rawProjects = data?.data ?? [];
 
-  // ソート切替ハンドラ
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      if (sortOrder === 'asc') {
-        setSortOrder('desc');
-      } else {
-        // 3回目のクリックでソート解除
-        setSortKey(null);
-        setSortOrder('asc');
-      }
-    } else {
-      setSortKey(key);
-      setSortOrder('asc');
-    }
+  // ソート切替ハンドラ（各列独立で asc → desc → 解除）
+  const toggleSort = (setter: React.Dispatch<React.SetStateAction<SortDirection>>) => {
+    setter((prev) => (prev === null ? 'asc' : prev === 'asc' ? 'desc' : null));
   };
 
   // ステータスのソート順マップ（statusSortOrder基準）
@@ -130,23 +118,31 @@ export function MovementsClient() {
     return map;
   }, [allStatusDefs]);
 
-  // ソート済み案件リスト
+  // ソート済み案件リスト（両方独立に適用、営業ステータス→受注予定月の順で比較）
   const projects = useMemo(() => {
-    if (!sortKey) return rawProjects;
+    if (!statusSort && !monthSort) return rawProjects;
     return [...rawProjects].sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'salesStatus') {
+      // 営業ステータスで比較
+      if (statusSort) {
         const aOrder = statusSortMap.get(a.projectSalesStatus) ?? Infinity;
         const bOrder = statusSortMap.get(b.projectSalesStatus) ?? Infinity;
-        cmp = aOrder - bOrder;
-      } else if (sortKey === 'expectedCloseMonth') {
+        const cmp = aOrder - bOrder;
+        if (cmp !== 0) return statusSort === 'desc' ? -cmp : cmp;
+      }
+      // 受注予定月で比較
+      if (monthSort) {
         const aVal = a.projectExpectedCloseMonth ?? '';
         const bVal = b.projectExpectedCloseMonth ?? '';
-        cmp = aVal.localeCompare(bVal) || (aVal === '' ? 1 : 0) - (bVal === '' ? 1 : 0);
+        let cmp = 0;
+        if (!aVal && !bVal) cmp = 0;
+        else if (!aVal) cmp = 1;
+        else if (!bVal) cmp = -1;
+        else cmp = aVal.localeCompare(bVal);
+        if (cmp !== 0) return monthSort === 'desc' ? -cmp : cmp;
       }
-      return sortOrder === 'desc' ? -cmp : cmp;
+      return 0;
     });
-  }, [rawProjects, sortKey, sortOrder, statusSortMap]);
+  }, [rawProjects, statusSort, monthSort, statusSortMap]);
 
   // テーブル幅の計算（案件情報 + ステップ数 * セル幅 + 営業ステータス）
   const minWidth = useMemo(() => 200 + templates.length * 120 + 100, [templates.length]);
@@ -253,16 +249,18 @@ export function MovementsClient() {
             <div className="overflow-x-auto">
               <div style={{ minWidth: `${minWidth}px` }}>
                 {/* ヘッダー行 */}
-                <div className="bg-muted/50 border-b flex">
+                <div className="bg-muted border-b flex">
                   <div
-                    className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted/50 z-10 cursor-pointer select-none hover:bg-muted/70 transition-colors"
-                    onClick={() => handleSort('expectedCloseMonth')}
+                    className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted z-10 cursor-pointer select-none hover:bg-muted/70 transition-colors"
+                    onClick={() => toggleSort(setMonthSort)}
                   >
                     <span className="flex items-center gap-1">
                       案件情報
                       <span className="text-xs text-muted-foreground">/ 受注予定月</span>
-                      {sortKey === 'expectedCloseMonth' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3.5 w-3.5 text-primary" /> : <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                      {monthSort === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5 text-primary" />
+                      ) : monthSort === 'desc' ? (
+                        <ArrowDown className="h-3.5 w-3.5 text-primary" />
                       ) : (
                         <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/50" />
                       )}
@@ -270,12 +268,14 @@ export function MovementsClient() {
                   </div>
                   <div
                     className="w-[100px] sm:w-[120px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium cursor-pointer select-none hover:bg-muted/70 transition-colors"
-                    onClick={() => handleSort('salesStatus')}
+                    onClick={() => toggleSort(setStatusSort)}
                   >
-                    <span className="flex items-center justify-center gap-1">
+                    <span className="flex items-center justify-center gap-1 whitespace-nowrap">
                       営業ステータス
-                      {sortKey === 'salesStatus' ? (
-                        sortOrder === 'asc' ? <ArrowUp className="h-3 w-3 text-primary" /> : <ArrowDown className="h-3 w-3 text-primary" />
+                      {statusSort === 'asc' ? (
+                        <ArrowUp className="h-3 w-3 text-primary" />
+                      ) : statusSort === 'desc' ? (
+                        <ArrowDown className="h-3 w-3 text-primary" />
                       ) : (
                         <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
                       )}
