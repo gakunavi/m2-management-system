@@ -24,6 +24,74 @@ function getCurrentMonth(): string {
   return `${y}-${m}`;
 }
 
+function parseYearMonth(value: string | null): { year: string; month: string } {
+  if (!value) {
+    const current = getCurrentMonth();
+    const [y, m] = current.split('-');
+    return { year: y, month: m };
+  }
+  const [y, m] = value.split('-');
+  return { year: y, month: m };
+}
+
+function toYearMonth(year: string, month: string): string {
+  return `${year}-${month}`;
+}
+
+const MONTHS = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1).padStart(2, '0'),
+  label: `${i + 1}月`,
+}));
+
+function getYearOptions(): { value: string; label: string }[] {
+  const currentYear = new Date().getFullYear();
+  const years: { value: string; label: string }[] = [];
+  for (let y = currentYear - 2; y <= currentYear + 5; y++) {
+    years.push({ value: String(y), label: `${y}年` });
+  }
+  return years;
+}
+
+const selectClass =
+  'h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer';
+
+interface MonthSelectProps {
+  value: string | null;
+  onChange: (value: string) => void;
+}
+
+function MonthSelect({ value, onChange }: MonthSelectProps) {
+  const { year, month } = parseYearMonth(value);
+  const yearOptions = getYearOptions();
+
+  return (
+    <div className="flex items-center gap-1">
+      <select
+        value={year}
+        onChange={(e) => onChange(toYearMonth(e.target.value, month))}
+        className={selectClass}
+      >
+        {yearOptions.map((y) => (
+          <option key={y.value} value={y.value}>
+            {y.label}
+          </option>
+        ))}
+      </select>
+      <select
+        value={month}
+        onChange={(e) => onChange(toYearMonth(year, e.target.value))}
+        className={selectClass}
+      >
+        {MONTHS.map((m) => (
+          <option key={m.value} value={m.value}>
+            {m.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props) {
   const [mode, setMode] = useState<FilterMode>(() => detectInitialMode(monthFrom, monthTo));
 
@@ -84,30 +152,21 @@ export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props
 
         {/* 月選択UI */}
         {mode === 'single' && (
-          <input
-            type="month"
-            value={monthFrom ?? ''}
-            onChange={(e) => {
-              const val = e.target.value || null;
-              onChange(val, val);
-            }}
-            className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          <MonthSelect
+            value={monthFrom}
+            onChange={(val) => onChange(val, val)}
           />
         )}
         {mode === 'range' && (
           <div className="flex items-center gap-2">
-            <input
-              type="month"
-              value={monthFrom ?? ''}
-              onChange={(e) => onChange(e.target.value || null, monthTo)}
-              className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <MonthSelect
+              value={monthFrom}
+              onChange={(val) => onChange(val, monthTo)}
             />
             <span className="text-xs text-muted-foreground">〜</span>
-            <input
-              type="month"
-              value={monthTo ?? ''}
-              onChange={(e) => onChange(monthFrom, e.target.value || null)}
-              className="h-8 rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <MonthSelect
+              value={monthTo}
+              onChange={(val) => onChange(monthFrom, val)}
             />
           </div>
         )}
