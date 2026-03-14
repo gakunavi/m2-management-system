@@ -8,6 +8,56 @@ import { apiClient, ApiClientError } from '@/lib/api-client';
 import { useToast } from './use-toast';
 import type { EntityFormConfig } from '@/types/config';
 
+/**
+ * ドット記法のフラットキーをネストされたオブジェクトに変換する。
+ * 例: { "projectCustomData.needs": "value", "name": "test" }
+ *   → { projectCustomData: { needs: "value" }, name: "test" }
+ */
+function unflattenDotKeys(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    const dotIndex = key.indexOf('.');
+    if (dotIndex > 0) {
+      const parent = key.substring(0, dotIndex);
+      const child = key.substring(dotIndex + 1);
+      if (!result[parent] || typeof result[parent] !== 'object') {
+        result[parent] = {};
+      }
+      (result[parent] as Record<string, unknown>)[child] = value;
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * ネストされたオブジェクトをドット記法のフラットキーに展開する。
+ * 例: { projectCustomData: { needs: "value" } }
+ *   → { "projectCustomData.needs": "value" }
+ * ※ 対象は Record<string, unknown> 型の値のみ（配列・Date等は展開しない）
+ */
+function flattenNestedToFormKeys(data: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      !(value instanceof Date) &&
+      // projectCustomData 等のネストされたオブジェクトのみ展開
+      key.endsWith('CustomData')
+    ) {
+      for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+        result[`${key}.${childKey}`] = childValue;
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 export function useEntityForm(config: EntityFormConfig, id?: string) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -36,9 +86,12 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
   });
 
   // 取得データ + ユーザー編集差分 = 最終フォームデータ（同期的に導出）
+  // 編集時: fetchedData のネストされたオブジェクト（projectCustomData 等）を
+  // ドット記法に展開してフォームフィールドキーと一致させる
   const formData = useMemo<Record<string, unknown>>(() => {
     if (fetchedData) {
-      return { ...fetchedData, ...localEdits };
+      const expanded = flattenNestedToFormKeys(fetchedData);
+      return { ...expanded, ...localEdits };
     }
     return localEdits;
   }, [fetchedData, localEdits]);
@@ -57,17 +110,23 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
     setIsSubmitting(true);
     setErrors({});
 
+    // ドット記法をネストされたオブジェクトに変換（バリデーション・API送信用）
+    const submissionData = unflattenDotKeys(formData);
+
     // --- フロント側 Zod バリデーション ---
     const schema = config.validationSchema;
     if (schema && typeof schema === 'object' && 'safeParse' in schema) {
       const zodSchema = schema as z.ZodType;
-      const result = zodSchema.safeParse(formData);
+      const result = zodSchema.safeParse(submissionData);
       if (!result.success) {
         const fieldErrors: Record<string, string> = {};
         for (const issue of result.error.issues) {
-          const key = issue.path[0];
-          if (typeof key === 'string' && !fieldErrors[key]) {
-            fieldErrors[key] = issue.message;
+          // ネストされたパスをドット記法に変換してフォームフィールドと一致させる
+          const fieldKey = issue.path.length > 1
+            ? issue.path.join('.')
+            : String(issue.path[0]);
+          if (!fieldErrors[fieldKey]) {
+            fieldErrors[fieldKey] = issue.message;
           }
         }
         setErrors(fieldErrors);
@@ -97,12 +156,12 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
     try {
       let result: { id: number };
       if (mode === 'create') {
-        result = await apiClient.create<{ id: number }>(config.apiEndpoint, formData);
+        result = await apiClient.create<{ id: number }>(config.apiEndpoint, submissionData);
       } else {
         // 編集時は PATCH（部分更新 + 楽観的ロック）
         result = await apiClient.patch<{ id: number }>(
           `${config.apiEndpoint}/${id!}`,
-          formData,
+          submissionData,
         );
       }
 

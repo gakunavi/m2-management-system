@@ -381,6 +381,7 @@ export async function POST(request: NextRequest) {
           projectAssignedUserId: data.projectAssignedUserId ?? null,
           projectAssignedUserName: data.projectAssignedUserName || null,
           projectNotes: data.projectNotes || null,
+          projectRenovationNumber: data.projectRenovationNumber || null,
           projectCustomData: customDataForCreate as object,
           createdBy: user.id,
           updatedBy: user.id,

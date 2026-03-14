@@ -15,7 +15,7 @@ export function buildFormFields(fields: ProjectFieldDefinition[]): FormFieldDef[
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => {
       const base: FormFieldDef = {
-        key: `customData.${field.key}`,
+        key: `projectCustomData.${field.key}`,
         label: field.label,
         type: mapFieldType(field.type),
         required: field.required ?? false,
@@ -243,7 +243,7 @@ export function extractCustomData(
   const customData: Record<string, unknown> = {};
   for (const field of fields) {
     if (field.type === 'formula') continue; // formula型はスキップ
-    const formKey = `customData.${field.key}`;
+    const formKey = `projectCustomData.${field.key}`;
     if (formKey in formData) {
       customData[field.key] = formData[formKey];
     }
@@ -260,7 +260,7 @@ export function expandCustomData(
 ): Record<string, unknown> {
   const expanded: Record<string, unknown> = {};
   for (const field of fields) {
-    expanded[`customData.${field.key}`] = customData[field.key] ?? null;
+    expanded[`projectCustomData.${field.key}`] = customData[field.key] ?? null;
   }
   return expanded;
 }

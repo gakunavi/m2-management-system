@@ -115,7 +115,7 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
     const dynamicFormFields = buildFormFields(projectFields);
     const dynamicSchema = projectFields.length
       ? projectBaseSchema.extend({
-          customData: buildDynamicFieldSchema(projectFields).optional().default({}),
+          projectCustomData: buildDynamicFieldSchema(projectFields).optional().default({}),
         })
       : projectBaseSchema;
 

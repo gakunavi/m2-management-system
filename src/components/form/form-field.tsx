@@ -248,7 +248,7 @@ function MonthPicker({
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 14 }, (_, i) => currentYear - 5 + i);
 
-  const [year, month] = value ? value.split('-') : ['', ''];
+  const [year, month] = value ? value.split('-') : [String(currentYear), ''];
 
   const handleYearChange = (y: string) => {
     if (y && month) {
