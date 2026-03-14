@@ -1,7 +1,7 @@
 'use client';
 
-import { memo, useMemo } from 'react';
-import { CalendarDays } from 'lucide-react';
+import { memo, useMemo, useCallback } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getCurrentMonth } from '@/lib/revenue-helpers';
 
@@ -73,6 +73,13 @@ function parseYearMonth(ym: string): { year: string; month: string } {
 /** year, month → YYYY-MM 形式に結合 */
 function toYearMonth(year: string, month: string): string {
   return `${year}-${month.padStart(2, '0')}`;
+}
+
+/** YYYY-MM を1ヶ月前後に移動 */
+function shiftMonth(ym: string, delta: -1 | 1): string {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 // ============================================
@@ -172,12 +179,30 @@ export const DashboardMonthFilter = memo(function DashboardMonthFilter({
 
       {/* 単月ピッカー */}
       {value.mode === 'month' && (
-        <>
+        <div className="inline-flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => onChange({ ...value, month: shiftMonth(value.month, -1) })}
+            aria-label="前月"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
           <YearMonthSelect
             value={value.month}
             onChange={(ym) => onChange({ ...value, month: ym })}
             yearOptions={yearOptions}
           />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => onChange({ ...value, month: shiftMonth(value.month, 1) })}
+            aria-label="翌月"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
           {value.month !== currentMonth && (
             <Button
               variant="outline"
@@ -187,7 +212,7 @@ export const DashboardMonthFilter = memo(function DashboardMonthFilter({
               当月に戻す
             </Button>
           )}
-        </>
+        </div>
       )}
 
       {/* 期間指定ピッカー */}
