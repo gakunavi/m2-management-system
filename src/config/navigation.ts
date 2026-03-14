@@ -16,7 +16,7 @@ export interface NavItem {
 export const mainNavItems: NavItem[] = [
   { label: 'ダッシュボード', href: '/dashboard', icon: LayoutDashboard },
   { label: '契約マスタ', href: '/projects', icon: FolderKanban, requiresBusiness: true },
-  { label: '契約ムーブメント', href: '/movements', icon: BarChart3, requiresBusiness: true },
+  { label: '案件ムーブメント', href: '/movements', icon: BarChart3, requiresBusiness: true },
   { label: '事業マスタ', href: '/businesses', icon: Briefcase },
   { label: '顧客マスタ', href: '/customers', icon: Users },
   { label: '代理店マスタ', href: '/partners', icon: Building2 },
@@ -31,7 +31,7 @@ export const mainNavItems: NavItem[] = [
 export const partnerNavItems: NavItem[] = [
   { label: 'ダッシュボード', href: '/portal', icon: LayoutDashboard },
   { label: '契約一覧', href: '/portal/projects', icon: FolderKanban, requiresBusiness: true },
-  { label: '契約ムーブメント', href: '/portal/movements', icon: BarChart3, requiresBusiness: true },
+  { label: '案件ムーブメント', href: '/portal/movements', icon: BarChart3, requiresBusiness: true },
   { label: '月次レポート', href: '/reports', icon: FileBarChart },
   { label: 'QA/ナレッジ', href: '/qa', icon: BookOpen },
   { label: '問い合わせ', href: '/inquiries', icon: MessageSquare },
