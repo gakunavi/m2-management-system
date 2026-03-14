@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/hooks/use-auth';
 import { useBusiness } from '@/hooks/use-business';
-import { getCurrentFiscalYear } from '@/lib/revenue-helpers';
+import { getCurrentFiscalYear, getFiscalYearFromMonth } from '@/lib/revenue-helpers';
 import { PageHeader } from '@/components/layout/page-header';
 import { KpiSummaryCards } from '@/components/features/dashboard/kpi-summary-cards';
 import { KpiTabSelector } from '@/components/features/dashboard/kpi-tab-selector';
@@ -66,6 +66,11 @@ function PortalCompanyDashboard() {
   const [trendYear, setTrendYear] = useState(getCurrentFiscalYear);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(getDefaultPeriodFilter);
 
+  // 単月モード時はグラフの年度を指定月の年度に自動連動
+  const isMonthMode = periodFilter.mode === 'month';
+  const effectiveTrendYear = isMonthMode ? getFiscalYearFromMonth(periodFilter.month) : trendYear;
+  const highlightMonth = isMonthMode ? periodFilter.month : null;
+
   const periodParams = buildPeriodParams(periodFilter);
   const periodKey = periodQueryKey(periodFilter);
 
@@ -75,8 +80,8 @@ function PortalCompanyDashboard() {
   });
 
   const { data: trend, isLoading: trendLoading } = useQuery({
-    queryKey: ['portal', 'revenue-trend', trendYear],
-    queryFn: () => apiClient.get<RevenueTrendResponse>(`/portal/revenue-trend?year=${trendYear}`),
+    queryKey: ['portal', 'revenue-trend', effectiveTrendYear],
+    queryFn: () => apiClient.get<RevenueTrendResponse>(`/portal/revenue-trend?year=${effectiveTrendYear}`),
   });
 
   const { data: pipeline, isLoading: pipelineLoading } = useQuery({
@@ -104,10 +109,12 @@ function PortalCompanyDashboard() {
         <div className="lg:col-span-2">
           <RevenueTrendChart
             data={trend}
-            year={trendYear}
+            year={effectiveTrendYear}
             onYearChange={setTrendYear}
             isLoading={trendLoading}
             hideTarget
+            highlightMonth={highlightMonth}
+            hideYearSelector={isMonthMode}
           />
         </div>
         <div>
@@ -135,6 +142,11 @@ function PortalBusinessDashboard({ businessId }: { businessId: number }) {
   const [selectedKpiKey, setSelectedKpiKey] = useState('');
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>(getDefaultPeriodFilter);
   const [rankingMode, setRankingMode] = useState<'staff' | 'subordinate'>('staff');
+
+  // 単月モード時はグラフの年度を指定月の年度に自動連動
+  const isMonthMode = periodFilter.mode === 'month';
+  const effectiveTrendYear = isMonthMode ? getFiscalYearFromMonth(periodFilter.month) : trendYear;
+  const highlightMonth = isMonthMode ? periodFilter.month : null;
 
   const kpiParam = selectedKpiKey ? `&kpiKey=${selectedKpiKey}` : '';
   const periodParams = buildPeriodParams(periodFilter);
@@ -164,10 +176,10 @@ function PortalBusinessDashboard({ businessId }: { businessId: number }) {
 
   // 売上推移
   const { data: trend, isLoading: trendLoading } = useQuery({
-    queryKey: ['portal', 'revenue-trend', businessId, trendYear, selectedKpiKey],
+    queryKey: ['portal', 'revenue-trend', businessId, effectiveTrendYear, selectedKpiKey],
     queryFn: () =>
       apiClient.get<RevenueTrendResponse>(
-        `/portal/revenue-trend?businessId=${businessId}&year=${trendYear}${kpiParam}`,
+        `/portal/revenue-trend?businessId=${businessId}&year=${effectiveTrendYear}${kpiParam}`,
       ),
     enabled: !!selectedKpiKey || kpiDefinitions.length === 0,
   });
@@ -220,12 +232,14 @@ function PortalBusinessDashboard({ businessId }: { businessId: number }) {
 
       <RevenueTrendChart
         data={trend}
-        year={trendYear}
+        year={effectiveTrendYear}
         onYearChange={setTrendYear}
         isLoading={trendLoading}
         kpiLabel={currentKpi?.label}
         kpiUnit={currentKpi?.unit}
         hideTarget
+        highlightMonth={highlightMonth}
+        hideYearSelector={isMonthMode}
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

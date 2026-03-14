@@ -3,6 +3,7 @@
 import {
   ComposedChart,
   Bar,
+  Cell,
   Line,
   XAxis,
   YAxis,
@@ -16,6 +17,9 @@ import { Button } from '@/components/ui/button';
 import { CHART_COLORS, CHART_DEFAULTS, formatKpiValue, formatKpiYAxis } from './chart-config';
 import type { RevenueTrendResponse } from '@/types/dashboard';
 
+/** ハイライト用の濃い青 */
+const HIGHLIGHT_COLOR = '#1d4ed8';
+
 interface Props {
   data: RevenueTrendResponse | undefined;
   year: number;
@@ -25,6 +29,10 @@ interface Props {
   kpiUnit?: string;
   /** 目標線を非表示にする（ポータル用） */
   hideTarget?: boolean;
+  /** ハイライトする月（YYYY-MM 形式）。該当月のバーを強調色で表示 */
+  highlightMonth?: string | null;
+  /** 年度セレクターを非表示にする（単月連動時） */
+  hideYearSelector?: boolean;
 }
 
 function formatValue(value: number, unit?: string): string {
@@ -50,7 +58,7 @@ function CustomTooltip({ active, payload, label, unit, hideTarget }: { active?: 
   );
 }
 
-export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabel, kpiUnit, hideTarget }: Props) {
+export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabel, kpiUnit, hideTarget, highlightMonth, hideYearSelector }: Props) {
   // APIレスポンスの kpiLabel を優先、なければ props、なければデフォルト
   const chartLabel = data?.kpiLabel ?? kpiLabel ?? '売上';
   const chartUnit = data?.kpiUnit ?? kpiUnit;
@@ -59,15 +67,19 @@ export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabe
     <div className="rounded-lg border bg-card p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">{chartLabel}推移</h3>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => onYearChange(year - 1)} aria-label="前年度">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-medium w-16 text-center">{year}年度</span>
-          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => onYearChange(year + 1)} aria-label="翌年度">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        {hideYearSelector ? (
+          <span className="text-sm font-medium text-muted-foreground">{year}年度</span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => onYearChange(year - 1)} aria-label="前年度">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium w-16 text-center">{year}年度</span>
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => onYearChange(year + 1)} aria-label="翌年度">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {isLoading || !data ? (
@@ -88,7 +100,15 @@ export function RevenueTrendChart({ data, year, onYearChange, isLoading, kpiLabe
                 wrapperStyle={{ fontSize: '12px' }}
               />
             )}
-            <Bar dataKey="actualAmount" fill={CHART_COLORS.primary} barSize={CHART_DEFAULTS.barSize} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="actualAmount" fill={CHART_COLORS.primary} barSize={CHART_DEFAULTS.barSize} radius={[4, 4, 0, 0]}>
+              {highlightMonth && data.months.map((entry) => (
+                <Cell
+                  key={entry.month}
+                  fill={entry.month === highlightMonth ? HIGHLIGHT_COLOR : CHART_COLORS.primary}
+                  fillOpacity={entry.month === highlightMonth ? 1 : 0.6}
+                />
+              ))}
+            </Bar>
             {!hideTarget && (
               <Line
                 dataKey="targetAmount"

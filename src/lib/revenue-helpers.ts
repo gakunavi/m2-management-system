@@ -30,6 +30,15 @@ export function getCurrentFiscalYear(): number {
 }
 
 /**
+ * 指定月から年度を算出
+ * "2026-03" → 2025, "2026-04" → 2026
+ */
+export function getFiscalYearFromMonth(ym: string): number {
+  const [y, m] = ym.split('-').map(Number);
+  return m >= 4 ? y : y - 1;
+}
+
+/**
  * 現在の年月を YYYY-MM 形式で返す
  */
 export function getCurrentMonth(): string {
