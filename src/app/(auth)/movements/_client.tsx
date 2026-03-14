@@ -8,8 +8,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
-import { ExpectedCloseMonthFilter } from '@/components/features/project/expected-close-month-filter';
+import { ProjectFilterPanel } from '@/components/features/project/project-filter-panel';
 import { MovementEditModal } from '@/components/features/project/movement-edit-modal';
 import { SalesStatusEditModal } from '@/components/features/project/sales-status-edit-modal';
 import { GanttChart, type ViewMode as GanttViewMode } from '@/components/features/project/gantt-chart';
@@ -219,23 +218,17 @@ export function MovementsClient() {
       </div>
 
       {/* フィルター */}
-      <div className="bg-card rounded-lg border p-3 sm:p-4 space-y-4">
-        {statusDefinitions.length > 0 && (
-          <SalesStatusFilter
-            statusDefinitions={statusDefinitions}
-            selectedStatuses={selectedStatuses ?? []}
-            onStatusChange={setSelectedStatuses}
-          />
-        )}
-        <ExpectedCloseMonthFilter
-          monthFrom={expectedMonthFrom}
-          monthTo={expectedMonthTo}
-          onChange={(from, to) => {
-            setExpectedMonthFrom(from);
-            setExpectedMonthTo(to);
-          }}
-        />
-      </div>
+      <ProjectFilterPanel
+        statusDefinitions={statusDefinitions}
+        selectedStatuses={selectedStatuses ?? []}
+        onStatusChange={setSelectedStatuses}
+        monthFrom={expectedMonthFrom}
+        monthTo={expectedMonthTo}
+        onMonthChange={(from, to) => {
+          setExpectedMonthFrom(from);
+          setExpectedMonthTo(to);
+        }}
+      />
 
       {/* ビューの切替 */}
       {viewMode === 'matrix' ? (

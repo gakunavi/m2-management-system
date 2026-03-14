@@ -7,8 +7,7 @@ import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, CheckCircle, Circle, Play, 
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
-import { ExpectedCloseMonthFilter } from '@/components/features/project/expected-close-month-filter';
+import { ProjectFilterPanel } from '@/components/features/project/project-filter-panel';
 import type { MovementOverviewResponse, MovementItem } from '@/types/movement';
 import { useBusiness } from '@/hooks/use-business';
 import { useStatusDefinitions } from '@/hooks/use-status-definitions';
@@ -148,23 +147,17 @@ export function PortalMovementsClient() {
       </div>
 
       {/* フィルター */}
-      <div className="bg-card rounded-lg border p-3 sm:p-4 space-y-4">
-        {statusDefinitions.length > 0 && (
-          <SalesStatusFilter
-            statusDefinitions={statusDefinitions}
-            selectedStatuses={selectedStatuses ?? []}
-            onStatusChange={setSelectedStatuses}
-          />
-        )}
-        <ExpectedCloseMonthFilter
-          monthFrom={expectedMonthFrom}
-          monthTo={expectedMonthTo}
-          onChange={(from, to) => {
-            setExpectedMonthFrom(from);
-            setExpectedMonthTo(to);
-          }}
-        />
-      </div>
+      <ProjectFilterPanel
+        statusDefinitions={statusDefinitions}
+        selectedStatuses={selectedStatuses ?? []}
+        onStatusChange={setSelectedStatuses}
+        monthFrom={expectedMonthFrom}
+        monthTo={expectedMonthTo}
+        onMonthChange={(from, to) => {
+          setExpectedMonthFrom(from);
+          setExpectedMonthTo(to);
+        }}
+      />
 
       {/* 凡例 */}
       <div className="bg-card rounded-lg border p-3 sm:p-4">

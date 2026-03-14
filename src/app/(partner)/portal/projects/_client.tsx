@@ -6,8 +6,7 @@ import { useBusiness } from '@/hooks/use-business';
 import { useDebounce } from '@/hooks/use-debounce';
 import { PageHeader } from '@/components/layout/page-header';
 import { SearchInput } from '@/components/form/search-input';
-import { SalesStatusFilter } from '@/components/features/project/sales-status-filter';
-import { ExpectedCloseMonthFilter } from '@/components/features/project/expected-close-month-filter';
+import { ProjectFilterPanel } from '@/components/features/project/project-filter-panel';
 import { PortalProjectList } from '@/components/features/portal/portal-project-list';
 import type { PortalProject, PortalFieldDefinition } from '@/types/dashboard';
 
@@ -117,20 +116,14 @@ export function PortalProjectsClient() {
         />
       </div>
 
-      <div className="bg-card rounded-lg border p-4 space-y-4">
-        {statusDefinitions.length > 0 && (
-          <SalesStatusFilter
-            statusDefinitions={statusDefinitions}
-            selectedStatuses={selectedStatuses}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-        <ExpectedCloseMonthFilter
-          monthFrom={expectedMonthFrom}
-          monthTo={expectedMonthTo}
-          onChange={handleMonthChange}
-        />
-      </div>
+      <ProjectFilterPanel
+        statusDefinitions={statusDefinitions}
+        selectedStatuses={selectedStatuses}
+        onStatusChange={handleStatusChange}
+        monthFrom={expectedMonthFrom}
+        monthTo={expectedMonthTo}
+        onMonthChange={handleMonthChange}
+      />
 
       <PortalProjectList
         projects={projectsResponse?.data}
