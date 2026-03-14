@@ -17,6 +17,13 @@ function detectInitialMode(from: string | null, to: string | null): FilterMode {
   return 'single';
 }
 
+function getCurrentMonth(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
 export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props) {
   const [mode, setMode] = useState<FilterMode>(() => detectInitialMode(monthFrom, monthTo));
 
@@ -24,6 +31,12 @@ export function ExpectedCloseMonthFilter({ monthFrom, monthTo, onChange }: Props
     setMode(newMode);
     if (newMode === 'all') {
       onChange(null, null);
+    } else if (newMode === 'single') {
+      const defaultMonth = monthFrom || getCurrentMonth();
+      onChange(defaultMonth, defaultMonth);
+    } else if (newMode === 'range') {
+      const defaultFrom = monthFrom || getCurrentMonth();
+      onChange(defaultFrom, monthTo);
     }
   };
 
