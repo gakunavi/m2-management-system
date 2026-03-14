@@ -435,6 +435,12 @@ export async function POST(request: NextRequest) {
               },
             });
             await createInitialMovements(tx, created.id, businessId);
+            // 顧客×事業リンクを自動作成（未存在の場合のみ）
+            await tx.customerBusinessLink.upsert({
+              where: { customerId_businessId: { customerId: customer.id, businessId } },
+              update: {},
+              create: { customerId: customer.id, businessId, linkStatus: 'active' },
+            });
             results.created++;
           } else {
             // upsert モード: projectNo優先 → businessId+customerId フォールバック
@@ -493,6 +499,12 @@ export async function POST(request: NextRequest) {
                   version: { increment: 1 },
                 },
               });
+              // 顧客×事業リンクを自動作成（未存在の場合のみ）
+              await tx.customerBusinessLink.upsert({
+                where: { customerId_businessId: { customerId: customer.id, businessId } },
+                update: {},
+                create: { customerId: customer.id, businessId, linkStatus: 'active' },
+              });
               results.updated++;
             } else {
               const projectNo = await generateProjectNo(tx, businessId);
@@ -509,6 +521,12 @@ export async function POST(request: NextRequest) {
                 },
               });
               await createInitialMovements(tx, created.id, businessId);
+              // 顧客×事業リンクを自動作成（未存在の場合のみ）
+              await tx.customerBusinessLink.upsert({
+                where: { customerId_businessId: { customerId: customer.id, businessId } },
+                update: {},
+                create: { customerId: customer.id, businessId, linkStatus: 'active' },
+              });
               results.created++;
             }
           }
