@@ -34,7 +34,7 @@ export function RelatedTabContent({ config, parentId }: RelatedTabContentProps) 
   return (
     <div className="rounded-md border overflow-auto max-h-[calc(100vh-400px)]">
       <table className="w-full text-sm">
-        <thead className="bg-muted/50 sticky top-0 z-20">
+        <thead className="bg-muted sticky top-0 z-20">
           <tr>
             {config.columns.map((col) => (
               <th

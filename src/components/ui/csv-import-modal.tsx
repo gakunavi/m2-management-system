@@ -529,7 +529,7 @@ export function CsvImportModal({
           </p>
           <div className="overflow-x-auto overflow-y-auto rounded-md border max-h-44">
             <table className="text-xs w-max">
-              <thead className="bg-muted/50 sticky top-0">
+              <thead className="bg-muted sticky top-0">
                 <tr>
                   {previewHeaders.map((h, idx) => (
                     <th

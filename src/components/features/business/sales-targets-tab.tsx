@@ -241,8 +241,8 @@ export function SalesTargetsTab({ entityId }: Props) {
       {/* テーブル */}
       <div className="border rounded-lg overflow-auto max-h-[calc(100vh-400px)]">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-20 bg-background">
-            <tr className="border-b bg-muted/50">
+          <thead className="sticky top-0 z-20 bg-muted">
+            <tr className="border-b bg-muted">
               <th className="text-left px-4 py-3 font-medium w-24">月</th>
               <th className="text-right px-4 py-3 font-medium">目標（{unit}）</th>
               <th className="text-right px-4 py-3 font-medium">実績（{unit}）</th>

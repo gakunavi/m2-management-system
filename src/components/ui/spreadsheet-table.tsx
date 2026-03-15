@@ -548,7 +548,7 @@ export function SpreadsheetTable({
           onDragEnd={handleDragEnd}
         >
           <table className="w-full caption-bottom text-sm" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-            <thead className="bg-muted/50 sticky top-0 z-20">
+            <thead className="bg-muted sticky top-0 z-20">
               {headerGroups.map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   <SortableContext

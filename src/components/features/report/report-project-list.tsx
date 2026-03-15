@@ -37,8 +37,8 @@ export function ReportProjectList({ projects, isLoading }: Props) {
       ) : (
         <div className="overflow-auto max-h-[calc(100vh-400px)]">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-20 bg-background">
-              <tr className="border-b bg-muted/50">
+            <thead className="sticky top-0 z-20 bg-muted">
+              <tr className="border-b bg-muted">
                 <th className="text-left p-3 font-medium">案件番号</th>
                 <th className="text-left p-3 font-medium">顧客名</th>
                 <th className="text-left p-3 font-medium">ステータス</th>

@@ -466,8 +466,8 @@ export function PortalProjectList({
       <div className="overflow-auto max-h-[calc(100vh-300px)]">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <table className="w-full text-sm">
-            <thead className="sticky top-0 z-20 bg-muted/50">
-              <tr className="border-t border-b bg-muted/50">
+            <thead className="sticky top-0 z-20 bg-muted">
+              <tr className="border-t border-b bg-muted">
                 <SortableContext
                   items={visibleColumns.map((c) => c.key)}
                   strategy={horizontalListSortingStrategy}

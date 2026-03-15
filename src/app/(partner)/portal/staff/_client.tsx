@@ -185,7 +185,7 @@ export function StaffListClient() {
       ) : (
         <div className="rounded-md border overflow-hidden max-h-[calc(100vh-300px)] overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0 z-20">
+            <thead className="bg-muted sticky top-0 z-20">
               <tr>
                 <th className="text-left px-4 py-3 font-medium">名前</th>
                 <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">メールアドレス</th>

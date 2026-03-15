@@ -461,7 +461,7 @@ export function UserListClient() {
         /* ===== フラット表示 ===== */
         <div className="rounded-md border overflow-hidden max-h-[calc(100vh-300px)] overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 sticky top-0 z-20">
+            <thead className="bg-muted sticky top-0 z-20">
               <tr>
                 <SortableTh field="userName" label="名前" currentField={sortField} direction={sortDirection} onSort={handleSort} />
                 <SortableTh field="userEmail" label="メールアドレス" currentField={sortField} direction={sortDirection} onSort={handleSort} />
