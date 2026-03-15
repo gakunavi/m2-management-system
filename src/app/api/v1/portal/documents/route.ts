@@ -79,8 +79,8 @@ export async function GET(request: NextRequest) {
         creator: { select: { id: true, userName: true } },
       },
       orderBy: type === 'invoice'
-        ? [{ targetMonth: 'desc' }, { createdAt: 'desc' }]
-        : { createdAt: 'desc' },
+        ? [{ targetMonth: 'desc' }, { documentSortOrder: 'asc' }]
+        : { documentSortOrder: 'asc' },
     });
 
     const data = documents.map((doc) => ({
@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
       targetMonth: doc.targetMonth,
       documentDescription: doc.documentDescription,
       isPublic: doc.isPublic,
+      documentSortOrder: doc.documentSortOrder,
       createdAt: doc.createdAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
       createdBy: doc.createdBy,

@@ -721,6 +721,7 @@ model BusinessDocument {
   createdBy           Int?      @map("created_by")
   lastNotifiedAt      DateTime? @map("last_notified_at") @db.Timestamptz(6)
   lastNotifiedBy      Int?      @map("last_notified_by")
+  documentSortOrder   Int       @default(0) @map("document_sort_order")
 
   business Business @relation(fields: [businessId], references: [id])
   partner  Partner? @relation("PartnerDocuments", fields: [partnerId], references: [id])

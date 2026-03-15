@@ -14,6 +14,7 @@ export interface BusinessDocument {
   targetMonth: string | null;
   documentDescription: string | null;
   isPublic: boolean;
+  documentSortOrder: number;
   createdAt: string;
   updatedAt: string;
   createdBy: number | null;

@@ -3,6 +3,22 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   File,
   FileText,
   FileSpreadsheet,
@@ -18,6 +34,7 @@ import {
   EyeOff,
   Bell,
   Loader2,
+  GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -113,6 +130,212 @@ function FileTypeIcon({ mimeType, className }: { mimeType: string; className?: s
 }
 
 // ============================================
+// SortableRow コンポーネント
+// ============================================
+
+interface SortableRowProps {
+  doc: BusinessDocument;
+  index: number;
+  isInvoice: boolean;
+  canManage: boolean;
+  togglingId: number | null;
+  notifyingId: number | null;
+  onTogglePublic: (doc: BusinessDocument) => void;
+  onNotify: (doc: BusinessDocument) => void;
+  onOpenFile: (doc: BusinessDocument) => void;
+  onEdit: (doc: BusinessDocument) => void;
+  onDelete: (doc: BusinessDocument) => void;
+}
+
+function SortableRow({
+  doc,
+  index,
+  isInvoice,
+  canManage,
+  togglingId,
+  notifyingId,
+  onTogglePublic,
+  onNotify,
+  onOpenFile,
+  onEdit,
+  onDelete,
+}: SortableRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: doc.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style}>
+      {/* ドラッグハンドル + 表示番号 */}
+      {canManage ? (
+        <TableCell className="w-[60px]">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-muted"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <span className="text-xs text-muted-foreground font-medium">{index + 1}</span>
+          </div>
+        </TableCell>
+      ) : (
+        <TableCell className="w-[40px]">
+          <span className="text-xs text-muted-foreground font-medium">{index + 1}</span>
+        </TableCell>
+      )}
+
+      {/* タイトル（クリックでブラウザ表示） */}
+      <TableCell>
+        <button
+          type="button"
+          onClick={() => onOpenFile(doc)}
+          className="flex items-center gap-2 text-left text-sm font-medium text-primary hover:underline cursor-pointer"
+        >
+          <FileTypeIcon mimeType={doc.fileMimeType} />
+          <span className="truncate">{doc.documentTitle}</span>
+        </button>
+      </TableCell>
+
+      {/* ファイル名 */}
+      <TableCell>
+        <span className="text-sm text-muted-foreground truncate block max-w-[200px]">
+          {doc.fileName}
+        </span>
+      </TableCell>
+
+      {/* サイズ */}
+      <TableCell>
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {formatFileSize(doc.fileSize)}
+        </span>
+      </TableCell>
+
+      {/* 対象年月（支払明細書のみ） */}
+      {isInvoice && (
+        <TableCell>
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {doc.targetMonth ? formatTargetMonth(doc.targetMonth) : '-'}
+          </span>
+        </TableCell>
+      )}
+
+      {/* アップロード日 */}
+      <TableCell>
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {formatDate(doc.createdAt)}
+        </span>
+      </TableCell>
+
+      {/* 公開状態（管理者のみ表示） */}
+      {canManage && (
+        <TableCell>
+          <button
+            type="button"
+            onClick={() => onTogglePublic(doc)}
+            disabled={togglingId === doc.id}
+            className="cursor-pointer disabled:opacity-50"
+          >
+            {doc.isPublic ? (
+              <Badge variant="default" className="gap-1 text-xs">
+                <Eye className="h-3 w-3" />
+                公開
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="gap-1 text-xs">
+                <EyeOff className="h-3 w-3" />
+                非公開
+              </Badge>
+            )}
+          </button>
+        </TableCell>
+      )}
+
+      {/* 通知（管理者のみ） */}
+      {canManage && (
+        <TableCell>
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              disabled={notifyingId === doc.id}
+              onClick={() => onNotify(doc)}
+            >
+              {notifyingId === doc.id ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Bell className="h-3 w-3" />
+              )}
+              {notifyingId === doc.id ? '送信中...' : '通知送信'}
+            </Button>
+            {doc.lastNotifiedAt && (
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                最終: {formatDateTime(doc.lastNotifiedAt)}
+              </span>
+            )}
+          </div>
+        </TableCell>
+      )}
+
+      {/* 操作 */}
+      <TableCell>
+        <div className="flex items-center justify-end gap-1">
+          {/* ダウンロード */}
+          <a
+            href={doc.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={doc.fileName}
+            className="inline-flex items-center justify-center rounded-md h-8 w-8 hover:bg-muted transition-colors"
+            aria-label="ダウンロード"
+          >
+            <Download className="h-4 w-4 text-muted-foreground" />
+          </a>
+
+          {canManage && (
+            <>
+              {/* 編集 */}
+              <button
+                type="button"
+                onClick={() => onEdit(doc)}
+                className="inline-flex items-center justify-center rounded-md h-8 w-8 hover:bg-muted transition-colors"
+                aria-label="編集"
+              >
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </button>
+
+              {/* 削除 */}
+              <button
+                type="button"
+                onClick={() => onDelete(doc)}
+                className="inline-flex items-center justify-center rounded-md h-8 w-8 hover:bg-destructive/10 transition-colors"
+                aria-label="削除"
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+              </button>
+            </>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// ============================================
 // Props
 // ============================================
 
@@ -175,6 +398,48 @@ export function BusinessDocumentSection({
         );
       },
     });
+  };
+
+  // ドラッグ&ドロップ
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = documents.findIndex((d) => d.id === active.id);
+    const newIndex = documents.findIndex((d) => d.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(documents, oldIndex, newIndex);
+
+    // 楽観的更新
+    queryClient.setQueryData(queryKey, reordered);
+
+    // サーバーに保存
+    try {
+      const response = await fetch(
+        `/api/v1/businesses/${businessId}/documents/reorder`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderedIds: reordered.map((d) => d.id),
+            documentType,
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error('並び替えの保存に失敗しました');
+      }
+    } catch {
+      // 失敗時はリフェッチ
+      invalidateDocuments();
+      toast({ message: '並び替えの保存に失敗しました', type: 'error' });
+    }
   };
 
   // 公開状態トグル
@@ -286,6 +551,46 @@ export function BusinessDocumentSection({
   }
 
   // ============================================
+  // テーブル内容のレンダリング
+  // ============================================
+
+  const tableContent = (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className={canManage ? 'w-[60px]' : 'w-[40px]'}>No.</TableHead>
+          <TableHead className="min-w-[180px]">タイトル</TableHead>
+          <TableHead className="min-w-[140px]">ファイル名</TableHead>
+          <TableHead className="w-[80px]">サイズ</TableHead>
+          {isInvoice && <TableHead className="w-[100px]">対象年月</TableHead>}
+          <TableHead className="w-[100px]">アップロード日</TableHead>
+          {canManage && <TableHead className="w-[80px]">公開状態</TableHead>}
+          {canManage && <TableHead className="w-[120px]">通知</TableHead>}
+          <TableHead className="w-[120px] text-right">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {documents.map((doc, index) => (
+          <SortableRow
+            key={doc.id}
+            doc={doc}
+            index={index}
+            isInvoice={isInvoice}
+            canManage={canManage}
+            togglingId={togglingId}
+            notifyingId={notifyingId}
+            onTogglePublic={handleTogglePublic}
+            onNotify={handleNotify}
+            onOpenFile={handleOpenFile}
+            onEdit={setEditingDoc}
+            onDelete={setDeletingDoc}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  );
+
+  // ============================================
   // メインレンダリング
   // ============================================
 
@@ -329,159 +634,22 @@ export function BusinessDocumentSection({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[180px]">タイトル</TableHead>
-                <TableHead className="min-w-[140px]">ファイル名</TableHead>
-                <TableHead className="w-[80px]">サイズ</TableHead>
-                {isInvoice && <TableHead className="w-[100px]">対象年月</TableHead>}
-                <TableHead className="w-[100px]">アップロード日</TableHead>
-                {canManage && <TableHead className="w-[80px]">公開状態</TableHead>}
-                {canManage && <TableHead className="w-[120px]">通知</TableHead>}
-                <TableHead className="w-[120px] text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {documents.map((doc) => (
-                <TableRow key={doc.id}>
-                  {/* タイトル（クリックでブラウザ表示） */}
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenFile(doc)}
-                      className="flex items-center gap-2 text-left text-sm font-medium text-primary hover:underline cursor-pointer"
-                    >
-                      <FileTypeIcon mimeType={doc.fileMimeType} />
-                      <span className="truncate">{doc.documentTitle}</span>
-                    </button>
-                  </TableCell>
-
-                  {/* ファイル名 */}
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground truncate block max-w-[200px]">
-                      {doc.fileName}
-                    </span>
-                  </TableCell>
-
-                  {/* サイズ */}
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">
-                      {formatFileSize(doc.fileSize)}
-                    </span>
-                  </TableCell>
-
-                  {/* 対象年月（支払明細書のみ） */}
-                  {isInvoice && (
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground whitespace-nowrap">
-                        {doc.targetMonth ? formatTargetMonth(doc.targetMonth) : '-'}
-                      </span>
-                    </TableCell>
-                  )}
-
-                  {/* アップロード日 */}
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">
-                      {formatDate(doc.createdAt)}
-                    </span>
-                  </TableCell>
-
-                  {/* 公開状態（管理者のみ表示） */}
-                  {canManage && (
-                    <TableCell>
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePublic(doc)}
-                        disabled={togglingId === doc.id}
-                        className="cursor-pointer disabled:opacity-50"
-                      >
-                        {doc.isPublic ? (
-                          <Badge variant="default" className="gap-1 text-xs">
-                            <Eye className="h-3 w-3" />
-                            公開
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="gap-1 text-xs">
-                            <EyeOff className="h-3 w-3" />
-                            非公開
-                          </Badge>
-                        )}
-                      </button>
-                    </TableCell>
-                  )}
-
-                  {/* 通知（管理者のみ） */}
-                  {canManage && (
-                    <TableCell>
-                      <div className="flex flex-col items-start gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs gap-1"
-                          disabled={notifyingId === doc.id}
-                          onClick={() => handleNotify(doc)}
-                        >
-                          {notifyingId === doc.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Bell className="h-3 w-3" />
-                          )}
-                          {notifyingId === doc.id ? '送信中...' : '通知送信'}
-                        </Button>
-                        {doc.lastNotifiedAt && (
-                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            最終: {formatDateTime(doc.lastNotifiedAt)}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                  )}
-
-                  {/* 操作 */}
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      {/* ダウンロード */}
-                      <a
-                        href={doc.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download={doc.fileName}
-                        className="inline-flex items-center justify-center rounded-md h-8 w-8 hover:bg-muted transition-colors"
-                        aria-label="ダウンロード"
-                      >
-                        <Download className="h-4 w-4 text-muted-foreground" />
-                      </a>
-
-                      {canManage && (
-                        <>
-                          {/* 編集 */}
-                          <button
-                            type="button"
-                            onClick={() => setEditingDoc(doc)}
-                            className="inline-flex items-center justify-center rounded-md h-8 w-8 hover:bg-muted transition-colors"
-                            aria-label="編集"
-                          >
-                            <Pencil className="h-4 w-4 text-muted-foreground" />
-                          </button>
-
-                          {/* 削除 */}
-                          <button
-                            type="button"
-                            onClick={() => setDeletingDoc(doc)}
-                            className="inline-flex items-center justify-center rounded-md h-8 w-8 hover:bg-destructive/10 transition-colors"
-                            aria-label="削除"
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {canManage ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={documents.map((d) => d.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {tableContent}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            tableContent
+          )}
         </div>
       )}
 

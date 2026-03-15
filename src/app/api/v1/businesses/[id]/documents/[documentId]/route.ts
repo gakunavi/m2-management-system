@@ -63,6 +63,7 @@ function serializeDocument(doc: Record<string, unknown>) {
     targetMonth: doc.targetMonth,
     documentDescription: doc.documentDescription,
     isPublic: doc.isPublic,
+    documentSortOrder: doc.documentSortOrder,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
     updatedAt: doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt,
     createdBy: doc.createdBy,

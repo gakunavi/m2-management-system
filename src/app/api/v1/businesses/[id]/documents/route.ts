@@ -45,6 +45,7 @@ function serializeDocument(doc: {
   targetMonth: string | null;
   documentDescription: string | null;
   isPublic: boolean;
+  documentSortOrder: number;
   createdAt: Date;
   updatedAt: Date;
   createdBy: number | null;
@@ -65,6 +66,7 @@ function serializeDocument(doc: {
     targetMonth: doc.targetMonth,
     documentDescription: doc.documentDescription,
     isPublic: doc.isPublic,
+    documentSortOrder: doc.documentSortOrder,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
     createdBy: doc.createdBy,
@@ -117,8 +119,8 @@ export async function GET(
       where,
       include: INCLUDE_CREATOR,
       orderBy: type === 'invoice'
-        ? [{ targetMonth: 'desc' }, { createdAt: 'desc' }]
-        : { createdAt: 'desc' },
+        ? [{ targetMonth: 'desc' }, { documentSortOrder: 'asc' }]
+        : { documentSortOrder: 'asc' },
     });
 
     return NextResponse.json({
@@ -183,6 +185,13 @@ export async function POST(
     const storage = getStorageAdapter();
     const result = await storage.upload(buffer, file.name, file.type, `business-documents/${businessId}/${documentType}`);
 
+    // 新規ドキュメントは最後尾に追加
+    const maxSortOrder = await prisma.businessDocument.aggregate({
+      where: { businessId, documentType },
+      _max: { documentSortOrder: true },
+    });
+    const nextSortOrder = (maxSortOrder._max.documentSortOrder ?? 0) + 1;
+
     const created = await prisma.businessDocument.create({
       data: {
         businessId,
@@ -197,6 +206,7 @@ export async function POST(
         documentDescription,
         isPublic,
         createdBy: user.id,
+        documentSortOrder: nextSortOrder,
       },
       include: INCLUDE_CREATOR,
     });
