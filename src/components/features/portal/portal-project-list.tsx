@@ -463,10 +463,10 @@ export function PortalProjectList({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[calc(100vh-300px)]">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-muted/50">
               <tr className="border-t border-b bg-muted/50">
                 <SortableContext
                   items={visibleColumns.map((c) => c.key)}

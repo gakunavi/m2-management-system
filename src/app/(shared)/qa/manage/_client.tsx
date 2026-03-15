@@ -400,9 +400,9 @@ function CategoriesTab() {
         </Button>
       </div>
 
-      <div className="border rounded-lg overflow-x-auto">
+      <div className="border rounded-lg overflow-auto max-h-[calc(100vh-300px)]">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-20 bg-muted/50">
             <TableRow>
               <TableHead className="w-8"></TableHead>
               <TableHead>カテゴリ名</TableHead>
@@ -573,9 +573,9 @@ function ItemsTab() {
       </div>
 
       {/* Table */}
-      <div className="border rounded-lg overflow-x-auto">
+      <div className="border rounded-lg overflow-auto max-h-[calc(100vh-300px)]">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-20 bg-muted/50">
             <TableRow>
               <TableHead>タイトル</TableHead>
               <TableHead className="w-28 hidden sm:table-cell">事業</TableHead>

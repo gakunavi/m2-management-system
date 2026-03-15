@@ -31,9 +31,9 @@ export function ReportStatusBreakdownTable({ data, totalCount, totalAmount, isLo
       <div className="p-4 border-b">
         <h3 className="font-semibold">ステータス別内訳</h3>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[calc(100vh-400px)]">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-20 bg-background">
             <tr className="border-b bg-muted/50">
               <th className="text-left p-3 font-medium">ステータス</th>
               <th className="text-right p-3 font-medium">案件数</th>

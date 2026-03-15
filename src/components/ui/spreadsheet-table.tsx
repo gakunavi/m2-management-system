@@ -541,7 +541,7 @@ export function SpreadsheetTable({
       </div>
 
       {/* テーブル本体 */}
-      <div className="overflow-auto rounded-md border">
+      <div className="overflow-auto rounded-md border max-h-[calc(100vh-300px)]">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

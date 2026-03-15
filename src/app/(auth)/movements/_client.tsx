@@ -258,10 +258,10 @@ export function MovementsClient() {
 
           {/* マトリクス表 */}
           <div className="bg-card rounded-lg border overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[calc(100vh-300px)]">
               <div style={{ minWidth: `${minWidth}px` }}>
                 {/* ヘッダー行 */}
-                <div className="bg-muted border-b flex">
+                <div className="bg-muted border-b flex sticky top-0 z-30">
                   <div
                     className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted z-20 cursor-pointer select-none hover:brightness-95 transition-all"
                     onClick={() => toggleSort(setMonthSort)}

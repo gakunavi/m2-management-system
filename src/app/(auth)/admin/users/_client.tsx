@@ -397,7 +397,7 @@ export function UserListClient() {
         </div>
       ) : isGroupView ? (
         /* ===== グループ表示 ===== */
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-auto">
           {groups.map((group) => {
             const isCollapsed = collapsedGroups.has(group.key);
             return (
@@ -459,9 +459,9 @@ export function UserListClient() {
         </div>
       ) : (
         /* ===== フラット表示 ===== */
-        <div className="rounded-md border overflow-hidden">
+        <div className="rounded-md border overflow-hidden max-h-[calc(100vh-300px)] overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50">
+            <thead className="bg-muted/50 sticky top-0 z-20">
               <tr>
                 <SortableTh field="userName" label="名前" currentField={sortField} direction={sortDirection} onSort={handleSort} />
                 <SortableTh field="userEmail" label="メールアドレス" currentField={sortField} direction={sortDirection} onSort={handleSort} />

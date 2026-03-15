@@ -35,9 +35,9 @@ export function ReportProjectList({ projects, isLoading }: Props) {
           該当月の案件はありません
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-400px)]">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-background">
               <tr className="border-b bg-muted/50">
                 <th className="text-left p-3 font-medium">案件番号</th>
                 <th className="text-left p-3 font-medium">顧客名</th>

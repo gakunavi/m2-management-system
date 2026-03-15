@@ -66,9 +66,9 @@ export function DataTable({
   };
 
   return (
-    <div className="rounded-lg border bg-card shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm max-h-[calc(100vh-300px)] overflow-auto">
       <Table>
-        <TableHeader>
+        <TableHeader className="sticky top-0 z-20 bg-muted/50">
           <TableRow>
             {hasSelection && (
               <TableHead className="w-[40px]">
