@@ -417,6 +417,9 @@ export type SavedTableView = {
   settings: SavedViewSettings;
   displayOrder: number;
   isDefault: boolean;
+  isShared: boolean;
+  /** 共有ビューの作成者名（他人の共有ビューのみ） */
+  ownerName?: string;
   createdAt: string;
   updatedAt: string;
 };

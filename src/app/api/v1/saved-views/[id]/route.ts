@@ -40,6 +40,7 @@ const patchSchema = z.object({
   settings: savedViewSettingsSchema.optional(),
   displayOrder: z.number().int().min(0).optional(),
   isDefault: z.boolean().optional(),
+  isShared: z.boolean().optional(),
 });
 
 // ============================================
@@ -76,6 +77,7 @@ export async function PATCH(
     if (patch.displayOrder !== undefined)
       updateData.displayOrder = patch.displayOrder;
     if (patch.isDefault !== undefined) updateData.isDefault = patch.isDefault;
+    if (patch.isShared !== undefined) updateData.isShared = patch.isShared;
 
     const updated = await prisma.$transaction(async (tx) => {
       // デフォルト設定時は既存のデフォルトを解除

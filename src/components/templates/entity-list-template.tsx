@@ -80,12 +80,15 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   // ============================================
   const {
     views,
+    myViews,
     isLoading: viewsLoading,
     defaultView,
     createView,
     renameView,
     updateViewSettings,
     setDefaultView,
+    toggleShareView,
+    copySharedView,
     deleteView,
     isCreating,
     isUpdating,
@@ -192,9 +195,9 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
 
   /** ビュー保存 */
   const handleSaveView = useCallback(
-    async (name: string, setAsDefault: boolean) => {
+    async (name: string, setAsDefault: boolean, isShared: boolean) => {
       const settings = snapshotCurrentState();
-      const created = await createView(name, settings, setAsDefault);
+      const created = await createView(name, settings, setAsDefault, isShared);
       setActiveViewId(created.id);
     },
     [snapshotCurrentState, createView],
@@ -209,19 +212,38 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
         `${view.viewName}（コピー）`,
         view.settings as SavedViewSettings,
         false,
+        false,
       );
       setActiveViewId(created.id);
     },
     [views, createView],
   );
 
-  /** 列設定変更時のラッパー: アクティブビューにも反映 */
+  /** 共有トグル */
+  const handleToggleShare = useCallback(
+    async (id: number, isShared: boolean) => {
+      await toggleShareView(id, isShared);
+    },
+    [toggleShareView],
+  );
+
+  /** 共有ビューをコピー */
+  const handleCopySharedView = useCallback(
+    async (view: SavedTableView) => {
+      const created = await copySharedView(view);
+      setActiveViewId(created.id);
+      applyViewState(created);
+    },
+    [copySharedView, applyViewState],
+  );
+
+  /** 列設定変更時のラッパー: アクティブビューにも反映（共有ビューは読み取り専用） */
   const savePreferencesWithView = useCallback(
     (settings: PersistedColumnSettings) => {
       savePreferences(settings);
       if (activeViewId !== null) {
         const view = views.find((v) => v.id === activeViewId);
-        if (view) {
+        if (view && !view.ownerName) {
           updateViewSettings(activeViewId, {
             ...(view.settings as SavedViewSettings),
             columnSettings: settings,
@@ -250,10 +272,10 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       if (activeViewId === null && basePrefsRef.current) {
         basePrefsRef.current = { ...basePrefsRef.current, pageSize: size };
       }
-      // アクティブビューにも反映
+      // アクティブビューにも反映（共有ビューは読み取り専用）
       if (activeViewId !== null) {
         const view = views.find((v) => v.id === activeViewId);
-        if (view) {
+        if (view && !view.ownerName) {
           updateViewSettings(activeViewId, {
             ...(view.settings as SavedViewSettings),
             columnSettings: updatedPrefs,
@@ -395,8 +417,10 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
         }
         onSetDefault={(id) => setDefaultView(id)}
         onDuplicateView={handleDuplicateView}
+        onToggleShare={handleToggleShare}
+        onCopySharedView={handleCopySharedView}
         isLoading={viewsLoading}
-        atLimit={views.length >= 10}
+        atLimit={myViews.length >= 10}
       />
 
       {config.renderBeforeTable?.({ filters, setFilter })}

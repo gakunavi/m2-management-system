@@ -176,11 +176,13 @@ model SavedTableView {
   settings     Json
   displayOrder Int      @default(0) @map("display_order")
   isDefault    Boolean  @default(false) @map("is_default")
+  isShared     Boolean  @default(false) @map("is_shared")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, tableKey])
+  @@index([tableKey, isShared])
   @@map("saved_table_views")
 }
 

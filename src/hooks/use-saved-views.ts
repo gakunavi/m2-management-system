@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
@@ -20,11 +20,22 @@ export function useSavedViews(tableKey: string) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // 自分のビューと共有ビューを分離
+  const myViews = useMemo(
+    () => views.filter((v) => !v.ownerName),
+    [views],
+  );
+  const sharedViews = useMemo(
+    () => views.filter((v) => !!v.ownerName),
+    [views],
+  );
+
   const createMutation = useMutation({
     mutationFn: (payload: {
       viewName: string;
       settings: SavedViewSettings;
       isDefault?: boolean;
+      isShared?: boolean;
     }) =>
       apiClient.create<SavedTableView>('/saved-views', {
         tableKey,
@@ -55,6 +66,7 @@ export function useSavedViews(tableKey: string) {
       settings?: SavedViewSettings;
       displayOrder?: number;
       isDefault?: boolean;
+      isShared?: boolean;
     }) => apiClient.patch<SavedTableView>(`/saved-views/${id}`, patch),
     onSuccess: (updatedView) => {
       queryClient.setQueryData(queryKey, (old: SavedTableView[] = []) =>
@@ -85,8 +97,8 @@ export function useSavedViews(tableKey: string) {
   });
 
   const createView = useCallback(
-    (viewName: string, settings: SavedViewSettings, isDefault = false) =>
-      createMutation.mutateAsync({ viewName, settings, isDefault }),
+    (viewName: string, settings: SavedViewSettings, isDefault = false, isShared = false) =>
+      createMutation.mutateAsync({ viewName, settings, isDefault, isShared }),
     [createMutation],
   );
 
@@ -107,21 +119,44 @@ export function useSavedViews(tableKey: string) {
     [updateMutation],
   );
 
+  const toggleShareView = useCallback(
+    (id: number, isShared: boolean) =>
+      updateMutation.mutateAsync({ id, isShared }),
+    [updateMutation],
+  );
+
   const deleteView = useCallback(
     (id: number) => deleteMutation.mutateAsync(id),
     [deleteMutation],
   );
 
-  const defaultView = views.find((v) => v.isDefault) ?? null;
+  /** 共有ビューを自分のビューとしてコピー */
+  const copySharedView = useCallback(
+    async (sourceView: SavedTableView) => {
+      return createMutation.mutateAsync({
+        viewName: `${sourceView.viewName}（コピー）`,
+        settings: sourceView.settings as SavedViewSettings,
+        isDefault: false,
+        isShared: false,
+      });
+    },
+    [createMutation],
+  );
+
+  const defaultView = myViews.find((v) => v.isDefault) ?? null;
 
   return {
     views,
+    myViews,
+    sharedViews,
     isLoading,
     defaultView,
     createView,
     renameView,
     updateViewSettings,
     setDefaultView,
+    toggleShareView,
+    copySharedView,
     deleteView,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,

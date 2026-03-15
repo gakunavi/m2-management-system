@@ -43,12 +43,14 @@ const createSchema = z.object({
     .max(100, '100文字以内で入力してください'),
   settings: savedViewSettingsSchema,
   isDefault: z.boolean().optional().default(false),
+  isShared: z.boolean().optional().default(false),
 });
 
 const MAX_VIEWS_PER_TABLE = 10;
 
 // ============================================
 // GET /api/v1/saved-views?tableKey=xxx
+// 自分のビュー + 他ユーザーの共有ビューを返す
 // ============================================
 
 export async function GET(request: NextRequest) {
@@ -60,12 +62,44 @@ export async function GET(request: NextRequest) {
     const tableKey = request.nextUrl.searchParams.get('tableKey');
     if (!tableKey) throw ApiError.badRequest('tableKey が必要です');
 
-    const views = await prisma.savedTableView.findMany({
+    // 自分のビュー
+    const myViews = await prisma.savedTableView.findMany({
       where: { userId: user.id, tableKey },
+      include: { user: { select: { userName: true } } },
       orderBy: { displayOrder: 'asc' },
     });
 
-    return NextResponse.json({ success: true, data: views });
+    // 他ユーザーの共有ビュー
+    const sharedViews = await prisma.savedTableView.findMany({
+      where: {
+        tableKey,
+        isShared: true,
+        userId: { not: user.id },
+      },
+      include: { user: { select: { userName: true } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const serializeView = (v: typeof myViews[number], isOwner: boolean) => ({
+      id: v.id,
+      userId: v.userId,
+      tableKey: v.tableKey,
+      viewName: v.viewName,
+      settings: v.settings,
+      displayOrder: v.displayOrder,
+      isDefault: isOwner ? v.isDefault : false,
+      isShared: v.isShared,
+      ...(isOwner ? {} : { ownerName: v.user.userName }),
+      createdAt: v.createdAt.toISOString(),
+      updatedAt: v.updatedAt.toISOString(),
+    });
+
+    const data = [
+      ...myViews.map((v) => serializeView(v, true)),
+      ...sharedViews.map((v) => serializeView(v, false)),
+    ];
+
+    return NextResponse.json({ success: true, data });
   } catch (error) {
     return handleApiError(error);
   }
@@ -82,9 +116,9 @@ export async function POST(request: NextRequest) {
 
     const user = session.user as { id: number };
     const body = await request.json();
-    const { tableKey, viewName, settings, isDefault } = createSchema.parse(body);
+    const { tableKey, viewName, settings, isDefault, isShared } = createSchema.parse(body);
 
-    // 上限チェック
+    // 上限チェック（自分のビューのみ）
     const count = await prisma.savedTableView.count({
       where: { userId: user.id, tableKey },
     });
@@ -95,14 +129,12 @@ export async function POST(request: NextRequest) {
     }
 
     const view = await prisma.$transaction(async (tx) => {
-      // 末尾に追加する displayOrder を算出
       const maxOrder = await tx.savedTableView.aggregate({
         where: { userId: user.id, tableKey },
         _max: { displayOrder: true },
       });
       const nextOrder = (maxOrder._max.displayOrder ?? -1) + 1;
 
-      // デフォルト設定時は既存のデフォルトを解除
       if (isDefault) {
         await tx.savedTableView.updateMany({
           where: { userId: user.id, tableKey, isDefault: true },
@@ -118,11 +150,19 @@ export async function POST(request: NextRequest) {
           settings: settings as Prisma.InputJsonValue,
           displayOrder: nextOrder,
           isDefault,
+          isShared,
         },
       });
     });
 
-    return NextResponse.json({ success: true, data: view }, { status: 201 });
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...view,
+        createdAt: view.createdAt.toISOString(),
+        updatedAt: view.updatedAt.toISOString(),
+      },
+    }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 interface SaveViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (name: string, setAsDefault: boolean) => Promise<void>;
+  onSave: (name: string, setAsDefault: boolean, isShared: boolean) => Promise<void>;
   isSaving: boolean;
   atLimit: boolean;
 }
@@ -30,6 +30,7 @@ export function SaveViewDialog({
 }: SaveViewDialogProps) {
   const [name, setName] = useState('');
   const [setAsDefault, setSetAsDefault] = useState(false);
+  const [isShared, setIsShared] = useState(false);
   const [error, setError] = useState('');
 
   const handleSave = async () => {
@@ -40,9 +41,10 @@ export function SaveViewDialog({
     }
     setError('');
     try {
-      await onSave(trimmed, setAsDefault);
+      await onSave(trimmed, setAsDefault, isShared);
       setName('');
       setSetAsDefault(false);
+      setIsShared(false);
       onOpenChange(false);
     } catch {
       setError('保存に失敗しました。もう一度お試しください。');
@@ -53,6 +55,7 @@ export function SaveViewDialog({
     if (!nextOpen) {
       setName('');
       setSetAsDefault(false);
+      setIsShared(false);
       setError('');
     }
     onOpenChange(nextOpen);
@@ -94,6 +97,19 @@ export function SaveViewDialog({
               className="text-sm font-normal cursor-pointer"
             >
               デフォルトビューに設定する
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="set-shared"
+              checked={isShared}
+              onCheckedChange={(v) => setIsShared(v === true)}
+            />
+            <Label
+              htmlFor="set-shared"
+              className="text-sm font-normal cursor-pointer"
+            >
+              チームに共有する
             </Label>
           </div>
           {atLimit && (
