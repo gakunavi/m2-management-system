@@ -68,6 +68,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // テキスト検索（顧客名・案件番号）
+    const searchText = searchParams.get('search');
+    if (searchText) {
+      where.OR = [
+        { customer: { customerName: { contains: searchText, mode: 'insensitive' } } },
+        { projectNo: { contains: searchText, mode: 'insensitive' } },
+      ];
+    }
+
+    // カスタムフィールドフィルター（アプリケーション側で処理）
+    const customFieldFilters: { key: string; value: string }[] = [];
+    searchParams.forEach((paramValue, paramKey) => {
+      const match = paramKey.match(/^customField_(.+)$/);
+      if (match && paramValue) {
+        customFieldFilters.push({ key: match[1], value: paramValue });
+      }
+    });
+
     // visibleToPartner=true のテンプレートのみ取得
     const templates = await prisma.movementTemplate.findMany({
       where: { businessId: bizId, stepIsActive: true, visibleToPartner: true },
@@ -118,9 +136,14 @@ export async function GET(request: NextRequest) {
       select: { businessConfig: true },
     });
     const businessConfig = (business?.businessConfig ?? {}) as Record<string, unknown>;
-    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string }>;
+    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string; type: string; options?: string[]; filterable?: boolean; visibleToPartner?: boolean; sortOrder: number }>;
     const needsField = projectFields.find((f) => f.label === 'ニーズ');
     const needsKey = needsField?.key ?? null;
+    // filterable かつ visibleToPartner なフィールド定義
+    const filterableFieldDefs = projectFields
+      .filter((f) => f.filterable && f.visibleToPartner)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options }));
 
     // ステータス定義
     const allStatusDefs = await prisma.businessStatusDefinition.findMany({
@@ -132,8 +155,22 @@ export async function GET(request: NextRequest) {
       allStatusDefs.map((s) => [s.statusCode, { label: s.statusLabel, color: s.statusColor }]),
     );
 
+    // カスタムフィールドフィルタリング（JSONB アプリケーション側）
+    const filteredProjects = customFieldFilters.length > 0
+      ? projects.filter((p) => {
+          const customData = (p.projectCustomData ?? {}) as Record<string, unknown>;
+          return customFieldFilters.every(({ key, value }) => {
+            const fieldValue = customData[key];
+            if (fieldValue === undefined || fieldValue === null) return !value;
+            if (value === 'true') return fieldValue === true || fieldValue === 'true';
+            if (value === 'false') return fieldValue === false || fieldValue === 'false' || !fieldValue;
+            return String(fieldValue).toLowerCase().includes(value.toLowerCase());
+          });
+        })
+      : projects;
+
     // レスポンス整形
-    const data = projects.map((p) => {
+    const data = filteredProjects.map((p) => {
       const status = statusMap.get(p.projectSalesStatus);
       return {
         id: p.id,
@@ -174,6 +211,7 @@ export async function GET(request: NextRequest) {
           statusIsFinal: s.statusIsFinal,
           statusIsLost: s.statusIsLost,
         })),
+        filterableFields: filterableFieldDefs,
       },
     });
   } catch (error) {

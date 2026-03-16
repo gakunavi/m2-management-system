@@ -46,6 +46,13 @@ export interface TemplateHeader {
   stepName: string;
 }
 
+export interface FilterableFieldDef {
+  key: string;
+  label: string;
+  type: string;
+  options?: string[];
+}
+
 export interface MovementOverviewResponse {
   success: boolean;
   data: ProjectRow[];
@@ -53,6 +60,7 @@ export interface MovementOverviewResponse {
     total: number;
     templates: TemplateHeader[];
     statusDefinitions: StatusDef[];
+    filterableFields?: FilterableFieldDef[];
   };
 }
 

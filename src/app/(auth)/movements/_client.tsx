@@ -21,6 +21,7 @@ import type {
   ProjectRow,
   MovementOverviewResponse,
 } from '@/types/movement';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import { useBusiness } from '@/hooks/use-business';
 import { useStatusDefinitions } from '@/hooks/use-status-definitions';
 import { useToast } from '@/hooks/use-toast';
@@ -61,6 +62,8 @@ export function MovementsClient() {
   const [monthSort, setMonthSort] = useState<SortDirection>(null);
   const [expectedMonthFrom, setExpectedMonthFrom] = useState<string | null>(null);
   const [expectedMonthTo, setExpectedMonthTo] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [customFieldFilters, setCustomFieldFilters] = useState<{ key: string; value: string }[]>([]);
   const prevBusinessIdRef = useRef<number | null>(null);
 
   // 事業未選択時はダッシュボードへリダイレクト（hydration完了後に判定）
@@ -76,6 +79,8 @@ export function MovementsClient() {
       setSelectedStatuses(null);
       setExpectedMonthFrom(null);
       setExpectedMonthTo(null);
+      setSearchText('');
+      setCustomFieldFilters([]);
       prevBusinessIdRef.current = selectedBusinessId;
     }
   }, [selectedBusinessId]);
@@ -93,7 +98,7 @@ export function MovementsClient() {
   }, [allStatusDefs, selectedStatuses]);
 
   const { data, isLoading, error } = useQuery<MovementOverviewResponse>({
-    queryKey: ['project-movements-overview', selectedBusinessId, selectedStatuses, expectedMonthFrom, expectedMonthTo],
+    queryKey: ['project-movements-overview', selectedBusinessId, selectedStatuses, expectedMonthFrom, expectedMonthTo, searchText, customFieldFilters],
     queryFn: async () => {
       const params = new URLSearchParams({ businessId: String(selectedBusinessId) });
       if (selectedStatuses && selectedStatuses.length > 0) {
@@ -101,6 +106,10 @@ export function MovementsClient() {
       }
       if (expectedMonthFrom) params.set('expectedCloseMonthFrom', expectedMonthFrom);
       if (expectedMonthTo) params.set('expectedCloseMonthTo', expectedMonthTo);
+      if (searchText) params.set('search', searchText);
+      customFieldFilters.forEach(({ key, value }) => {
+        if (value) params.set(`customField_${key}`, value);
+      });
       const res = await fetch(`/api/v1/projects/movements?${params.toString()}`);
       if (!res.ok) throw new Error('取得に失敗しました');
       return res.json() as Promise<MovementOverviewResponse>;
@@ -111,6 +120,7 @@ export function MovementsClient() {
   const templates = data?.meta?.templates ?? [];
   const statusDefinitions = data?.meta?.statusDefinitions ?? [];
   const rawProjects = data?.data ?? [];
+  const filterableFields = (data?.meta?.filterableFields ?? []) as ProjectFieldDefinition[];
 
   // ソート切替ハンドラ（各列独立で asc → desc → 解除）
   const toggleSort = (setter: React.Dispatch<React.SetStateAction<SortDirection>>) => {
@@ -228,6 +238,11 @@ export function MovementsClient() {
           setExpectedMonthFrom(from);
           setExpectedMonthTo(to);
         }}
+        searchText={searchText}
+        onSearchChange={setSearchText}
+        filterableFields={filterableFields}
+        customFieldFilters={customFieldFilters}
+        onCustomFieldFilterChange={setCustomFieldFilters}
       />
 
       {/* ビューの切替 */}

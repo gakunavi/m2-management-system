@@ -9,6 +9,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ProjectFilterPanel } from '@/components/features/project/project-filter-panel';
 import type { MovementOverviewResponse, MovementItem } from '@/types/movement';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import { useBusiness } from '@/hooks/use-business';
 import { useStatusDefinitions } from '@/hooks/use-status-definitions';
 import { cn } from '@/lib/utils';
@@ -37,6 +38,8 @@ export function PortalMovementsClient() {
   const [monthSort, setMonthSort] = useState<SortDirection>(null);
   const [expectedMonthFrom, setExpectedMonthFrom] = useState<string | null>(null);
   const [expectedMonthTo, setExpectedMonthTo] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [customFieldFilters, setCustomFieldFilters] = useState<{ key: string; value: string }[]>([]);
   const prevBusinessIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -51,6 +54,8 @@ export function PortalMovementsClient() {
       setSelectedStatuses(null);
       setExpectedMonthFrom(null);
       setExpectedMonthTo(null);
+      setSearchText('');
+      setCustomFieldFilters([]);
       prevBusinessIdRef.current = selectedBusinessId;
     }
   }, [selectedBusinessId]);
@@ -68,7 +73,7 @@ export function PortalMovementsClient() {
   }, [allStatusDefs, selectedStatuses]);
 
   const { data, isLoading, error } = useQuery<MovementOverviewResponse>({
-    queryKey: ['portal-movements-overview', selectedBusinessId, selectedStatuses, expectedMonthFrom, expectedMonthTo],
+    queryKey: ['portal-movements-overview', selectedBusinessId, selectedStatuses, expectedMonthFrom, expectedMonthTo, searchText, customFieldFilters],
     queryFn: async () => {
       const params = new URLSearchParams({ businessId: String(selectedBusinessId) });
       if (selectedStatuses && selectedStatuses.length > 0) {
@@ -76,6 +81,10 @@ export function PortalMovementsClient() {
       }
       if (expectedMonthFrom) params.set('expectedCloseMonthFrom', expectedMonthFrom);
       if (expectedMonthTo) params.set('expectedCloseMonthTo', expectedMonthTo);
+      if (searchText) params.set('search', searchText);
+      customFieldFilters.forEach(({ key, value }) => {
+        if (value) params.set(`customField_${key}`, value);
+      });
       const res = await fetch(`/api/v1/portal/movements?${params.toString()}`);
       if (!res.ok) throw new Error('取得に失敗しました');
       return res.json() as Promise<MovementOverviewResponse>;
@@ -86,6 +95,7 @@ export function PortalMovementsClient() {
   const templates = data?.meta?.templates ?? [];
   const statusDefinitions = data?.meta?.statusDefinitions ?? [];
   const rawProjects = data?.data ?? [];
+  const filterableFields = (data?.meta?.filterableFields ?? []) as ProjectFieldDefinition[];
 
   // ソート切替ハンドラ（各列独立で asc → desc → 解除）
   const toggleSort = (setter: React.Dispatch<React.SetStateAction<SortDirection>>) => {
@@ -157,6 +167,11 @@ export function PortalMovementsClient() {
           setExpectedMonthFrom(from);
           setExpectedMonthTo(to);
         }}
+        searchText={searchText}
+        onSearchChange={setSearchText}
+        filterableFields={filterableFields}
+        customFieldFilters={customFieldFilters}
+        onCustomFieldFilterChange={setCustomFieldFilters}
       />
 
       {/* 凡例 */}

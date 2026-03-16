@@ -65,11 +65,32 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 取得件数制限（デフォルト200、最大500）
+    // テキスト検索（顧客名・代理店名・案件番号）
+    const searchText = searchParams.get('search');
+    if (searchText) {
+      where.OR = [
+        { customer: { customerName: { contains: searchText, mode: 'insensitive' } } },
+        { partner: { partnerName: { contains: searchText, mode: 'insensitive' } } },
+        { projectNo: { contains: searchText, mode: 'insensitive' } },
+      ];
+    }
+
+    // カスタムフィールドフィルター（アプリケーション側で処理）
+    const customFieldFilters: { key: string; value: string }[] = [];
+    searchParams.forEach((paramValue, paramKey) => {
+      const match = paramKey.match(/^customField_(.+)$/);
+      if (match && paramValue) {
+        customFieldFilters.push({ key: match[1], value: paramValue });
+      }
+    });
+
+    // 取得件数制限（デフォルト200、最大500）— カスタムフィールドフィルター時は全件取得
     const limitParam = searchParams.get('limit');
-    const take = limitParam
-      ? Math.min(500, Math.max(1, parseInt(limitParam, 10)))
-      : 200;
+    const take = customFieldFilters.length > 0
+      ? 1000
+      : limitParam
+        ? Math.min(500, Math.max(1, parseInt(limitParam, 10)))
+        : 200;
 
     // 全案件 + ムーブメント + テンプレート取得
     const projects = await prisma.project.findMany({
@@ -124,10 +145,15 @@ export async function GET(request: NextRequest) {
       select: { businessConfig: true },
     });
     const businessConfig = (business?.businessConfig ?? {}) as Record<string, unknown>;
-    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string }>;
+    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string; type: string; options?: string[]; filterable?: boolean; visibleToPartner?: boolean; sortOrder: number }>;
     // 「ニーズ」フィールドのキーを特定
     const needsField = projectFields.find((f) => f.label === 'ニーズ');
     const needsKey = needsField?.key ?? null;
+    // filterable フィールド定義
+    const filterableFieldDefs = projectFields
+      .filter((f) => f.filterable)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options }));
 
     // ムーブメントテンプレート一覧（列ヘッダー用）
     const templates = await prisma.movementTemplate.findMany({
@@ -136,8 +162,24 @@ export async function GET(request: NextRequest) {
       select: { id: true, stepNumber: true, stepCode: true, stepName: true },
     });
 
+    // カスタムフィールドフィルタリング（JSONB アプリケーション側）
+    const filteredProjects = customFieldFilters.length > 0
+      ? projects.filter((p) => {
+          const customData = (p.projectCustomData ?? {}) as Record<string, unknown>;
+          return customFieldFilters.every(({ key, value }) => {
+            const fieldValue = customData[key];
+            if (fieldValue === undefined || fieldValue === null) return !value;
+            // checkbox型
+            if (value === 'true') return fieldValue === true || fieldValue === 'true';
+            if (value === 'false') return fieldValue === false || fieldValue === 'false' || !fieldValue;
+            // テキスト部分一致
+            return String(fieldValue).toLowerCase().includes(value.toLowerCase());
+          });
+        })
+      : projects;
+
     // レスポンス整形
-    const data = projects.map((p) => {
+    const data = filteredProjects.map((p) => {
       const status = statusMap.get(p.projectSalesStatus);
       return {
         id: p.id,
@@ -180,6 +222,7 @@ export async function GET(request: NextRequest) {
           statusIsFinal: s.statusIsFinal,
           statusIsLost: s.statusIsLost,
         })),
+        filterableFields: filterableFieldDefs,
       },
     });
   } catch (error) {
