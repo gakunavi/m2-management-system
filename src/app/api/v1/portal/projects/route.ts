@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 import {
   isCustomDataSort,
   applyAppSortAndSlice,
+  buildSelectOptionOrderMap,
   type SortItem,
 } from '@/lib/sort-helper';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
@@ -180,6 +181,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // カスタムフィールドフィルター（filter[customField_xxx] 形式）
+    const customFieldFilters: { key: string; values: string[] }[] = [];
+    searchParams.forEach((paramValue, paramKey) => {
+      const cfMatch = paramKey.match(/^filter\[customField_(.+)\]$/);
+      if (cfMatch && paramValue) {
+        customFieldFilters.push({
+          key: cfMatch[1],
+          values: paramValue.split(',').filter(Boolean),
+        });
+      }
+    });
+    const hasCustomFieldFilter = customFieldFilters.length > 0;
+
     const orderBy = buildPortalOrderBy(sortByParam, sortOrder);
     const skip = (page - 1) * pageSize;
 
@@ -201,13 +215,14 @@ export async function GET(request: NextRequest) {
       : [];
 
     // 案件一覧 + 件数を並列取得
-    // カスタムフィールドソート時は全件取得してアプリ側でソート
+    // カスタムフィールドソート/フィルター時は全件取得してアプリ側で処理
+    const needsFullFetch = isCustomSort || hasCustomFieldFilter;
     const [total, allProjects] = await Promise.all([
       prisma.project.count({ where }),
       prisma.project.findMany({
         where,
         ...(orderBy ? { orderBy } : {}),
-        ...(isCustomSort ? {} : { skip, take: pageSize }),
+        ...(needsFullFetch ? {} : { skip, take: pageSize }),
         select: {
           id: true,
           businessId: true,
@@ -237,39 +252,70 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // カスタムフィールドフィルター適用（アプリ側）
+    let filteredProjects = allProjects;
+    if (hasCustomFieldFilter) {
+      filteredProjects = allProjects.filter((p) => {
+        const customData = p.projectCustomData as Record<string, unknown> | null;
+        if (!customData) return false;
+        return customFieldFilters.every(({ key, values }) => {
+          const fieldVal = customData[key];
+          if (fieldVal == null) return false;
+          if (typeof fieldVal === 'boolean') return values.includes(String(fieldVal));
+          return values.some((v) => String(fieldVal).includes(v));
+        });
+      });
+    }
+
     // アプリ側ソート（カスタムフィールド or ステータス）
-    let projects = allProjects;
-    if (isCustomSort) {
+    let projects = filteredProjects;
+    if (needsFullFetch) {
       if (isStatusSort(sortByParam)) {
         // ステータスソート: statusSortOrder マップで優先順位順に並べ替え
-        const allBizIds = Array.from(new Set(allProjects.map((p) => p.businessId)));
+        const allBizIds = Array.from(new Set(filteredProjects.map((p) => p.businessId)));
         const allStatusDefs = allBizIds.length > 0
           ? await prisma.businessStatusDefinition.findMany({
               where: { businessId: { in: allBizIds } },
               select: { businessId: true, statusCode: true, statusSortOrder: true },
             })
           : [];
-        // businessId:statusCode → statusSortOrder のマップ
         const sortOrderMap = new Map<string, number>();
         for (const sd of allStatusDefs) {
           sortOrderMap.set(`${sd.businessId}:${sd.statusCode}`, sd.statusSortOrder);
         }
         const direction = sortOrder === 'asc' ? 1 : -1;
-        const sorted = [...allProjects].sort((a, b) => {
+        const sorted = [...filteredProjects].sort((a, b) => {
           const aOrder = sortOrderMap.get(`${a.businessId}:${a.projectSalesStatus}`) ?? 9999;
           const bOrder = sortOrderMap.get(`${b.businessId}:${b.projectSalesStatus}`) ?? 9999;
           return (aOrder - bOrder) * direction;
         });
         projects = sorted.slice(skip, skip + pageSize);
-      } else {
-        // カスタムフィールドソート
+      } else if (isCustomDataSort(sortByParam)) {
+        // カスタムフィールドソート（select型はオプション定義順）
+        const sortBizIds = Array.from(new Set(filteredProjects.map((p) => p.businessId)));
+        let selectOrderMap;
+        if (sortBizIds.length > 0) {
+          const sortBizConfigs = await prisma.business.findMany({
+            where: { id: { in: sortBizIds } },
+            select: { businessConfig: true },
+          });
+          const allFields = sortBizConfigs.flatMap((b) => {
+            const cfg = b.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+            return cfg?.projectFields ?? [];
+          });
+          selectOrderMap = buildSelectOptionOrderMap(allFields);
+        }
         projects = applyAppSortAndSlice(
-          allProjects,
+          filteredProjects,
           [{ field: sortByParam, direction: sortOrder }] as SortItem[],
           (p) => p.projectCustomData as Record<string, unknown> | null,
           skip,
           pageSize,
+          selectOrderMap,
         );
+      } else {
+        // カスタムフィールドフィルターのみ → ページネーションだけ
+        projects = filteredProjects.slice(skip, skip + pageSize);
       }
     }
 
@@ -386,10 +432,10 @@ export async function GET(request: NextRequest) {
         statusColor: s.statusColor,
       })),
       meta: {
-        total,
+        total: hasCustomFieldFilter ? filteredProjects.length : total,
         page,
         pageSize,
-        totalPages: Math.ceil(total / pageSize),
+        totalPages: Math.ceil((hasCustomFieldFilter ? filteredProjects.length : total) / pageSize),
       },
     });
   } catch (error) {

@@ -54,6 +54,12 @@ const FIELD_COLUMNS: SortableItemColumn<ProjectFieldDefinitionWithId>[] = [
     render: (value) => (value ? '✓' : '-'),
   },
   {
+    key: 'filterable',
+    label: '絞り込み',
+    width: 70,
+    render: (value) => (value ? '✓' : '-'),
+  },
+  {
     key: 'visibleToPartner',
     label: '代理店表示',
     width: 90,
@@ -143,6 +149,12 @@ const FIELD_FORM_FIELDS: SortableItemFormField[] = [
     label: '説明（入力ヒント）',
     type: 'text',
     placeholder: '例：税込金額を入力してください',
+  },
+  {
+    key: 'filterable',
+    label: '絞り込みフィルターに表示する',
+    type: 'checkbox',
+    description: '一覧画面のフィルターに追加されます（select型・チェックボックス型推奨）',
   },
   {
     key: 'visibleToPartner',

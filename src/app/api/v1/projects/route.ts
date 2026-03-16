@@ -9,6 +9,7 @@ import {
   getCustomSortPagination,
   applyAppSortAndSlice,
   isCustomDataSort,
+  buildSelectOptionOrderMap,
 } from '@/lib/sort-helper';
 import type { SortDirection } from '@/lib/sort-helper';
 import { formatProject } from '@/lib/format-project';
@@ -202,13 +203,26 @@ export async function GET(request: NextRequest) {
       where.projectAssignedUserId = parseInt(assignedUserFilter, 10);
     }
 
+    // カスタムフィールドフィルター（filter[customField_xxx] 形式）
+    const customFieldFilters: { key: string; values: string[] }[] = [];
+    searchParams.forEach((paramValue, paramKey) => {
+      const cfMatch = paramKey.match(/^filter\[customField_(.+)\]$/);
+      if (cfMatch && paramValue) {
+        customFieldFilters.push({
+          key: cfMatch[1],
+          values: paramValue.split(',').filter(Boolean),
+        });
+      }
+    });
+    const hasCustomFieldFilter = customFieldFilters.length > 0;
+
     const defaultOrderBy = [{ updatedAt: 'desc' as const }];
     const orderBy = buildProjectOrderBy(sortItems, defaultOrderBy);
     const originalSkip = (page - 1) * pageSize;
     const hasStatusSort = sortItems.some((item) => isStatusSort(item.field));
     const { skip, take, needsAppSort: needsCustomSort } = getCustomSortPagination(sortItems, originalSkip, pageSize);
-    // ステータスソートもアプリ側で処理（全件取得が必要）
-    const needsAppSort = needsCustomSort || hasStatusSort;
+    // ステータスソート/カスタムフィールドフィルターもアプリ側で処理（全件取得が必要）
+    const needsAppSort = needsCustomSort || hasStatusSort || hasCustomFieldFilter;
     const actualSkip = needsAppSort ? 0 : skip;
     const actualTake = needsAppSort ? undefined : take;
 
@@ -223,12 +237,31 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // アプリ側ソート（カスタムフィールド or ステータス）
-    let projects = allProjects;
+    // カスタムフィールドフィルター適用（アプリ側）
+    let filteredProjects = allProjects;
+    if (hasCustomFieldFilter) {
+      filteredProjects = allProjects.filter((p) => {
+        const customData = p.projectCustomData as Record<string, unknown> | null;
+        if (!customData) return false;
+        return customFieldFilters.every(({ key, values }) => {
+          const fieldVal = customData[key];
+          if (fieldVal == null) return false;
+          // boolean型
+          if (typeof fieldVal === 'boolean') {
+            return values.includes(String(fieldVal));
+          }
+          // select/text: カンマ区切り値のいずれかに一致
+          return values.some((v) => String(fieldVal).includes(v));
+        });
+      });
+    }
+
+    // アプリ側ソート＋ページネーション（カスタムフィールド or ステータス or カスタムフィルター）
+    let projects = filteredProjects;
     if (needsAppSort) {
       if (hasStatusSort) {
         // ステータスソート: statusSortOrder マップで優先順位順に並べ替え
-        const allBizIds = Array.from(new Set(allProjects.map((p) => p.businessId)));
+        const allBizIds = Array.from(new Set(filteredProjects.map((p) => p.businessId)));
         const allStatusDefs = allBizIds.length > 0
           ? await prisma.businessStatusDefinition.findMany({
               where: { businessId: { in: allBizIds } },
@@ -241,21 +274,38 @@ export async function GET(request: NextRequest) {
         }
         const statusSortItem = sortItems.find((item) => isStatusSort(item.field));
         const direction = statusSortItem?.direction === 'asc' ? 1 : -1;
-        projects = [...allProjects].sort((a, b) => {
+        projects = [...filteredProjects].sort((a, b) => {
           const aOrder = sortOrderMap.get(`${a.businessId}:${a.projectSalesStatus}`) ?? 9999;
           const bOrder = sortOrderMap.get(`${b.businessId}:${b.projectSalesStatus}`) ?? 9999;
           return (aOrder - bOrder) * direction;
         });
         projects = projects.slice(originalSkip, originalSkip + pageSize);
-      } else {
-        // カスタムフィールドソート
+      } else if (needsCustomSort) {
+        // カスタムフィールドソート（select型はオプション定義順）
+        const sortBizIds = Array.from(new Set(filteredProjects.map((p) => p.businessId)));
+        let selectOrderMap;
+        if (sortBizIds.length > 0) {
+          const sortBizConfigs = await prisma.business.findMany({
+            where: { id: { in: sortBizIds } },
+            select: { businessConfig: true },
+          });
+          const allFields = sortBizConfigs.flatMap((b) => {
+            const cfg = b.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+            return cfg?.projectFields ?? [];
+          });
+          selectOrderMap = buildSelectOptionOrderMap(allFields);
+        }
         projects = applyAppSortAndSlice(
-          allProjects,
+          filteredProjects,
           sortItems,
           (p) => p.projectCustomData as Record<string, unknown> | null,
           originalSkip,
           pageSize,
+          selectOrderMap,
         );
+      } else {
+        // カスタムフィールドフィルターのみ（ソートはDB側で済み）→ ページネーションだけ
+        projects = filteredProjects.slice(originalSkip, originalSkip + pageSize);
       }
     }
 
@@ -319,8 +369,8 @@ export async function GET(request: NextRequest) {
       meta: {
         page,
         pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
+        total: hasCustomFieldFilter ? filteredProjects.length : total,
+        totalPages: Math.ceil((hasCustomFieldFilter ? filteredProjects.length : total) / pageSize),
       },
     });
   } catch (error) {

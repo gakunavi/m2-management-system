@@ -1,4 +1,4 @@
-import type { FormFieldDef, ColumnDef, CellEditConfig } from '@/types/config';
+import type { FormFieldDef, ColumnDef, CellEditConfig, FilterDef } from '@/types/config';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
@@ -100,6 +100,48 @@ export function buildDynamicColumns(fields: ProjectFieldDefinition[]): ColumnDef
         },
       };
       return col;
+    });
+}
+
+// ============================================
+// フィルター生成
+// ============================================
+
+/**
+ * filterable フラグが true のフィールド定義から FilterDef 配列を生成する。
+ * select → multi-select フィルター、checkbox → boolean フィルター、text → text フィルター。
+ */
+export function buildDynamicFilters(fields: ProjectFieldDefinition[]): FilterDef[] {
+  return fields
+    .filter((f) => f.filterable)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((field): FilterDef => {
+      const filterKey = `customField_${field.key}`;
+      switch (field.type) {
+        case 'select':
+          return {
+            key: filterKey,
+            label: field.label,
+            type: 'multi-select' as const,
+            options: (field.options ?? []).map((opt) => ({ label: opt, value: opt })),
+          };
+        case 'checkbox':
+          return {
+            key: filterKey,
+            label: field.label,
+            type: 'boolean' as const,
+            trueLabel: 'あり',
+            falseLabel: 'なし',
+          };
+        default:
+          return {
+            key: filterKey,
+            label: field.label,
+            type: 'text' as const,
+            placeholder: `${field.label}で検索`,
+            debounceMs: 300,
+          };
+      }
     });
 }
 

@@ -11,6 +11,7 @@ import {
   buildDynamicColumns,
   buildDynamicDisplayFields,
   buildDynamicCsvColumns,
+  buildDynamicFilters,
 } from '@/lib/dynamic-field-helpers';
 import { buildDynamicFieldSchema } from '@/lib/validations/dynamic-fields';
 import { projectBaseSchema } from '@/lib/validations/project';
@@ -90,12 +91,15 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
     return {
       ...projectListConfig,
       columns: mergedColumns,
-      filters: projectListConfig.filters.map((f) => {
-        if (f.key === 'projectSalesStatus' && f.type === 'multi-select') {
-          return { ...f, options: statusOptions } as typeof f;
-        }
-        return f;
-      }),
+      filters: [
+        ...projectListConfig.filters.map((f) => {
+          if (f.key === 'projectSalesStatus' && f.type === 'multi-select') {
+            return { ...f, options: statusOptions } as typeof f;
+          }
+          return f;
+        }),
+        ...buildDynamicFilters(projectFields),
+      ],
       ...(projectListConfig.csv && {
         csv: {
           ...projectListConfig.csv,

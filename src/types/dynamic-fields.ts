@@ -21,4 +21,6 @@ export interface ProjectFieldDefinition {
   sortOrder: number;
   /** 代理店ユーザーに表示するか */
   visibleToPartner?: boolean;
+  /** 一覧画面のフィルターに表示するか */
+  filterable?: boolean;
 }

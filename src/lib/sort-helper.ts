@@ -89,19 +89,25 @@ export function buildOrderBy(
   return validated;
 }
 
+/** select型フィールドのオプション順序マップ: fieldKey → optionValue → index */
+export type SelectOptionOrderMap = Map<string, Map<string, number>>;
+
 /**
  * カスタムフィールド（JSONB）でレコード配列をアプリケーション側でソートする。
  * sortItems のうち customData_ プレフィックスを持つフィールドのみ処理。
+ * select 型フィールドはオプション定義順でソートする。
  *
  * @param records - ソート対象のレコード配列
  * @param sortItems - ソート項目
  * @param getCustomData - レコードから projectCustomData を取得する関数
+ * @param selectOrderMap - select型フィールドのオプション順序マップ（省略時は文字列比較）
  * @returns ソート済み配列（新しい配列）
  */
 function sortByCustomData<T>(
   records: T[],
   sortItems: SortItem[],
   getCustomData: (record: T) => Record<string, unknown> | null,
+  selectOrderMap?: SelectOptionOrderMap,
 ): T[] {
   const customSortItems = sortItems.filter((item) => isCustomDataSort(item.field));
   if (customSortItems.length === 0) return records;
@@ -114,13 +120,31 @@ function sortByCustomData<T>(
       const aVal = aData?.[key] ?? null;
       const bVal = bData?.[key] ?? null;
 
-      const cmp = compareValues(aVal, bVal);
+      // select型: オプション定義順で比較
+      const optionOrder = selectOrderMap?.get(key);
+      const cmp = optionOrder
+        ? compareByOptionOrder(aVal, bVal, optionOrder)
+        : compareValues(aVal, bVal);
       if (cmp !== 0) {
         return item.direction === 'asc' ? cmp : -cmp;
       }
     }
     return 0;
   });
+}
+
+/** select型フィールドをオプション定義順で比較 */
+function compareByOptionOrder(
+  a: unknown,
+  b: unknown,
+  orderMap: Map<string, number>,
+): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  const aIdx = orderMap.get(String(a)) ?? 9999;
+  const bIdx = orderMap.get(String(b)) ?? 9999;
+  return aIdx - bIdx;
 }
 
 /** null を末尾に配置する汎用比較関数 */
@@ -166,9 +190,27 @@ export function applyAppSortAndSlice<T>(
   getCustomData: (record: T) => Record<string, unknown> | null,
   skip: number,
   take: number,
+  selectOrderMap?: SelectOptionOrderMap,
 ): T[] {
-  const sorted = sortByCustomData(records, sortItems, getCustomData);
+  const sorted = sortByCustomData(records, sortItems, getCustomData, selectOrderMap);
   return sorted.slice(skip, skip + take);
+}
+
+/**
+ * ProjectFieldDefinition[] から select 型のオプション順序マップを構築する。
+ */
+export function buildSelectOptionOrderMap(
+  fields: { key: string; type: string; options?: string[] }[],
+): SelectOptionOrderMap {
+  const map: SelectOptionOrderMap = new Map();
+  for (const f of fields) {
+    if (f.type === 'select' && f.options && f.options.length > 0) {
+      const orderMap = new Map<string, number>();
+      f.options.forEach((opt, idx) => orderMap.set(opt, idx));
+      map.set(f.key, orderMap);
+    }
+  }
+  return map;
 }
 
 // ============================================
