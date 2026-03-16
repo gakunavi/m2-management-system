@@ -49,10 +49,15 @@ export function ProjectFilterPanel({
 }: Props) {
   const [localSearch, setLocalSearch] = useState(searchText ?? '');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLocalChangeRef = useRef(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // searchText prop が外から変わった場合に同期
+  // searchText prop が外から変わった場合のみ同期（自分の入力起因の変更はスキップ）
   useEffect(() => {
+    if (isLocalChangeRef.current) {
+      isLocalChangeRef.current = false;
+      return;
+    }
     setLocalSearch(searchText ?? '');
   }, [searchText]);
 
@@ -60,6 +65,7 @@ export function ProjectFilterPanel({
     setLocalSearch(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      isLocalChangeRef.current = true;
       onSearchChange?.(value);
     }, 300);
   };
