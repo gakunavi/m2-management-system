@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { updateMovementSchema } from '@/lib/validations/movement';
+import type { Prisma } from '@prisma/client';
 
 // ============================================
 // PATCH /api/v1/projects/:id/movements/:movementId
@@ -31,8 +32,7 @@ export async function PATCH(
       include: {
         template: {
           select: {
-            stepIsSalesLinked: true,
-            stepLinkedStatusCode: true,
+            stepLinkedFieldKey: true,
             stepName: true,
           },
         },
@@ -41,7 +41,6 @@ export async function PATCH(
     if (!existing) throw ApiError.notFound('ムーブメントが見つかりません');
 
     const now = new Date();
-    let statusLinkedLabel: string | null = null;
 
     // タイムスタンプの設定（明示的な日付指定がある場合はそちらを優先）
     const timestamps: {
@@ -50,7 +49,6 @@ export async function PATCH(
     } = {};
 
     if (data.movementStartedAt !== undefined) {
-      // 明示的に送信された場合はそのまま使用
       timestamps.movementStartedAt = data.movementStartedAt ? new Date(data.movementStartedAt) : null;
     }
     if (data.movementCompletedAt !== undefined) {
@@ -78,7 +76,7 @@ export async function PATCH(
       }
     }
 
-    // トランザクション: ムーブメント更新 + 営業ステータス連動
+    // トランザクション: ムーブメント更新 + 連動フィールド更新
     const updated = await prisma.$transaction(async (tx) => {
       const movement = await tx.projectMovement.update({
         where: { id: mvId },
@@ -96,45 +94,32 @@ export async function PATCH(
               stepCode: true,
               stepName: true,
               stepDescription: true,
-              stepIsSalesLinked: true,
-              stepLinkedStatusCode: true,
+              stepLinkedFieldKey: true,
             },
           },
         },
       });
 
-      // ステータス連動: completed かつ salesLinked の場合
-      if (
-        data.movementStatus === 'completed' &&
-        existing.template.stepIsSalesLinked &&
-        existing.template.stepLinkedStatusCode
-      ) {
-        const statusCode = existing.template.stepLinkedStatusCode;
+      // 連動フィールド更新: linkedFieldUpdate が送信された場合
+      if (data.linkedFieldUpdate) {
+        const { key, value } = data.linkedFieldUpdate;
+        // テンプレートの連動フィールドキーと一致するか検証
+        if (existing.template.stepLinkedFieldKey && key === existing.template.stepLinkedFieldKey) {
+          const project = await tx.project.findUniqueOrThrow({
+            where: { id: projectId },
+            select: { projectCustomData: true },
+          });
+          const currentCustomData = (project.projectCustomData ?? {}) as Record<string, unknown>;
+          const updatedCustomData = { ...currentCustomData, [key]: value };
 
-        // ステータス定義の存在確認
-        const statusDef = await tx.businessStatusDefinition.findFirst({
-          where: {
-            businessId: (await tx.project.findUniqueOrThrow({
-              where: { id: projectId },
-              select: { businessId: true },
-            })).businessId,
-            statusCode,
-            statusIsActive: true,
-          },
-          select: { statusLabel: true },
-        });
-
-        if (statusDef) {
           await tx.project.update({
             where: { id: projectId },
             data: {
-              projectSalesStatus: statusCode,
-              projectStatusChangedAt: now,
+              projectCustomData: updatedCustomData as Prisma.InputJsonValue,
               updatedBy: user.id,
               version: { increment: 1 },
             },
           });
-          statusLinkedLabel = statusDef.statusLabel;
         }
       }
 
@@ -155,8 +140,6 @@ export async function PATCH(
         updatedBy: updated.updatedBy,
         template: updated.template,
       },
-      // ステータス連動が発生した場合、クライアントに通知
-      ...(statusLinkedLabel ? { statusLinked: { label: statusLinkedLabel } } : {}),
     });
   } catch (error) {
     return handleApiError(error);

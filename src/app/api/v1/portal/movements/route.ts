@@ -90,10 +90,16 @@ export async function GET(request: NextRequest) {
     const templates = await prisma.movementTemplate.findMany({
       where: { businessId: bizId, stepIsActive: true, visibleToPartner: true },
       orderBy: { stepNumber: 'asc' },
-      select: { id: true, stepNumber: true, stepCode: true, stepName: true },
+      select: { id: true, stepNumber: true, stepCode: true, stepName: true, stepLinkedFieldKey: true },
     });
 
     const visibleTemplateIds = templates.map((t) => t.id);
+    // テンプレートID → 連動フィールドキーのマップ
+    const templateLinkedFieldMap = new Map(
+      templates
+        .filter((t) => t.stepLinkedFieldKey)
+        .map((t) => [t.id, t.stepLinkedFieldKey!]),
+    );
 
     // 案件 + ムーブメント取得（visibleToPartner テンプレートのみ）
     const projects = await prisma.project.findMany({
@@ -183,17 +189,22 @@ export async function GET(request: NextRequest) {
         projectNotes: p.projectNotes,
         projectNeeds: needsKey ? String((p.projectCustomData as Record<string, unknown>)?.[needsKey] ?? '') || null : null,
         customerName: p.customer?.customerName ?? null,
-        movements: p.movements.map((m) => ({
-          id: m.id,
-          movementStatus: m.movementStatus,
-          movementStartedAt: m.movementStartedAt?.toISOString() ?? null,
-          movementCompletedAt: m.movementCompletedAt?.toISOString() ?? null,
-          movementNotes: m.movementNotes,
-          templateId: m.template.id,
-          stepNumber: m.template.stepNumber,
-          stepCode: m.template.stepCode,
-          stepName: m.template.stepName,
-        })),
+        movements: p.movements.map((m) => {
+          const linkedKey = templateLinkedFieldMap.get(m.template.id);
+          const customData = (p.projectCustomData ?? {}) as Record<string, unknown>;
+          return {
+            id: m.id,
+            movementStatus: m.movementStatus,
+            movementStartedAt: m.movementStartedAt?.toISOString() ?? null,
+            movementCompletedAt: m.movementCompletedAt?.toISOString() ?? null,
+            movementNotes: m.movementNotes,
+            templateId: m.template.id,
+            stepNumber: m.template.stepNumber,
+            stepCode: m.template.stepCode,
+            stepName: m.template.stepName,
+            linkedFieldValue: linkedKey ? (customData[linkedKey] ?? null) : undefined,
+          };
+        }),
       };
     });
 
@@ -202,7 +213,21 @@ export async function GET(request: NextRequest) {
       data,
       meta: {
         total: data.length,
-        templates,
+        templates: templates.map((t) => {
+          const fieldDef = t.stepLinkedFieldKey
+            ? projectFields.find((f) => f.key === t.stepLinkedFieldKey && f.visibleToPartner)
+            : null;
+          return {
+            id: t.id,
+            stepNumber: t.stepNumber,
+            stepCode: t.stepCode,
+            stepName: t.stepName,
+            stepLinkedFieldKey: fieldDef ? t.stepLinkedFieldKey : null,
+            linkedFieldLabel: fieldDef?.label ?? null,
+            linkedFieldType: fieldDef?.type ?? null,
+            linkedFieldOptions: fieldDef?.options ?? null,
+          };
+        }),
         statusDefinitions: allStatusDefs.map((s) => ({
           statusCode: s.statusCode,
           statusLabel: s.statusLabel,

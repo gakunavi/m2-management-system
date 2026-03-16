@@ -12,6 +12,7 @@ const createSchema = z.object({
   stepDescription: z.string().optional().nullable(),
   stepIsSalesLinked: z.boolean().default(false),
   stepLinkedStatusCode: z.string().max(50).optional().nullable(),
+  stepLinkedFieldKey: z.string().max(100).optional().nullable(),
   visibleToPartner: z.boolean().default(false),
 });
 
@@ -103,6 +104,7 @@ export async function POST(
           stepDescription: data.stepDescription ?? null,
           stepIsSalesLinked: data.stepIsSalesLinked,
           stepLinkedStatusCode: data.stepLinkedStatusCode ?? null,
+          stepLinkedFieldKey: data.stepLinkedFieldKey ?? null,
           visibleToPartner: data.visibleToPartner,
           stepIsActive: true,
         },

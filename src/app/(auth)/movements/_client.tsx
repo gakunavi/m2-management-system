@@ -9,7 +9,7 @@ import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { ProjectFilterPanel } from '@/components/features/project/project-filter-panel';
-import { MovementEditModal } from '@/components/features/project/movement-edit-modal';
+import { MovementEditModal, type MovementData } from '@/components/features/project/movement-edit-modal';
 import { SalesStatusEditModal } from '@/components/features/project/sales-status-edit-modal';
 import { GanttChart, type ViewMode as GanttViewMode } from '@/components/features/project/gantt-chart';
 import {
@@ -17,7 +17,6 @@ import {
 } from '@/components/features/project/gantt-chart-utils';
 import type { GanttBar, GanttRow } from '@/components/features/project/gantt-chart-utils';
 import type {
-  MovementItem,
   ProjectRow,
   MovementOverviewResponse,
 } from '@/types/movement';
@@ -41,10 +40,17 @@ function formatCompactDate(iso: string | null): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 連動フィールド値を表示用に変換 */
+function formatLinkedFieldValue(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'boolean') return value ? '✓' : '-';
+  return String(value);
+}
+
 // モーダル用の状態型
 type ModalState =
   | { type: 'none' }
-  | { type: 'movement'; movement: MovementItem & { projectId: number } }
+  | { type: 'movement'; movement: MovementData }
   | { type: 'salesStatus'; project: ProjectRow };
 
 type ViewMode = 'matrix' | 'gantt';
@@ -177,10 +183,17 @@ export function MovementsClient() {
     const project = projects.find((p) => p.id === bar.projectId);
     const movement = project?.movements.find((m) => m.id === bar.movementId);
     if (movement && project) {
-      setModal({
-        type: 'movement',
-        movement: { ...movement, projectId: project.id },
-      });
+      const template = templates.find((t) => t.id === movement.templateId);
+      const movementData: MovementData = {
+        ...movement,
+        projectId: project.id,
+        stepLinkedFieldKey: template?.stepLinkedFieldKey,
+        linkedFieldValue: movement.linkedFieldValue,
+        linkedFieldLabel: template?.linkedFieldLabel,
+        linkedFieldType: template?.linkedFieldType,
+        linkedFieldOptions: template?.linkedFieldOptions,
+      };
+      setModal({ type: 'movement', movement: movementData });
     }
   };
 
@@ -386,12 +399,18 @@ export function MovementsClient() {
                             'w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex flex-col items-center justify-center cursor-pointer hover:opacity-80 transition-opacity',
                             config.bg,
                           )}
-                          onClick={() =>
-                            setModal({
-                              type: 'movement',
-                              movement: { ...movement, projectId: project.id },
-                            })
-                          }
+                          onClick={() => {
+                            const movementData: MovementData = {
+                              ...movement,
+                              projectId: project.id,
+                              stepLinkedFieldKey: template.stepLinkedFieldKey,
+                              linkedFieldValue: movement.linkedFieldValue,
+                              linkedFieldLabel: template.linkedFieldLabel,
+                              linkedFieldType: template.linkedFieldType,
+                              linkedFieldOptions: template.linkedFieldOptions,
+                            };
+                            setModal({ type: 'movement', movement: movementData });
+                          }}
                         >
                           <Icon className={cn('h-4 w-4 mb-1', config.iconColor)} />
                           <div className="w-full bg-gray-200 rounded-full h-1 mb-1">
@@ -405,6 +424,11 @@ export function MovementsClient() {
                               )}
                             />
                           </div>
+                          {template.linkedFieldLabel && formatLinkedFieldValue(movement.linkedFieldValue) && (
+                            <div className="text-[10px] text-center text-purple-700 font-medium truncate w-full px-0.5 mb-0.5" title={`${template.linkedFieldLabel}: ${formatLinkedFieldValue(movement.linkedFieldValue)}`}>
+                              {formatLinkedFieldValue(movement.linkedFieldValue)}
+                            </div>
+                          )}
                           <div className="text-[10px] text-center space-y-0.5">
                             {movement.movementStartedAt && (
                               <div className="text-blue-600">
@@ -457,15 +481,8 @@ export function MovementsClient() {
           movement={modal.movement}
           open
           onClose={() => setModal({ type: 'none' })}
-          onSuccess={(result) => {
+          onSuccess={() => {
             toast({ message: 'ムーブメントを更新しました', type: 'success' });
-            if (result.statusLinked) {
-              toast({
-                message: `営業ステータスが「${result.statusLinked.label}」に更新されました`,
-                type: 'info',
-                duration: 7000,
-              });
-            }
           }}
           onError={(error) => {
             toast({ message: error.message, type: 'error' });

@@ -155,12 +155,21 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options }));
 
-    // ムーブメントテンプレート一覧（列ヘッダー用）
+    // ムーブメント定義一覧（列ヘッダー用）
     const templates = await prisma.movementTemplate.findMany({
       where: { businessId: bizId, stepIsActive: true },
       orderBy: { stepNumber: 'asc' },
-      select: { id: true, stepNumber: true, stepCode: true, stepName: true },
+      select: { id: true, stepNumber: true, stepCode: true, stepName: true, stepLinkedFieldKey: true },
     });
+
+    // 連動フィールド情報マップ（templateId → フィールド定義）
+    const fieldMap = new Map(projectFields.map((f) => [f.key, f]));
+    // テンプレートID → 連動フィールドキーのマップ
+    const templateLinkedFieldMap = new Map(
+      templates
+        .filter((t) => t.stepLinkedFieldKey)
+        .map((t) => [t.id, t.stepLinkedFieldKey!]),
+    );
 
     // カスタムフィールドフィルタリング（JSONB アプリケーション側）
     const filteredProjects = customFieldFilters.length > 0
@@ -194,17 +203,22 @@ export async function GET(request: NextRequest) {
         version: p.version,
         customerName: p.customer?.customerName ?? null,
         partnerName: p.partner?.partnerName ?? null,
-        movements: p.movements.map((m) => ({
-          id: m.id,
-          movementStatus: m.movementStatus,
-          movementStartedAt: m.movementStartedAt?.toISOString() ?? null,
-          movementCompletedAt: m.movementCompletedAt?.toISOString() ?? null,
-          movementNotes: m.movementNotes,
-          templateId: m.template.id,
-          stepNumber: m.template.stepNumber,
-          stepCode: m.template.stepCode,
-          stepName: m.template.stepName,
-        })),
+        movements: p.movements.map((m) => {
+          const linkedKey = templateLinkedFieldMap.get(m.template.id);
+          const customData = (p.projectCustomData ?? {}) as Record<string, unknown>;
+          return {
+            id: m.id,
+            movementStatus: m.movementStatus,
+            movementStartedAt: m.movementStartedAt?.toISOString() ?? null,
+            movementCompletedAt: m.movementCompletedAt?.toISOString() ?? null,
+            movementNotes: m.movementNotes,
+            templateId: m.template.id,
+            stepNumber: m.template.stepNumber,
+            stepCode: m.template.stepCode,
+            stepName: m.template.stepName,
+            linkedFieldValue: linkedKey ? (customData[linkedKey] ?? null) : undefined,
+          };
+        }),
       };
     });
 
@@ -213,7 +227,19 @@ export async function GET(request: NextRequest) {
       data,
       meta: {
         total: data.length,
-        templates,
+        templates: templates.map((t) => {
+          const linkedField = t.stepLinkedFieldKey ? fieldMap.get(t.stepLinkedFieldKey) : null;
+          return {
+            id: t.id,
+            stepNumber: t.stepNumber,
+            stepCode: t.stepCode,
+            stepName: t.stepName,
+            stepLinkedFieldKey: t.stepLinkedFieldKey ?? null,
+            linkedFieldLabel: linkedField?.label ?? null,
+            linkedFieldType: linkedField?.type ?? null,
+            linkedFieldOptions: linkedField?.options ?? null,
+          };
+        }),
         statusDefinitions: allStatusDefs.map((s) => ({
           statusCode: s.statusCode,
           statusLabel: s.statusLabel,

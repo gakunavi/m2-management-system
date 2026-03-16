@@ -169,7 +169,7 @@ export const businessDetailConfig: EntityDetailConfig = {
     },
     {
       key: 'movementTemplates',
-      label: 'ムーブメントテンプレート',
+      label: 'ムーブメント定義',
       component: 'custom',
       config: {},
     },

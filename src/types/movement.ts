@@ -12,6 +12,8 @@ export interface MovementItem {
   stepNumber: number;
   stepCode: string;
   stepName: string;
+  /** 連動フィールドの現在値（APIから注入） */
+  linkedFieldValue?: string | number | boolean | null;
 }
 
 export interface ProjectRow {
@@ -44,6 +46,14 @@ export interface TemplateHeader {
   stepNumber: number;
   stepCode: string;
   stepName: string;
+  /** 連動する案件フィールドのキー */
+  stepLinkedFieldKey?: string | null;
+  /** 連動フィールドのラベル（表示用） */
+  linkedFieldLabel?: string | null;
+  /** 連動フィールドの型 */
+  linkedFieldType?: string | null;
+  /** 連動フィールドの選択肢（select型の場合） */
+  linkedFieldOptions?: string[] | null;
 }
 
 export interface FilterableFieldDef {
@@ -74,6 +84,7 @@ export interface MovementTemplate {
   stepDescription: string | null;
   stepIsSalesLinked: boolean;
   stepLinkedStatusCode: string | null;
+  stepLinkedFieldKey: string | null;
   visibleToPartner: boolean;
 }
 
@@ -87,5 +98,11 @@ export interface DetailMovement {
   movementNotes: string | null;
   updatedAt: string;
   updatedBy: number | null;
-  template: MovementTemplate;
+  template: MovementTemplate & {
+    linkedFieldLabel?: string | null;
+    linkedFieldType?: string | null;
+    linkedFieldOptions?: string[] | null;
+  };
+  /** 連動フィールドの現在値 */
+  linkedFieldValue?: string | number | boolean | null;
 }

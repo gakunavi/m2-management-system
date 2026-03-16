@@ -11,6 +11,7 @@ const updateSchema = z.object({
   stepDescription: z.string().optional().nullable(),
   stepIsSalesLinked: z.boolean().optional(),
   stepLinkedStatusCode: z.string().max(50).optional().nullable(),
+  stepLinkedFieldKey: z.string().max(100).optional().nullable(),
   stepIsActive: z.boolean().optional(),
   visibleToPartner: z.boolean().optional(),
 });

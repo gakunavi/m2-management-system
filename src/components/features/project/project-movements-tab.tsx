@@ -33,6 +33,13 @@ function formatCompactDate(iso: string | null): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 連動フィールド値を表示用に変換 */
+function formatLinkedFieldValue(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'boolean') return value ? '✓' : '-';
+  return String(value);
+}
+
 /** Movement → MovementEditModal 用の MovementData に変換 */
 function toMovementData(movement: DetailMovement): MovementData {
   return {
@@ -45,8 +52,11 @@ function toMovementData(movement: DetailMovement): MovementData {
     stepNumber: movement.template.stepNumber,
     stepName: movement.template.stepName,
     stepDescription: movement.template.stepDescription,
-    stepIsSalesLinked: movement.template.stepIsSalesLinked,
-    stepLinkedStatusCode: movement.template.stepLinkedStatusCode,
+    stepLinkedFieldKey: movement.template.stepLinkedFieldKey,
+    linkedFieldValue: movement.linkedFieldValue,
+    linkedFieldLabel: movement.template.linkedFieldLabel,
+    linkedFieldType: movement.template.linkedFieldType,
+    linkedFieldOptions: movement.template.linkedFieldOptions,
   };
 }
 
@@ -117,10 +127,10 @@ export function ProjectMovementsTab({ entityId }: Props) {
                   className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium"
                 >
                   <div className="leading-tight">{m.template.stepName}</div>
-                  {m.template.stepIsSalesLinked && (
+                  {m.template.stepLinkedFieldKey && m.template.linkedFieldLabel && (
                     <div className="flex items-center justify-center gap-0.5 mt-1 text-muted-foreground">
                       <Link2 className="h-3 w-3" />
-                      <span className="text-[10px]">連動</span>
+                      <span className="text-[10px]">{m.template.linkedFieldLabel}</span>
                     </div>
                   )}
                 </div>
@@ -161,6 +171,13 @@ export function ProjectMovementsTab({ entityId }: Props) {
                     <span className={cn('text-xs font-medium mb-1', config.iconColor)}>
                       {config.label}
                     </span>
+
+                    {/* 連動フィールド値 */}
+                    {movement.template.linkedFieldLabel && formatLinkedFieldValue(movement.linkedFieldValue) && (
+                      <div className="text-[10px] text-center text-purple-700 font-medium truncate w-full px-0.5 mb-0.5" title={`${movement.template.linkedFieldLabel}: ${formatLinkedFieldValue(movement.linkedFieldValue)}`}>
+                        {formatLinkedFieldValue(movement.linkedFieldValue)}
+                      </div>
+                    )}
 
                     {/* 日付 */}
                     <div className="text-[10px] text-center space-y-0.5">
@@ -206,15 +223,8 @@ export function ProjectMovementsTab({ entityId }: Props) {
             ['project-movements', entityId],
             ['project', String(entityId)],
           ]}
-          onSuccess={(result) => {
+          onSuccess={() => {
             toast({ message: 'ムーブメントを更新しました', type: 'success' });
-            if (result.statusLinked) {
-              toast({
-                message: `営業ステータスが「${result.statusLinked.label}」に更新されました`,
-                type: 'info',
-                duration: 7000,
-              });
-            }
           }}
           onError={(error) => {
             toast({ message: error.message, type: 'error' });

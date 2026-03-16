@@ -28,6 +28,13 @@ function formatCompactDate(iso: string | null): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 連動フィールド値を表示用に変換 */
+function formatLinkedFieldValue(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'boolean') return value ? '✓' : '-';
+  return String(value);
+}
+
 type SortDirection = 'asc' | 'desc' | null;
 
 export function PortalMovementsClient() {
@@ -316,6 +323,11 @@ export function PortalMovementsClient() {
                           )}
                         />
                       </div>
+                      {template.linkedFieldLabel && formatLinkedFieldValue(movement.linkedFieldValue) && (
+                        <div className="text-[10px] text-center text-purple-700 font-medium truncate w-full px-0.5 mb-0.5" title={`${template.linkedFieldLabel}: ${formatLinkedFieldValue(movement.linkedFieldValue)}`}>
+                          {formatLinkedFieldValue(movement.linkedFieldValue)}
+                        </div>
+                      )}
                       <div className="text-[10px] text-center space-y-0.5">
                         {movement.movementStartedAt && (
                           <div className="text-blue-600">

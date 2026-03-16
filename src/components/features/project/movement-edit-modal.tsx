@@ -15,6 +15,14 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import type { MovementStatus } from '@/lib/validations/movement';
 
@@ -30,6 +38,16 @@ export interface MovementData {
   stepDescription?: string | null;
   stepIsSalesLinked?: boolean;
   stepLinkedStatusCode?: string | null;
+  /** 連動フィールドキー */
+  stepLinkedFieldKey?: string | null;
+  /** 連動フィールドの現在値 */
+  linkedFieldValue?: string | number | boolean | null;
+  /** 連動フィールドのラベル */
+  linkedFieldLabel?: string | null;
+  /** 連動フィールドの型 */
+  linkedFieldType?: string | null;
+  /** 連動フィールドの選択肢 */
+  linkedFieldOptions?: string[] | null;
 }
 
 interface Props {
@@ -38,8 +56,8 @@ interface Props {
   onClose: () => void;
   /** 追加で invalidate するクエリキー */
   invalidateKeys?: unknown[][];
-  /** 成功時コールバック（toast通知等） */
-  onSuccess?: (result: { statusLinked?: { label: string } }) => void;
+  /** 成功時コールバック */
+  onSuccess?: (result: Record<string, unknown>) => void;
   /** エラー時コールバック */
   onError?: (error: Error) => void;
 }
@@ -57,6 +75,13 @@ function toDateInput(iso: string | null | undefined): string {
   return iso.split('T')[0];
 }
 
+/** 連動フィールドの初期値を文字列に変換 */
+function toFieldString(value: string | number | boolean | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return String(value);
+}
+
 export function MovementEditModal({
   movement,
   open,
@@ -70,6 +95,9 @@ export function MovementEditModal({
   const [startDate, setStartDate] = useState(toDateInput(movement.movementStartedAt));
   const [endDate, setEndDate] = useState(toDateInput(movement.movementCompletedAt));
   const [notes, setNotes] = useState(movement.movementNotes ?? '');
+  const [linkedFieldValue, setLinkedFieldValue] = useState(toFieldString(movement.linkedFieldValue));
+
+  const hasLinkedField = !!movement.stepLinkedFieldKey && !!movement.linkedFieldLabel;
 
   // ステータス変更時に日付を自動設定
   const handleStatusChange = (newStatus: MovementStatus) => {
@@ -96,12 +124,7 @@ export function MovementEditModal({
   };
 
   const mutation = useMutation({
-    mutationFn: async (payload: {
-      movementStatus: MovementStatus;
-      movementNotes: string | null;
-      movementStartedAt: string | null;
-      movementCompletedAt: string | null;
-    }) => {
+    mutationFn: async (payload: Record<string, unknown>) => {
       const res = await fetch(`/api/v1/projects/${movement.projectId}/movements/${movement.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -116,6 +139,7 @@ export function MovementEditModal({
     onSuccess: (result) => {
       // デフォルトで overview キーを invalidate
       queryClient.invalidateQueries({ queryKey: ['project-movements-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-movements-overview'] });
       // 追加キーを invalidate
       if (invalidateKeys) {
         for (const key of invalidateKeys) {
@@ -131,12 +155,29 @@ export function MovementEditModal({
   });
 
   const handleSave = () => {
-    mutation.mutate({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload: Record<string, any> = {
       movementStatus: status,
       movementNotes: notes.trim() || null,
       movementStartedAt: startDate || null,
       movementCompletedAt: endDate || null,
-    });
+    };
+
+    // 連動フィールドの値が変わっていたら送信
+    if (hasLinkedField && linkedFieldValue !== toFieldString(movement.linkedFieldValue)) {
+      let parsedValue: string | number | boolean | null = linkedFieldValue || null;
+      if (movement.linkedFieldType === 'number' && linkedFieldValue) {
+        parsedValue = Number(linkedFieldValue);
+      } else if (movement.linkedFieldType === 'checkbox') {
+        parsedValue = linkedFieldValue === 'true';
+      }
+      payload.linkedFieldUpdate = {
+        key: movement.stepLinkedFieldKey,
+        value: parsedValue,
+      };
+    }
+
+    mutation.mutate(payload);
   };
 
   const origStartDate = toDateInput(movement.movementStartedAt);
@@ -145,7 +186,119 @@ export function MovementEditModal({
     status !== movement.movementStatus ||
     startDate !== origStartDate ||
     endDate !== origEndDate ||
-    (notes.trim() || null) !== (movement.movementNotes ?? null);
+    (notes.trim() || null) !== (movement.movementNotes ?? null) ||
+    (hasLinkedField && linkedFieldValue !== toFieldString(movement.linkedFieldValue));
+
+  /** 連動フィールドの入力要素を型に応じて描画 */
+  const renderLinkedFieldInput = () => {
+    if (!hasLinkedField) return null;
+
+    const fieldType = movement.linkedFieldType;
+    const fieldLabel = movement.linkedFieldLabel!;
+
+    switch (fieldType) {
+      case 'select':
+        return (
+          <div className="space-y-1">
+            <Label>{fieldLabel}</Label>
+            <Select value={linkedFieldValue || ''} onValueChange={setLinkedFieldValue}>
+              <SelectTrigger>
+                <SelectValue placeholder="選択してください..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(movement.linkedFieldOptions ?? []).map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      case 'checkbox':
+        return (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="mv-linked-checkbox"
+              checked={linkedFieldValue === 'true'}
+              onCheckedChange={(checked) => setLinkedFieldValue(checked ? 'true' : 'false')}
+            />
+            <Label htmlFor="mv-linked-checkbox">{fieldLabel}</Label>
+          </div>
+        );
+      case 'number':
+        return (
+          <div className="space-y-1">
+            <Label htmlFor="mv-linked-number">{fieldLabel}</Label>
+            <Input
+              id="mv-linked-number"
+              type="number"
+              value={linkedFieldValue}
+              onChange={(e) => setLinkedFieldValue(e.target.value)}
+            />
+          </div>
+        );
+      case 'date':
+        return (
+          <div className="space-y-1">
+            <Label htmlFor="mv-linked-date">{fieldLabel}</Label>
+            <Input
+              id="mv-linked-date"
+              type="date"
+              value={linkedFieldValue}
+              onChange={(e) => setLinkedFieldValue(e.target.value)}
+            />
+          </div>
+        );
+      case 'month':
+        return (
+          <div className="space-y-1">
+            <Label htmlFor="mv-linked-month">{fieldLabel}</Label>
+            <Input
+              id="mv-linked-month"
+              type="month"
+              value={linkedFieldValue}
+              onChange={(e) => setLinkedFieldValue(e.target.value)}
+            />
+          </div>
+        );
+      case 'textarea':
+        return (
+          <div className="space-y-1">
+            <Label htmlFor="mv-linked-textarea">{fieldLabel}</Label>
+            <Textarea
+              id="mv-linked-textarea"
+              value={linkedFieldValue}
+              onChange={(e) => setLinkedFieldValue(e.target.value)}
+              rows={2}
+            />
+          </div>
+        );
+      case 'url':
+        return (
+          <div className="space-y-1">
+            <Label htmlFor="mv-linked-url">{fieldLabel}</Label>
+            <Input
+              id="mv-linked-url"
+              type="url"
+              value={linkedFieldValue}
+              onChange={(e) => setLinkedFieldValue(e.target.value)}
+              placeholder="https://..."
+            />
+          </div>
+        );
+      default: // text
+        return (
+          <div className="space-y-1">
+            <Label htmlFor="mv-linked-text">{fieldLabel}</Label>
+            <Input
+              id="mv-linked-text"
+              type="text"
+              value={linkedFieldValue}
+              onChange={(e) => setLinkedFieldValue(e.target.value)}
+            />
+          </div>
+        );
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -158,13 +311,6 @@ export function MovementEditModal({
             {movement.stepDescription || 'ステータスを変更して保存してください'}
           </DialogDescription>
         </DialogHeader>
-
-        {movement.stepIsSalesLinked && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded">
-            <Link2 className="h-3 w-3" />
-            完了時に営業ステータスを「{movement.stepLinkedStatusCode}」に連動
-          </div>
-        )}
 
         {/* ステータス選択 */}
         <div className="space-y-2">
@@ -214,6 +360,17 @@ export function MovementEditModal({
             />
           </div>
         </div>
+
+        {/* 連動フィールド編集 */}
+        {hasLinkedField && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Link2 className="h-3 w-3" />
+              連動フィールド
+            </div>
+            {renderLinkedFieldInput()}
+          </div>
+        )}
 
         {/* メモ */}
         <div className="space-y-2">

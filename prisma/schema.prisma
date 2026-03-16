@@ -127,6 +127,7 @@ model MovementTemplate {
   stepDescription      String?           @map("step_description")
   stepIsSalesLinked    Boolean           @default(false) @map("step_is_sales_linked")
   stepLinkedStatusCode String?           @map("step_linked_status_code") @db.VarChar(50)
+  stepLinkedFieldKey   String?           @map("step_linked_field_key") @db.VarChar(100)
   stepConfig           Json              @default("{}") @map("step_config")
   stepIsActive         Boolean           @default(true) @map("step_is_active")
   visibleToPartner     Boolean           @default(false) @map("visible_to_partner")

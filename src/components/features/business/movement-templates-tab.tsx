@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useMovementTemplates, type MovementTemplate } from '@/hooks/use-movement-templates';
-import { useStatusDefinitions } from '@/hooks/use-status-definitions';
+import { useProjectFieldDefinitions } from '@/hooks/use-project-field-definitions';
 import { SortableItemList, type SortableItemColumn, type SortableItemFormField } from '@/components/shared/sortable-item-list';
 import { TabCsvImport } from '@/components/shared/tab-csv-import';
 import { Button } from '@/components/ui/button';
@@ -17,12 +17,12 @@ interface Props {
 
 export function MovementTemplatesTab({ entityId }: Props) {
   const { items, isLoading, create, update, remove, reorder, sync } = useMovementTemplates(entityId);
-  const { items: statusItems } = useStatusDefinitions(entityId);
+  const { items: fieldDefinitions } = useProjectFieldDefinitions(entityId);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [syncing, setSyncing] = useState(false);
 
-  const statusLabelMap = new Map(statusItems.map((s) => [s.statusCode, s.statusLabel]));
+  const fieldLabelMap = new Map(fieldDefinitions.map((f) => [f.key, f.label]));
 
   const columns: SortableItemColumn<MovementTemplate>[] = [
     {
@@ -40,19 +40,13 @@ export function MovementTemplatesTab({ entityId }: Props) {
       label: 'ステップ名',
     },
     {
-      key: 'stepIsSalesLinked',
-      label: 'ステータス連動',
-      width: 100,
-      render: (value) => (value ? '✓' : '-'),
-    },
-    {
-      key: 'stepLinkedStatusCode',
-      label: '連動先',
+      key: 'stepLinkedFieldKey',
+      label: '連動フィールド',
       width: 140,
       render: (value) => {
         if (!value) return '-';
-        const code = String(value);
-        return statusLabelMap.get(code) ?? code;
+        const key = String(value);
+        return fieldLabelMap.get(key) ?? key;
       },
     },
     {
@@ -69,9 +63,9 @@ export function MovementTemplatesTab({ entityId }: Props) {
     },
   ];
 
-  const statusOptions = statusItems.map((s) => ({
-    label: `${s.statusCode}: ${s.statusLabel}`,
-    value: s.statusCode,
+  const fieldOptions = fieldDefinitions.map((f) => ({
+    label: `${f.label}（${f.key}）`,
+    value: f.key,
   }));
 
   const MOVEMENT_FORM_FIELDS: SortableItemFormField[] = [
@@ -97,19 +91,12 @@ export function MovementTemplatesTab({ entityId }: Props) {
       placeholder: 'ステップの詳細説明',
     },
     {
-      key: 'stepIsSalesLinked',
-      label: '営業ステータス連動',
-      type: 'checkbox',
-      description: 'チェック時、このステップ完了で営業ステータスが変わります',
-    },
-    {
-      key: 'stepLinkedStatusCode',
-      label: '連動ステータスコード',
+      key: 'stepLinkedFieldKey',
+      label: '連動フィールド',
       type: 'select',
-      options: statusOptions,
-      placeholder: 'ステータスを選択...',
-      description: '連動時に変更される営業ステータス',
-      visibleWhen: (formData) => !!formData.stepIsSalesLinked,
+      options: fieldOptions,
+      placeholder: 'フィールドを選択（任意）...',
+      description: 'ムーブメント画面でこのフィールドの値を表示・編集できます',
     },
     {
       key: 'visibleToPartner',
@@ -164,15 +151,15 @@ export function MovementTemplatesTab({ entityId }: Props) {
       items={items}
       isLoading={isLoading}
       columns={columns}
-      addLabel="テンプレートを追加"
+      addLabel="定義を追加"
       formFields={MOVEMENT_FORM_FIELDS}
-      formTitle={{ create: 'テンプレート追加', edit: 'テンプレート編集' }}
+      formTitle={{ create: '定義追加', edit: '定義編集' }}
       onCreate={create}
       onUpdate={update}
       onDelete={remove}
       onReorder={reorder}
       disabledOnEditKeys={['stepCode']}
-      deleteConfirmMessage={(item) => `テンプレート「${(item as MovementTemplate).stepName}」を削除しますか？`}
+      deleteConfirmMessage={(item) => `ムーブメント定義「${(item as MovementTemplate).stepName}」を削除しますか？`}
       headerActions={
         <div className="flex items-center gap-2">
           <Button

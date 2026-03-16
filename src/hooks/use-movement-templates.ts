@@ -11,6 +11,7 @@ export interface MovementTemplate {
   stepDescription: string | null;
   stepIsSalesLinked: boolean;
   stepLinkedStatusCode: string | null;
+  stepLinkedFieldKey: string | null;
   stepIsActive: boolean;
   visibleToPartner: boolean;
 }
@@ -50,7 +51,7 @@ export function useMovementTemplates(businessId: number) {
     try {
       await apiClient.create(`/businesses/${businessId}/movement-templates`, formData);
       invalidateMovementCaches();
-      toast({ message: 'テンプレートを追加しました', type: 'success' });
+      toast({ message: 'ムーブメント定義を追加しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '追加に失敗しました';
       toast({ title: 'エラー', message: msg, type: 'error' });
@@ -62,7 +63,7 @@ export function useMovementTemplates(businessId: number) {
     try {
       await apiClient.patch(`/businesses/${businessId}/movement-templates/${id}`, formData);
       invalidateMovementCaches();
-      toast({ message: 'テンプレートを更新しました', type: 'success' });
+      toast({ message: 'ムーブメント定義を更新しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '更新に失敗しました';
       toast({ title: 'エラー', message: msg, type: 'error' });
@@ -74,7 +75,7 @@ export function useMovementTemplates(businessId: number) {
     try {
       await apiClient.remove(`/businesses/${businessId}/movement-templates`, id);
       invalidateMovementCaches();
-      toast({ message: 'テンプレートを削除しました', type: 'success' });
+      toast({ message: 'ムーブメント定義を削除しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '削除に失敗しました';
       toast({ title: 'エラー', message: msg, type: 'error' });
