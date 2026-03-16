@@ -69,6 +69,7 @@ export function useProjectFieldDefinitions(businessId: number) {
         : undefined,
       sortOrder: projectFields.length + 1,
       visibleToPartner: (formData.visibleToPartner as boolean) ?? false,
+      filterable: (formData.filterable as boolean) ?? false,
     };
 
     // キーの重複チェック
@@ -97,6 +98,7 @@ export function useProjectFieldDefinitions(businessId: number) {
             ? (formData.formula as string).trim()
             : f.formula,
           visibleToPartner: (formData.visibleToPartner as boolean) ?? f.visibleToPartner,
+          filterable: (formData.filterable as boolean) ?? f.filterable,
         };
       }
       return f;
