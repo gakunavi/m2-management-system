@@ -19,11 +19,11 @@ interface SidebarProps {
   navItems?: NavItem[];
   /** 事業スイッチャーを表示するか（デフォルト: true） */
   showBusinessSwitcher?: boolean;
-  /** タイトル（デフォルト: M²管理システム） */
+  /** タイトル（デフォルト: 管理システム） */
   title?: string;
 }
 
-export function Sidebar({ navItems, showBusinessSwitcher = true, title = 'M²管理システム' }: SidebarProps) {
+export function Sidebar({ navItems, showBusinessSwitcher = true, title = '管理システム' }: SidebarProps) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const { hasSelectedBusiness } = useBusiness();

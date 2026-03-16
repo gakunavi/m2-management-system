@@ -63,7 +63,7 @@ async function sendEmailForUser(userId: number, subject: string, message: string
 
   await sendEmail({
     to: user.userEmail,
-    subject: `[M²] ${subject}`,
+    subject: `[管理システム] ${subject}`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1a1a2e; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
@@ -71,7 +71,7 @@ async function sendEmailForUser(userId: number, subject: string, message: string
         </h2>
         <p style="color: #334155; line-height: 1.6;">${message}</p>
         <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
-          M² 管理システムからの自動通知です。
+          管理システムからの自動通知です。
         </p>
       </div>
     `,

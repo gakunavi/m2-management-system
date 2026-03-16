@@ -43,14 +43,14 @@ export async function POST(request: NextRequest) {
     const result = await resend.emails.send({
       from: emailFrom,
       to: [to],
-      subject: '[M²] テストメール',
+      subject: '[管理システム] テストメール',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #1a1a2e; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
             テストメール送信成功
           </h2>
           <p style="color: #334155; line-height: 1.6;">
-            このメールは M² 管理システムからのテスト送信です。<br/>
+            このメールは 管理システムからのテスト送信です。<br/>
             メール通知機能が正常に動作しています。
           </p>
           <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
             </tr>
           </table>
           <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
-            M² 管理システムからの自動通知です。
+            管理システムからの自動通知です。
           </p>
         </div>
       `,

@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
       await sendEmail({
         to: email,
-        subject: `[M²] リマインダー: ${reminder.title}`,
+        subject: `[管理システム] リマインダー: ${reminder.title}`,
         html: buildReminderEmail({
           title: reminder.title,
           description: reminder.description,
@@ -133,7 +133,7 @@ function buildReminderEmail(params: {
         ` : ''}
       </table>
       <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
-        M² 管理システムからの自動通知です。
+        管理システムからの自動通知です。
       </p>
     </div>
   `;

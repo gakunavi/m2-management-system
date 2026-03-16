@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: {
-    default: 'M²管理システム',
-    template: '%s | M²管理システム',
+    default: '管理システム',
+    template: '%s | 管理システム',
   },
   description: '統合管理システム',
 };

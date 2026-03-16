@@ -54,7 +54,7 @@ function LoginForm() {
     <div className="rounded-xl border bg-card p-8 shadow-lg">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">
-          {isPartnerDomain ? '代理店用ログイン' : 'M² 管理システム'}
+          {isPartnerDomain ? '代理店用ログイン' : '管理システム'}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">アカウントにサインインしてください</p>
       </div>

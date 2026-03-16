@@ -47,7 +47,7 @@ export function buildStatusChangeEmail(params: {
   updatedBy: string;
 }): { subject: string; html: string } {
   return {
-    subject: `[M²] 案件ステータス変更: ${params.projectName}`,
+    subject: `[管理システム] 案件ステータス変更: ${params.projectName}`,
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1a1a2e; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
@@ -72,7 +72,7 @@ export function buildStatusChangeEmail(params: {
           </tr>
         </table>
         <p style="color: #64748b; font-size: 12px; margin-top: 24px;">
-          M² 管理システムからの自動通知です。
+          管理システムからの自動通知です。
         </p>
       </div>
     `,
