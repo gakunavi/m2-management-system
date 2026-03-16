@@ -118,7 +118,7 @@ export function ProjectFilterPanel({
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            カスタムフィールドで絞り込み
+            絞り込み
             {activeCustomFilters.length > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-primary text-primary-foreground">
                 {activeCustomFilters.length}
