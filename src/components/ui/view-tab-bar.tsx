@@ -372,7 +372,7 @@ function OverflowOwnViewItem({
   );
 }
 
-/** 共有ビューアイテム（読み取り専用、コピーのみ可能） */
+/** 共有ビューアイテム（コピーして自分のビューとして利用可能） */
 function SharedViewItem({
   view,
   isActive,
@@ -399,20 +399,26 @@ function SharedViewItem({
         </span>
       </DropdownMenuItem>
       {onCopy && (
-        <button
-          className={cn(
-            'absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center',
-            'opacity-0 group-hover:opacity-100 transition-opacity',
-            'text-muted-foreground hover:text-foreground hover:bg-muted',
-          )}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCopy();
-          }}
-          title="自分のビューにコピー"
-        >
-          <Copy className="h-3 w-3" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                'absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 rounded flex items-center justify-center',
+                'opacity-0 group-hover:opacity-100 transition-opacity',
+                'text-muted-foreground hover:text-foreground hover:bg-muted',
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-3 w-3" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" className="w-48">
+            <DropdownMenuItem onClick={onCopy}>
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              自分のビューにコピー
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );
