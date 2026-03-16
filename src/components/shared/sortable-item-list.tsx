@@ -287,14 +287,19 @@ export function SortableItemList<T extends { id: string | number }>({
                     />
                   ) : field.type === 'select' ? (
                     <Select
-                      value={(value as string) ?? ''}
-                      onValueChange={(v) => setField(field.key, v)}
+                      value={(value as string) || '__none__'}
+                      onValueChange={(v) => setField(field.key, v === '__none__' ? null : v)}
                       disabled={isDisabledOnEdit}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder={field.placeholder ?? '選択...'} />
                       </SelectTrigger>
                       <SelectContent>
+                        {!field.required && (
+                          <SelectItem value="__none__">
+                            <span className="text-muted-foreground">未選択</span>
+                          </SelectItem>
+                        )}
                         {field.options?.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
                             {opt.label}
