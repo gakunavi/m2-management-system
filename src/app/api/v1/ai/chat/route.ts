@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { handleApiError, ApiError } from '@/lib/error-handler';
-import { processChat, generateConversationTitle, AiNotConfiguredError } from '@/lib/ai/openai-client';
+import { ApiError } from '@/lib/error-handler';
+import { processChatStream, generateConversationTitle, AiNotConfiguredError } from '@/lib/ai/openai-client';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { StreamEvent } from '@/lib/ai/openai-client';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -12,10 +13,16 @@ export const maxDuration = 30;
 const MAX_HISTORY_MESSAGES = 20;
 
 // ============================================
-// POST /api/v1/ai/chat
+// POST /api/v1/ai/chat — SSE ストリーミング応答
 // ============================================
 
 export async function POST(request: NextRequest) {
+  const encoder = new TextEncoder();
+
+  function sendSSE(event: StreamEvent): string {
+    return `data: ${JSON.stringify(event)}\n\n`;
+  }
+
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
@@ -26,7 +33,6 @@ export async function POST(request: NextRequest) {
       role: string;
       partnerId?: number | null;
     };
-    // admin/staff のみ（Phase 1）
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const body = await request.json();
@@ -56,7 +62,6 @@ export async function POST(request: NextRequest) {
       });
       if (!existing) throw ApiError.notFound('会話が見つかりません');
 
-      // 事業コンテキストが変更された場合、会話に反映
       const newBusinessId = businessId ?? null;
       if (existing.businessId !== newBusinessId) {
         await prisma.chatConversation.update({
@@ -121,64 +126,92 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================
-    // OpenAI に送信して応答取得
+    // SSE ストリーミング応答
     // ============================================
 
-    const aiResponse = await processChat(chatMessages, {
-      id: user.id,
-      role: user.role,
-      partnerId: user.partnerId,
-      name: user.name,
-      businessId: resolvedBusinessId,
-      businessName,
-    });
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // conversationIdを即座に送信
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: 'init', conversationId: conversation.id })}\n\n`,
+            ),
+          );
 
-    // ============================================
-    // アシスタント応答をDB保存
-    // ============================================
+          const fullContent = await processChatStream(
+            chatMessages,
+            {
+              id: user.id,
+              role: user.role,
+              partnerId: user.partnerId,
+              name: user.name,
+              businessId: resolvedBusinessId,
+              businessName,
+            },
+            (event: StreamEvent) => {
+              controller.enqueue(encoder.encode(sendSSE(event)));
+            },
+          );
 
-    await prisma.chatMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: 'assistant',
-        content: aiResponse.content,
+          // アシスタント応答をDB保存
+          await prisma.chatMessage.create({
+            data: {
+              conversationId: conversation.id,
+              role: 'assistant',
+              content: fullContent,
+            },
+          });
+
+          // タイトル生成 or updatedAt更新
+          if (!conversationId) {
+            const title = await generateConversationTitle(message);
+            await prisma.chatConversation.update({
+              where: { id: conversation.id },
+              data: { title },
+            });
+          } else {
+            await prisma.chatConversation.update({
+              where: { id: conversation.id },
+              data: { updatedAt: new Date() },
+            });
+          }
+
+          controller.close();
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : 'Unknown error';
+          controller.enqueue(
+            encoder.encode(sendSSE({ type: 'error', message: errMsg })),
+          );
+          controller.close();
+        }
       },
     });
 
-    // ============================================
-    // 新規会話の場合、タイトルを自動生成
-    // ============================================
-
-    if (!conversationId) {
-      const title = await generateConversationTitle(message);
-      await prisma.chatConversation.update({
-        where: { id: conversation.id },
-        data: { title },
-      });
-    } else {
-      // updatedAt を更新
-      await prisma.chatConversation.update({
-        where: { id: conversation.id },
-        data: { updatedAt: new Date() },
-      });
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        conversationId: conversation.id,
-        message: aiResponse.content,
-        tableData: null,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
       },
     });
   } catch (error) {
-    // AI未設定エラーは専用レスポンス
+    // SSE開始前のエラー（認証、バリデーション等）はJSONで返す
     if (error instanceof AiNotConfiguredError) {
-      return NextResponse.json(
+      return Response.json(
         { success: false, error: { code: 'AI_NOT_CONFIGURED', message: 'AI機能が設定されていません' } },
         { status: 503 },
       );
     }
-    return handleApiError(error);
+    if (error instanceof ApiError) {
+      return Response.json(
+        { success: false, error: { code: error.code, message: error.message } },
+        { status: error.statusCode },
+      );
+    }
+    return Response.json(
+      { success: false, error: { code: 'INTERNAL_ERROR', message: '内部エラーが発生しました' } },
+      { status: 500 },
+    );
   }
 }

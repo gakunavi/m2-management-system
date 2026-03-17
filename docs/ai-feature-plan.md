@@ -110,30 +110,29 @@ AI: 「以下3件が受注確度が高いと推測されます: ...」
 ## Phase 2: UX改善
 
 **目的**: チャットの応答体験を改善
-**想定期間**: 数日
+**状態**: ✅ 実装完了（動作確認・デプロイ待ち）
 
-### 2-1. レスポンスのストリーミング対応
+### 2-1. レスポンスのストリーミング対応 ✅
 
-**現状の問題**: 長い回答は全文生成完了まで待つ必要がある（特にGPT-4o使用時）
+**改善内容**: 長い回答でも文字が流れるように段階的に表示
 
-**実装内容**:
-- [ ] OpenAI APIの `stream: true` オプションを有効化
-- [ ] Server-Sent Events (SSE) でクライアントに段階的に送信
-- [ ] Function Call結果もストリームに含める
-- [ ] UIに文字が流れるように表示するアニメーション追加
+**実装方式**:
+- [x] Function Calling フェーズは非ストリーミング（関数実行中は「データ取得中...」ステータス表示）
+- [x] 最終応答のみ `stream: true` でストリーミング生成
+- [x] Server-Sent Events (SSE) でクライアントに段階的に送信
+- [x] イベント種別: `init`（会話ID）/ `status`（処理状況）/ `delta`（テキストチャンク）/ `done`（完了）/ `error`
+- [x] リアルタイムでMarkdown+テーブルが描画される
 
 **対象ファイル**:
-- `src/lib/ai/openai-client.ts` — ストリーミング処理
-- `src/app/api/v1/ai/chat/route.ts` — SSEレスポンス
-- `src/components/features/ai/chat-message.tsx` — ストリーム表示UI
-- `src/hooks/use-chat.ts` — SSE受信ロジック
-
-**注意**: Function Callingとストリーミングの組み合わせは複雑。段階的に実装する。
+- `src/lib/ai/openai-client.ts` — `processChatStream()` 追加、共通セットアップを `prepareChatContext()` に抽出
+- `src/app/api/v1/ai/chat/route.ts` — ReadableStream + SSE レスポンス
+- `src/hooks/use-chat.ts` — `fetch` + `ReadableStream.getReader()` でSSE受信、コールバック方式
+- `src/app/(auth)/ai-assistant/_client.tsx` — `streamingContent` state でリアルタイム表示
 
 ### Phase 2 チェックリスト
 
-- [ ] 2-1: ストリーミング対応
-- [ ] TypeScriptチェック通過
+- [x] 2-1: ストリーミング対応
+- [x] TypeScriptチェック通過
 - [ ] Lintチェック通過
 - [ ] ローカル動作確認
 - [ ] 本番デプロイ・動作確認

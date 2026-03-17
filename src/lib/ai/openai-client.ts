@@ -112,16 +112,15 @@ async function getModelSetting(): Promise<string> {
 }
 
 /**
- * チャットメッセージを処理してAI応答を生成
+ * チャット共通セットアップ（モデル選択・システムメッセージ構築）
  */
-export async function processChat(
+async function prepareChatContext(
   messages: ChatCompletionMessageParam[],
   user: UserContext,
-): Promise<AiResponse> {
+) {
   const client = await getOpenAIClient();
   const modelSetting = await getModelSetting();
 
-  // ユーザーの最新メッセージからモデルをAI判定で自動選択
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
   const userText = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
   const model = await selectModel(userText, client, modelSetting);
@@ -136,6 +135,17 @@ export async function processChat(
   };
 
   const allMessages: ChatCompletionMessageParam[] = [systemMessage, ...messages];
+  return { client, model, allMessages };
+}
+
+/**
+ * チャットメッセージを処理してAI応答を生成（非ストリーミング）
+ */
+export async function processChat(
+  messages: ChatCompletionMessageParam[],
+  user: UserContext,
+): Promise<AiResponse> {
+  const { client, model, allMessages } = await prepareChatContext(messages, user);
 
   let functionCallCount = 0;
 
@@ -187,6 +197,115 @@ export async function processChat(
   }
 
   return { content: '処理が複雑すぎるため、質問を絞って再度お試しください。' };
+}
+
+/** SSEイベント種別 */
+export type StreamEvent =
+  | { type: 'status'; message: string }
+  | { type: 'delta'; content: string }
+  | { type: 'done'; content: string }
+  | { type: 'error'; message: string };
+
+/**
+ * チャットメッセージを処理してストリーミング応答を生成
+ * Function Calling は非ストリーミング、最終応答のみストリーミング
+ */
+export async function processChatStream(
+  messages: ChatCompletionMessageParam[],
+  user: UserContext,
+  onEvent: (event: StreamEvent) => void,
+): Promise<string> {
+  const { client, model, allMessages } = await prepareChatContext(messages, user);
+
+  let functionCallCount = 0;
+
+  // Function Calling ループ（非ストリーミング）
+  while (functionCallCount < MAX_FUNCTION_CALLS) {
+    // まずFunction Callの有無を確認（非ストリーミング）
+    const probe = await client.chat.completions.create({
+      model,
+      messages: allMessages,
+      tools: aiFunctions,
+      tool_choice: 'auto',
+      temperature: 0.3,
+      max_tokens: 2000,
+    });
+
+    const choice = probe.choices[0];
+    if (!choice) {
+      const msg = '応答を生成できませんでした。';
+      onEvent({ type: 'done', content: msg });
+      return msg;
+    }
+
+    const assistantMessage = choice.message;
+
+    // Function call がない場合、ストリーミングで最終応答を生成
+    if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      break;
+    }
+
+    // Function call を処理
+    allMessages.push(assistantMessage);
+
+    for (const toolCall of assistantMessage.tool_calls) {
+      if (toolCall.type !== 'function') continue;
+      functionCallCount++;
+      const fn = toolCall.function as { name: string; arguments: string };
+      const functionName = fn.name;
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(fn.arguments);
+      } catch {
+        args = {};
+      }
+
+      onEvent({ type: 'status', message: `データを取得中（${functionName}）...` });
+      const result = await executeFunctionCall(functionName, args, user);
+
+      allMessages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: result,
+      });
+    }
+  }
+
+  if (functionCallCount >= MAX_FUNCTION_CALLS) {
+    const msg = '処理が複雑すぎるため、質問を絞って再度お試しください。';
+    onEvent({ type: 'done', content: msg });
+    return msg;
+  }
+
+  // 最終応答をストリーミングで生成
+  onEvent({ type: 'status', message: '回答を生成中...' });
+
+  const stream = await client.chat.completions.create({
+    model,
+    messages: allMessages,
+    tools: aiFunctions,
+    tool_choice: 'none',
+    temperature: 0.3,
+    max_tokens: 2000,
+    stream: true,
+  });
+
+  let fullContent = '';
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) {
+      fullContent += delta;
+      onEvent({ type: 'delta', content: delta });
+    }
+  }
+
+  if (!fullContent) {
+    fullContent = '応答を生成できませんでした。';
+  }
+
+  onEvent({ type: 'done', content: fullContent });
+  return fullContent;
 }
 
 /**

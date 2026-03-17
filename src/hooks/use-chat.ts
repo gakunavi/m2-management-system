@@ -1,12 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type {
   ChatConversationItem,
   ChatConversationDetail,
-  ChatResponse,
 } from '@/types/chat';
 
 // ============================================
@@ -35,43 +34,128 @@ export function useChatConversation(conversationId: number | null) {
 }
 
 // ============================================
-// チャット送信フック
+// チャット送信フック（SSE ストリーミング対応）
 // ============================================
 
-export function useChat() {
+interface SendParams {
+  message: string;
+  conversationId?: number;
+  businessId?: number;
+}
+
+interface StreamCallbacks {
+  onDelta?: (chunk: string) => void;
+  onStatus?: (message: string) => void;
+  onDone?: (fullContent: string, conversationId: number) => void;
+  onError?: (message: string) => void;
+}
+
+export function useChat(callbacks?: StreamCallbacks) {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const sendMessage = useMutation({
-    mutationFn: async (params: {
-      message: string;
-      conversationId?: number;
-      businessId?: number;
-    }) => {
+  const sendMessage = useCallback(
+    async (params: SendParams): Promise<{ conversationId: number }> => {
       setIsLoading(true);
-      const res = await apiClient.create<ChatResponse>('/ai/chat', params);
-      return res;
-    },
-    onSuccess: (data) => {
-      // 会話一覧を更新
-      queryClient.invalidateQueries({ queryKey: ['ai-conversations'] });
-      // 会話詳細を更新
-      if (data.conversationId) {
-        queryClient.invalidateQueries({
-          queryKey: ['ai-conversation', data.conversationId],
+      setStatusMessage(null);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      let resolvedConversationId = params.conversationId ?? 0;
+
+      try {
+        const response = await fetch('/api/v1/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params),
+          signal: controller.signal,
         });
+
+        // SSEでない場合（認証エラー等）はJSONレスポンス
+        const contentType = response.headers.get('Content-Type') ?? '';
+        if (!contentType.includes('text/event-stream')) {
+          const json = await response.json();
+          const errMsg = json?.error?.message ?? 'エラーが発生しました';
+          throw new Error(errMsg);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('ストリームを取得できませんでした');
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          // 最後の不完全行をバッファに残す
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr) continue;
+
+            try {
+              const event = JSON.parse(jsonStr);
+              switch (event.type) {
+                case 'init':
+                  resolvedConversationId = event.conversationId;
+                  break;
+                case 'status':
+                  setStatusMessage(event.message);
+                  callbacks?.onStatus?.(event.message);
+                  break;
+                case 'delta':
+                  setStatusMessage(null);
+                  callbacks?.onDelta?.(event.content);
+                  break;
+                case 'done':
+                  callbacks?.onDone?.(event.content, resolvedConversationId);
+                  break;
+                case 'error':
+                  callbacks?.onError?.(event.message);
+                  break;
+              }
+            } catch {
+              // JSONパースエラーは無視
+            }
+          }
+        }
+
+        // キャッシュ更新
+        queryClient.invalidateQueries({ queryKey: ['ai-conversations'] });
+        if (resolvedConversationId) {
+          queryClient.invalidateQueries({
+            queryKey: ['ai-conversation', resolvedConversationId],
+          });
+        }
+
+        return { conversationId: resolvedConversationId };
+      } finally {
+        setIsLoading(false);
+        setStatusMessage(null);
+        abortRef.current = null;
       }
     },
-    onSettled: () => {
-      setIsLoading(false);
-    },
-  });
+    [callbacks, queryClient],
+  );
+
+  const abort = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   return {
-    sendMessage: sendMessage.mutate,
-    sendMessageAsync: sendMessage.mutateAsync,
+    sendMessage,
     isLoading,
-    error: sendMessage.error,
+    statusMessage,
+    abort,
   };
 }
 

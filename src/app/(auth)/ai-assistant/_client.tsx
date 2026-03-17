@@ -34,11 +34,12 @@ export function AiAssistantClient() {
   const { toast } = useToast();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [pendingMessages, setPendingMessages] = useState<ChatMessageItem[]>([]);
+  // ストリーミング中のアシスタント応答
+  const [streamingContent, setStreamingContent] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { selectedBusinessId, businesses } = useBusiness();
 
   // AI用の事業コンテキスト（サイドバー選択をデフォルトに、独立して切替可能）
-  // "all" = 全事業、数値文字列 = 特定事業ID
   const [aiBusinessValue, setAiBusinessValue] = useState<string>('__init__');
 
   // サイドバー選択をデフォルトとして初期化（初回のみ）
@@ -62,10 +63,35 @@ export function AiAssistantClient() {
   const isConfigured = aiStatus?.configured ?? false;
   const isAdmin = aiStatus?.isAdmin ?? false;
 
+  // ストリーミングコールバック
+  const { sendMessage, isLoading: chatLoading, statusMessage } = useChat({
+    onDelta: (chunk) => {
+      setStreamingContent((prev) => prev + chunk);
+    },
+    onDone: () => {
+      // ストリーミング完了 → pendingとstreamingをクリア（DBから再取得される）
+      setStreamingContent('');
+      setPendingMessages([]);
+    },
+    onError: (msg) => {
+      setStreamingContent('');
+      setPendingMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: `エラーが発生しました: ${msg}`,
+          tableData: null,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      toast({ message: 'メッセージの送信に失敗しました', type: 'error' });
+    },
+  });
+
   // データフェッチ
   const { data: conversations, isLoading: convLoading } = useChatConversations();
   const { data: conversationDetail } = useChatConversation(activeConversationId);
-  const { sendMessageAsync, isLoading: chatLoading } = useChat();
   const deleteConversation = useDeleteConversation();
 
   // 表示するメッセージ
@@ -75,11 +101,12 @@ export function AiAssistantClient() {
   // スクロール追従
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [allMessages.length]);
+  }, [allMessages.length, streamingContent]);
 
-  // 会話切り替え時にpendingをクリアし、会話の事業コンテキストを復元
+  // 会話切り替え時にpendingをクリア
   useEffect(() => {
     setPendingMessages([]);
+    setStreamingContent('');
   }, [activeConversationId]);
 
   // 既存会話を選択した際、その会話の事業コンテキストを復元
@@ -104,42 +131,30 @@ export function AiAssistantClient() {
         createdAt: new Date().toISOString(),
       };
       setPendingMessages((prev) => [...prev, userMsg]);
+      setStreamingContent('');
 
       try {
-        const response = await sendMessageAsync({
+        const result = await sendMessage({
           message,
           conversationId: activeConversationId ?? undefined,
           businessId: aiBusinessId,
         });
 
         // 新規会話の場合、IDをセット
-        if (!activeConversationId && response.conversationId) {
-          setActiveConversationId(response.conversationId);
+        if (!activeConversationId && result.conversationId) {
+          setActiveConversationId(result.conversationId);
         }
-
-        // pendingをクリア（DBから再取得される）
-        setPendingMessages([]);
       } catch {
-        // エラー時はアシスタントエラーメッセージを追加
-        setPendingMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now() + 1,
-            role: 'assistant',
-            content: 'エラーが発生しました。しばらく待ってから再度お試しください。',
-            tableData: null,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
         toast({ message: 'メッセージの送信に失敗しました', type: 'error' });
       }
     },
-    [activeConversationId, aiBusinessId, sendMessageAsync, toast],
+    [activeConversationId, aiBusinessId, sendMessage, toast],
   );
 
   const handleNewConversation = useCallback(() => {
     setActiveConversationId(null);
     setPendingMessages([]);
+    setStreamingContent('');
   }, []);
 
   const handleDeleteConversation = useCallback(
@@ -244,7 +259,7 @@ export function AiAssistantClient() {
 
         {/* メッセージエリア */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {allMessages.length === 0 ? (
+          {allMessages.length === 0 && !streamingContent ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <Bot className="h-12 w-12 mb-4 opacity-30" />
               <p className="text-sm font-medium mb-1">AIアシスタント</p>
@@ -272,13 +287,28 @@ export function AiAssistantClient() {
               </div>
             </div>
           ) : (
-            allMessages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
-            ))
+            <>
+              {allMessages.map((msg) => (
+                <ChatMessage key={msg.id} message={msg} />
+              ))}
+
+              {/* ストリーミング中のアシスタント応答 */}
+              {streamingContent && (
+                <ChatMessage
+                  message={{
+                    id: -1,
+                    role: 'assistant',
+                    content: streamingContent,
+                    tableData: null,
+                    createdAt: new Date().toISOString(),
+                  }}
+                />
+              )}
+            </>
           )}
 
-          {/* ローディングインジケーター */}
-          {chatLoading && pendingMessages.length > 0 && (
+          {/* ステータス表示（データ取得中等） */}
+          {chatLoading && statusMessage && !streamingContent && (
             <div className="flex gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
                 <Bot className="h-4 w-4" />
@@ -286,7 +316,22 @@ export function AiAssistantClient() {
               <div className="rounded-lg bg-muted px-4 py-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  回答を生成中...
+                  {statusMessage}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ローディングインジケーター（初期状態、ストリーム開始前） */}
+          {chatLoading && !statusMessage && !streamingContent && pendingMessages.length > 0 && (
+            <div className="flex gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                <Bot className="h-4 w-4" />
+              </div>
+              <div className="rounded-lg bg-muted px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  回答を準備中...
                 </div>
               </div>
             </div>
