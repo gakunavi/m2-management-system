@@ -54,6 +54,7 @@ model User {
   updater             User?                    @relation("UserUpdatedBy", fields: [updatedBy], references: [id])
   updatedUsers        User[]                   @relation("UserUpdatedBy")
   partner             Partner?                 @relation("UserPartner", fields: [userPartnerId], references: [id])
+  chatConversations   ChatConversation[]
 
   @@index([userRole])
   @@index([userIsActive])
@@ -89,6 +90,7 @@ model Business {
   qaItems                     QaItem[]
   documents                   BusinessDocument[]
   announcements                Announcement[]
+  chatConversations            ChatConversation[]
 
   @@index([businessIsActive, businessSortOrder])
   @@index([businessCode, businessIsActive], map: "idx_businesses_code_active")
@@ -780,4 +782,50 @@ model Announcement {
   @@index([publishedAt(sort: Desc)])
   @@index([targetScope, publishedAt(sort: Desc)])
   @@map("announcements")
+}
+
+// ============================================
+// AI アシスタント
+// ============================================
+
+model ChatConversation {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  businessId Int?     @map("business_id")
+  title      String?  @db.VarChar(200)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             Int      @id @default(autoincrement())
+  conversationId Int      @map("conversation_id")
+  role           String   @db.VarChar(20)
+  content        String   @db.Text
+  tableData      Json?    @map("table_data")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model SystemSetting {
+  id              Int      @id @default(autoincrement())
+  settingKey      String   @unique @map("setting_key") @db.VarChar(100)
+  settingValue    String   @map("setting_value") @db.Text
+  isEncrypted     Boolean  @default(false) @map("is_encrypted")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy       Int?     @map("updated_by")
+
+  @@map("system_settings")
 }
