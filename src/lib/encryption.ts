@@ -6,7 +6,6 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypt
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
-const AUTH_TAG_LENGTH = 16;
 
 /**
  * 暗号化キーを取得（環境変数 or NEXTAUTH_SECRET から派生）
