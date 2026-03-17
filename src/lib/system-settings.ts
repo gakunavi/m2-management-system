@@ -26,12 +26,22 @@ export async function getSystemSetting(key: string): Promise<string | null> {
     });
 
     if (setting) {
-      const value = setting.isEncrypted ? decrypt(setting.settingValue) : setting.settingValue;
+      let value: string;
+      if (setting.isEncrypted) {
+        try {
+          value = decrypt(setting.settingValue);
+        } catch (decryptError) {
+          console.error(`[system-settings] Failed to decrypt key="${key}":`, decryptError);
+          return null;
+        }
+      } else {
+        value = setting.settingValue;
+      }
       cache.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
       return value;
     }
-  } catch {
-    // DB取得失敗
+  } catch (dbError) {
+    console.error(`[system-settings] DB error for key="${key}":`, dbError);
   }
 
   return null;

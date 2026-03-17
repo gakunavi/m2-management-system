@@ -80,6 +80,14 @@ async function getOpenAIClient(): Promise<OpenAI> {
   if (!apiKey) {
     throw new AiNotConfiguredError();
   }
+
+  // APIキーのバリデーション（非ASCII文字が含まれていないか確認）
+  // eslint-disable-next-line no-control-regex
+  if (!/^[\x00-\x7F]+$/.test(apiKey)) {
+    console.error('[ai] API key contains non-ASCII characters - likely decryption failure');
+    throw new AiNotConfiguredError();
+  }
+
   return new OpenAI({ apiKey });
 }
 

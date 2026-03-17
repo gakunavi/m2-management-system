@@ -130,6 +130,11 @@ export async function PUT(request: Request) {
         continue;
       }
 
+      // APIキーのバリデーション
+      if (def.key === 'openai_api_key' && !/^sk-/.test(setting.value)) {
+        throw ApiError.badRequest('APIキーは sk- で始まる形式で入力してください');
+      }
+
       const valueToStore = def.isEncrypted ? encrypt(setting.value) : setting.value;
 
       await prisma.systemSetting.upsert({
