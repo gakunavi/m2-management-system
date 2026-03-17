@@ -55,6 +55,17 @@ export async function POST(request: NextRequest) {
         select: { id: true, businessId: true },
       });
       if (!existing) throw ApiError.notFound('会話が見つかりません');
+
+      // 事業コンテキストが変更された場合、会話に反映
+      const newBusinessId = businessId ?? null;
+      if (existing.businessId !== newBusinessId) {
+        await prisma.chatConversation.update({
+          where: { id: existing.id },
+          data: { businessId: newBusinessId },
+        });
+        existing.businessId = newBusinessId;
+      }
+
       conversation = existing;
     } else {
       conversation = await prisma.chatConversation.create({
@@ -96,6 +107,20 @@ export async function POST(request: NextRequest) {
     }));
 
     // ============================================
+    // 事業コンテキストの解決
+    // ============================================
+
+    let businessName: string | null = null;
+    const resolvedBusinessId = conversation.businessId ?? businessId ?? null;
+    if (resolvedBusinessId) {
+      const biz = await prisma.business.findUnique({
+        where: { id: resolvedBusinessId },
+        select: { businessName: true },
+      });
+      businessName = biz?.businessName ?? null;
+    }
+
+    // ============================================
     // OpenAI に送信して応答取得
     // ============================================
 
@@ -104,6 +129,8 @@ export async function POST(request: NextRequest) {
       role: user.role,
       partnerId: user.partnerId,
       name: user.name,
+      businessId: resolvedBusinessId,
+      businessName,
     });
 
     // ============================================

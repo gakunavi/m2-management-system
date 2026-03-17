@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Loader2, Settings, AlertCircle } from 'lucide-react';
+import { Bot, Loader2, Settings, AlertCircle, Building2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +17,13 @@ import {
 import { useBusiness } from '@/hooks/use-business';
 import { apiClient } from '@/lib/api-client';
 import type { ChatMessageItem } from '@/types/chat';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface AiStatus {
   configured: boolean;
@@ -28,7 +35,22 @@ export function AiAssistantClient() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [pendingMessages, setPendingMessages] = useState<ChatMessageItem[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { selectedBusinessId } = useBusiness();
+  const { selectedBusinessId, businesses } = useBusiness();
+
+  // AI用の事業コンテキスト（サイドバー選択をデフォルトに、独立して切替可能）
+  // "all" = 全事業、数値文字列 = 特定事業ID
+  const [aiBusinessValue, setAiBusinessValue] = useState<string>('__init__');
+
+  // サイドバー選択をデフォルトとして初期化（初回のみ）
+  useEffect(() => {
+    if (aiBusinessValue === '__init__') {
+      setAiBusinessValue(selectedBusinessId !== null ? String(selectedBusinessId) : 'all');
+    }
+  }, [selectedBusinessId, aiBusinessValue]);
+
+  const aiBusinessId = aiBusinessValue === 'all' || aiBusinessValue === '__init__'
+    ? undefined
+    : Number(aiBusinessValue);
 
   // AI設定状態チェック
   const { data: aiStatus, isLoading: statusLoading } = useQuery<AiStatus>({
@@ -55,10 +77,21 @@ export function AiAssistantClient() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [allMessages.length]);
 
-  // 会話切り替え時にpendingをクリア
+  // 会話切り替え時にpendingをクリアし、会話の事業コンテキストを復元
   useEffect(() => {
     setPendingMessages([]);
   }, [activeConversationId]);
+
+  // 既存会話を選択した際、その会話の事業コンテキストを復元
+  useEffect(() => {
+    if (conversationDetail) {
+      setAiBusinessValue(
+        conversationDetail.businessId !== null
+          ? String(conversationDetail.businessId)
+          : 'all',
+      );
+    }
+  }, [conversationDetail]);
 
   const handleSend = useCallback(
     async (message: string) => {
@@ -76,7 +109,7 @@ export function AiAssistantClient() {
         const response = await sendMessageAsync({
           message,
           conversationId: activeConversationId ?? undefined,
-          businessId: selectedBusinessId ?? undefined,
+          businessId: aiBusinessId,
         });
 
         // 新規会話の場合、IDをセット
@@ -101,7 +134,7 @@ export function AiAssistantClient() {
         toast({ message: 'メッセージの送信に失敗しました', type: 'error' });
       }
     },
-    [activeConversationId, selectedBusinessId, sendMessageAsync, toast],
+    [activeConversationId, aiBusinessId, sendMessageAsync, toast],
   );
 
   const handleNewConversation = useCallback(() => {
@@ -185,9 +218,28 @@ export function AiAssistantClient() {
           <h2 className="font-semibold text-sm">
             {conversationDetail?.title ?? 'AIアシスタント'}
           </h2>
-          {chatLoading && (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground ml-auto" />
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={aiBusinessValue === '__init__' ? 'all' : aiBusinessValue}
+              onValueChange={setAiBusinessValue}
+            >
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue placeholder="事業を選択" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全事業</SelectItem>
+                {businesses.map((b) => (
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.businessName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {chatLoading && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
         </div>
 
         {/* メッセージエリア */}

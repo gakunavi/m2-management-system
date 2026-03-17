@@ -65,6 +65,8 @@ interface UserContext {
   role: string;
   partnerId?: number | null;
   name: string;
+  businessId?: number | null;
+  businessName?: string | null;
 }
 
 interface AiResponse {
@@ -126,7 +128,11 @@ export async function processChat(
 
   const systemMessage: ChatCompletionMessageParam = {
     role: 'system',
-    content: getSystemPrompt(user.name),
+    content: getSystemPrompt({
+      userName: user.name,
+      businessName: user.businessName,
+      businessId: user.businessId,
+    }),
   };
 
   const allMessages: ChatCompletionMessageParam[] = [systemMessage, ...messages];
