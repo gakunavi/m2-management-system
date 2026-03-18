@@ -677,7 +677,7 @@ function TaskListView({
 
   const SortHeader = ({ field, label }: { field: string; label: string }) => (
     <div
-      className="cursor-pointer px-3 py-2 hover:text-foreground"
+      className="cursor-pointer px-3 py-2 hover:text-foreground whitespace-nowrap"
       onClick={() => handleSortClick(field)}
     >
       <span className="flex items-center gap-1">
@@ -705,7 +705,7 @@ function TaskListView({
     );
   }
 
-  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(180px,1fr)_96px_64px_72px_92px_minmax(80px,160px)_64px_84px]';
+  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(180px,1fr)_80px_56px_80px_96px_minmax(80px,160px)_72px_84px]';
 
   return (
     <div>
@@ -733,8 +733,8 @@ function TaskListView({
             <SortHeader field="priority" label="優先度" />
             <SortHeader field="assigneeId" label="担当者" />
             <SortHeader field="dueDate" label="期限" />
-            <div className="px-3 py-2">タグ</div>
-            <div className="px-2 py-2 text-center">アーカイブ</div>
+            <div className="px-3 py-2 whitespace-nowrap">タグ</div>
+            <div className="px-2 py-2 text-center whitespace-nowrap">アーカイブ</div>
             <SortHeader field="updatedAt" label="更新日" />
           </div>
           {/* スクロール可能なボディ（ヘッダーとは分離） */}
@@ -903,17 +903,17 @@ function ParentTaskRow({
           )}
         </div>
       </div>
-      <div className="px-3 py-2">
+      <div className="px-3 py-2 whitespace-nowrap">
         <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
           {statusOpt?.label ?? task.status}
         </span>
       </div>
-      <div className="px-3 py-2">
+      <div className="px-3 py-2 whitespace-nowrap">
         <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: priorityOpt?.color ?? '#94a3b8' }}>
           {priorityOpt?.label ?? task.priority}
         </span>
       </div>
-      <div className="px-3 py-2 truncate">{task.assigneeName ?? '-'}</div>
+      <div className="px-3 py-2 truncate whitespace-nowrap">{task.assigneeName ?? '-'}</div>
       <div className={`px-3 py-2 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
       <div className="px-3 py-2">
         <div className="flex flex-wrap gap-1">
@@ -974,13 +974,13 @@ function ChildTaskRow({
           )}
         </div>
       </div>
-      <div className="px-3 py-1.5">
+      <div className="px-3 py-1.5 whitespace-nowrap">
         <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
           {statusOpt?.label ?? task.status}
         </span>
       </div>
-      <div className="px-3 py-1.5 text-xs text-muted-foreground">—</div>
-      <div className="px-3 py-1.5 truncate">{task.assigneeName ?? '-'}</div>
+      <div className="px-3 py-1.5 whitespace-nowrap text-xs text-muted-foreground">—</div>
+      <div className="px-3 py-1.5 truncate whitespace-nowrap">{task.assigneeName ?? '-'}</div>
       <div className={`px-3 py-1.5 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
       <div className="px-3 py-1.5" />
       <div className="px-2 py-1.5 text-center">
