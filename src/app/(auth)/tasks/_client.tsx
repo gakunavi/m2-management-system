@@ -44,7 +44,8 @@ export function TasksClient() {
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
-  const [assigneeFilter, setAssigneeFilter] = useState<string>('');
+  const [assigneeFilter, setAssigneeFilter] = useState<number | null>(null);
+  const [assigneeSearchText, setAssigneeSearchText] = useState('');
   const [tagFilter, setTagFilter] = useState<number[]>([]);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -66,12 +67,13 @@ export function TasksClient() {
     scope,
     businessId: scope === 'business' ? currentBusiness?.id : undefined,
     boardId: scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
-    status: statusFilter.length > 0 ? statusFilter.join(',') : (!showArchived ? 'todo,in_progress,on_hold' : undefined),
+    status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
     priority: priorityFilter.length > 0 ? priorityFilter.join(',') : undefined,
-    assigneeId: assigneeFilter ? Number(assigneeFilter) : undefined,
+    assigneeId: assigneeFilter ?? undefined,
+    showArchived: showArchived ? 'true' : undefined,
     tagIds: tagFilter.length > 0 ? tagFilter.join(',') : undefined,
     parentOnly: viewMode !== 'list' ? true : undefined,
-  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, assigneeFilter, tagFilter, viewMode, showArchived]);
+  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, assigneeFilter, tagFilter, viewMode, showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: taskData, isLoading } = useTaskList(listParams);
   const { data: tags } = useTaskTags();
@@ -244,26 +246,23 @@ export function TasksClient() {
           />
         )}
 
-        {/* 担当者フィルター（テキスト入力でユーザーID/名前） */}
-        <div className="relative">
-          <input
-            type="text"
-            value={assigneeFilter}
-            onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
-            placeholder="担当者ID"
-            className="w-24 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-          />
-        </div>
+        {/* 担当者フィルター（ユーザー名検索） */}
+        <AssigneeFilter
+          value={assigneeFilter}
+          searchText={assigneeSearchText}
+          onSearchChange={setAssigneeSearchText}
+          onChange={(id) => { setAssigneeFilter(id); setPage(1); }}
+        />
 
         {/* アーカイブ表示トグル */}
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
           <input
             type="checkbox"
             checked={showArchived}
             onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
             className="accent-primary"
           />
-          完了含む
+          アーカイブを表示
         </label>
 
         {/* フィルタークリア */}
@@ -272,7 +271,8 @@ export function TasksClient() {
             onClick={() => {
               setStatusFilter([]);
               setPriorityFilter([]);
-              setAssigneeFilter('');
+              setAssigneeFilter(null);
+              setAssigneeSearchText('');
               setTagFilter([]);
               setSearch('');
               setPage(1);
@@ -744,6 +744,81 @@ function MultiSelectFilter({
                 </button>
               );
             })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// 担当者フィルター（ユーザー名検索）
+// ============================================
+
+function AssigneeFilter({
+  value,
+  searchText,
+  onSearchChange,
+  onChange,
+}: {
+  value: number | null;
+  searchText: string;
+  onSearchChange: (text: string) => void;
+  onChange: (id: number | null) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [users, setUsers] = useState<{ id: number; userName: string }[]>([]);
+
+  const handleSearch = async (q: string) => {
+    onSearchChange(q);
+    if (q.length < 1) { setUsers([]); return; }
+    try {
+      const res = await fetch(`/api/v1/users?search=${encodeURIComponent(q)}&pageSize=10`);
+      const json = await res.json();
+      setUsers((json.data ?? []).map((u: { id: number; userName: string }) => ({ id: u.id, userName: u.userName })));
+    } catch {
+      setUsers([]);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={searchText}
+          onChange={(e) => { handleSearch(e.target.value); setIsOpen(true); }}
+          onFocus={() => searchText.length >= 1 && setIsOpen(true)}
+          placeholder="担当者"
+          className={`w-28 rounded-md border px-2 py-1.5 text-sm ${value ? 'border-primary bg-primary/5 text-primary' : 'border-input bg-background'}`}
+        />
+        {value && (
+          <button onClick={() => { onChange(null); onSearchChange(''); }} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && users.length > 0 && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] max-h-[200px] overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+            {users.map((u) => (
+              <button
+                key={u.id}
+                onClick={() => {
+                  onChange(u.id);
+                  onSearchChange(u.userName);
+                  setIsOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
+                  {u.userName.charAt(0)}
+                </div>
+                {u.userName}
+              </button>
+            ))}
           </div>
         </>
       )}

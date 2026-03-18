@@ -40,6 +40,7 @@ export interface TaskListParams {
   relatedEntityType?: string;
   relatedEntityId?: number;
   parentOnly?: boolean;
+  showArchived?: string;
 }
 
 function buildTaskQueryString(params: TaskListParams): string {
@@ -60,6 +61,7 @@ function buildTaskQueryString(params: TaskListParams): string {
   if (params.relatedEntityType) sp.set('relatedEntityType', params.relatedEntityType);
   if (params.relatedEntityId) sp.set('relatedEntityId', String(params.relatedEntityId));
   if (params.parentOnly) sp.set('parentOnly', 'true');
+  if (params.showArchived) sp.set('showArchived', params.showArchived);
   return sp.toString();
 }
 

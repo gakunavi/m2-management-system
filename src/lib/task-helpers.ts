@@ -54,6 +54,7 @@ export const createTaskSchema = z.object({
   relatedEntityId: z.number().int().positive().optional().nullable(),
   notifyLevel: z.enum(['none', 'in_app', 'in_app_and_email']).default('in_app'),
   memo: z.string().max(5000).optional().nullable(),
+  taskUrl: z.string().url().max(500).optional().nullable().or(z.literal('')),
   notifyTargetUserIds: z.array(z.number().int().positive()).default([]),
   tagIds: z.array(z.number().int().positive()).default([]),
 });
@@ -62,6 +63,8 @@ export const updateTaskSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).optional().nullable(),
   memo: z.string().max(5000).optional().nullable(),
+  taskUrl: z.string().url().max(500).optional().nullable().or(z.literal('')),
+  isArchived: z.boolean().optional(),
   status: z.enum(['todo', 'in_progress', 'done', 'on_hold']).optional(),
   priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
   dueDate: z.string().optional().nullable(),
@@ -134,6 +137,8 @@ export function formatTaskListItem(task: any) {
     relatedEntityType: task.relatedEntityType,
     relatedEntityId: task.relatedEntityId,
     notifyLevel: task.notifyLevel,
+    taskUrl: task.taskUrl ?? null,
+    isArchived: task.isArchived ?? false,
     tags: (task.tags ?? []).map((tt: { tag: { id: number; name: string; color: string } }) => ({
       id: tt.tag.id,
       name: tt.tag.name,

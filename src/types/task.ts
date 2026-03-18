@@ -47,6 +47,8 @@ export interface TaskListItem {
   relatedEntityType: string | null;
   relatedEntityId: number | null;
   notifyLevel: TaskNotifyLevel;
+  taskUrl: string | null;
+  isArchived: boolean;
   tags: { id: number; name: string; color: string }[];
   childrenCount: number;
   childrenDoneCount: number;

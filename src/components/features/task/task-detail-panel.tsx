@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight } from 'lucide-react';
+import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight, ExternalLink, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTaskDetail, useTaskMutations } from '@/hooks/use-tasks';
 import { TaskChecklist } from './task-checklist';
@@ -25,20 +25,19 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
   const currentTaskId = navigationStack[navigationStack.length - 1];
 
   const { data: task, isLoading } = useTaskDetail(currentTaskId);
-  // パンくず表示用: 親タスクの情報を取得（子タスク表示中のみ）
-  const parentTaskIdForBreadcrumb = navigationStack.length > 1 ? navigationStack[0] : null;
-  const { data: parentTask } = useTaskDetail(parentTaskIdForBreadcrumb);
+  // パンくず表示用: 親タスクの情報を取得
+  // ケース1: パネル内遷移（navigationStack > 1）→ stack[0]が親
+  // ケース2: 一覧からサブタスクを直接選択（task.parentTaskId があるが stack は1つ）
+  const parentIdForBreadcrumb = navigationStack.length > 1
+    ? navigationStack[0]
+    : (task?.parentTaskId ?? null);
+  const { data: parentTask } = useTaskDetail(parentIdForBreadcrumb);
   const { updateTask, deleteTask } = useTaskMutations();
   const [isDeleting, setIsDeleting] = useState(false);
 
   // 子タスクに遷移
   const navigateToChild = useCallback((childId: number) => {
     setNavigationStack((prev) => [...prev, childId]);
-  }, []);
-
-  // パンくずクリックで戻る
-  const navigateBack = useCallback((index: number) => {
-    setNavigationStack((prev) => prev.slice(0, index + 1));
   }, []);
 
   const handleFieldUpdate = useCallback(
@@ -121,7 +120,8 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
   }
 
   const statusOpt = TASK_STATUS_OPTIONS.find((o) => o.value === task.status);
-  const isChildView = navigationStack.length > 1;
+  // サブタスクかどうか（パネル内遷移 OR 一覧から直接選択）
+  const isSubtaskView = navigationStack.length > 1 || !!task.parentTaskId;
 
   return (
     <>
@@ -132,15 +132,19 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
       <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg overflow-y-auto border-l bg-background shadow-xl">
         {/* ヘッダー + パンくず */}
         <div className="sticky top-0 z-10 border-b bg-background">
-          {/* パンくずナビゲーション（子タスク表示時） */}
-          {isChildView && (
+          {/* パンくずナビゲーション（サブタスク表示時） */}
+          {isSubtaskView && (
             <div className="flex items-center gap-1.5 border-b px-4 py-2 text-xs bg-muted/30">
               {/* 親タスクリンク */}
               <button
-                onClick={() => navigateBack(0)}
+                onClick={() => {
+                  if (parentIdForBreadcrumb) {
+                    setNavigationStack([parentIdForBreadcrumb]);
+                  }
+                }}
                 className="flex items-center gap-1 text-primary hover:underline font-medium"
               >
-                {parentTask?.taskNo ?? `#${navigationStack[0]}`}
+                {parentTask?.taskNo ?? ''}
                 <span className="text-muted-foreground font-normal truncate max-w-[150px]">
                   {parentTask?.title ?? ''}
                 </span>
@@ -163,9 +167,9 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
               >
                 {statusOpt?.label ?? task.status}
               </span>
-              {isChildView && (
+              {isSubtaskView && (
                 <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
-                  子タスク
+                  サブタスク
                 </span>
               )}
             </div>
@@ -250,6 +254,55 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
               <span className="font-medium">#{task.relatedEntityId}</span>
             </div>
           )}
+
+          {/* URL */}
+          <div>
+            <label className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <ExternalLink className="h-3 w-3" />
+              URL
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="url"
+                defaultValue={task.taskUrl ?? ''}
+                key={`url-${currentTaskId}-${task.version}`}
+                onBlur={(e) => {
+                  if (e.target.value !== (task.taskUrl ?? '')) {
+                    handleFieldUpdate('taskUrl', e.target.value || null);
+                  }
+                }}
+                className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                placeholder="https://..."
+              />
+              {task.taskUrl && (
+                <a
+                  href={task.taskUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md border border-input px-2 py-1.5 text-xs text-primary hover:bg-primary/5"
+                >
+                  開く
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* アーカイブ */}
+          <div className="flex items-center gap-2">
+            <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={task.isArchived}
+                onChange={(e) => handleFieldUpdate('isArchived', e.target.checked)}
+                className="accent-primary"
+              />
+              アーカイブ
+            </label>
+            {task.isArchived && (
+              <span className="text-xs text-muted-foreground">（一覧から非表示）</span>
+            )}
+          </div>
 
           {/* タグ */}
           <div>

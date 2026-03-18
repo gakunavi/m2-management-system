@@ -861,6 +861,8 @@ model Task {
   relatedEntityId   Int?      @map("related_entity_id")
   notifyLevel       String    @default("in_app") @map("notify_level") @db.VarChar(20)
   memo              String?   @map("memo") @db.Text
+  taskUrl           String?   @map("task_url") @db.VarChar(500)
+  isArchived        Boolean   @default(false) @map("is_archived")
   completedAt       DateTime? @map("completed_at") @db.Timestamptz(6)
   version           Int       @default(1)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -881,6 +883,7 @@ model Task {
   @@index([parentTaskId])
   @@index([relatedEntityType, relatedEntityId])
   @@index([status, dueDate])
+  @@index([isArchived, status])
   @@map("tasks")
 }
 
