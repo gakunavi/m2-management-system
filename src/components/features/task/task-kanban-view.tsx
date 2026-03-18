@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -502,6 +502,14 @@ export function TaskKanbanView({
     buildColumnItems(tasks, sortedColumns),
   );
 
+  // refで最新のcolumnItemsを保持（コールバック内でstale closureを防ぐ）
+  const columnItemsRef = useRef(columnItems);
+  columnItemsRef.current = columnItems;
+
+  // refで最新のonReorderを保持
+  const onReorderRef = useRef(onReorder);
+  onReorderRef.current = onReorder;
+
   // propsのtasks/columnsが変わったらカラムを再構築
   const [prevTasks, setPrevTasks] = useState(tasks);
   const [prevColumns, setPrevColumns] = useState(columns);
@@ -525,14 +533,17 @@ export function TaskKanbanView({
       const activeItemId = active.id as string;
       const overId = over.id as string;
 
+      // refから最新のcolumnItemsを取得（stale closure防止）
+      const currentItems = columnItemsRef.current;
+
       // ドラッグ元カラムを特定
-      const sourceColId = findColumnIdForItem(columnItems, activeItemId);
+      const sourceColId = findColumnIdForItem(currentItems, activeItemId);
       if (sourceColId === undefined) return;
 
       // オーバー先: カラムDnD IDか、別カラムのアイテムIDか判定
       const targetColId = isColumnDndId(overId)
         ? dndIdToColumnId(overId)
-        : findColumnIdForItem(columnItems, overId);
+        : findColumnIdForItem(currentItems, overId);
 
       if (targetColId === undefined) return;
 
@@ -578,7 +589,7 @@ export function TaskKanbanView({
         };
       });
     },
-    [columnItems],
+    [], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const handleDragEnd = useCallback(
@@ -591,20 +602,11 @@ export function TaskKanbanView({
       const activeItemId = active.id as string;
       const overId = over.id as string;
 
-      const currentColId = findColumnIdForItem(columnItems, activeItemId);
-      if (currentColId === undefined) return;
-
-      const targetColId = isColumnDndId(overId)
-        ? dndIdToColumnId(overId)
-        : findColumnIdForItem(columnItems, overId);
-
-      if (targetColId === undefined) return;
-
       // handleDragOverで既にUI更新済み。最終状態をAPIに送信
-      const allReorderItems = buildReorderPayload(columnItems);
-      onReorder(allReorderItems);
+      const allReorderItems = buildReorderPayload(columnItemsRef.current);
+      onReorderRef.current(allReorderItems);
     },
-    [columnItems, onReorder],
+    [], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (
