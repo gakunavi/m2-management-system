@@ -28,7 +28,6 @@ const PipelineChart = dynamic(
 );
 import { BusinessSummaryList } from '@/components/features/dashboard/business-summary-list';
 import { PartnerRanking } from '@/components/features/dashboard/partner-ranking';
-import { ActivityFeed } from '@/components/features/dashboard/activity-feed';
 import { KpiTabSelector } from '@/components/features/dashboard/kpi-tab-selector';
 import { BusinessDocumentSection } from '@/components/features/dashboard/business-document-section';
 import { AnnouncementBanner } from '@/components/features/announcement/announcement-banner';
@@ -38,7 +37,6 @@ import type {
   RevenueTrendResponse,
   PipelineResponse,
   PartnerRankingResponse,
-  ActivityResponse,
   KpiDefinition,
 } from '@/types/dashboard';
 
@@ -191,11 +189,7 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
       ),
   });
 
-  const { data: activity, isLoading: activityLoading } = useQuery({
-    queryKey: ['dashboard', 'activity', businessId],
-    queryFn: () =>
-      apiClient.get<ActivityResponse>(`/dashboard/activity?businessId=${businessId}`),
-  });
+
 
   const currentKpi = kpiDefinitions.find((k) => k.key === selectedKpiKey);
 
@@ -236,8 +230,6 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
         <PipelineChart data={pipeline} isLoading={pipelineLoading} />
         <PartnerRanking data={ranking} isLoading={rankingLoading} />
       </div>
-
-      <ActivityFeed data={activity} isLoading={activityLoading} />
 
       <TaskDashboardWidget />
 
