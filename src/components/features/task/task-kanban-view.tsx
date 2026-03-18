@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -502,14 +502,6 @@ export function TaskKanbanView({
     buildColumnItems(tasks, sortedColumns),
   );
 
-  // refで最新のcolumnItemsを保持（コールバック内でstale closureを防ぐ）
-  const columnItemsRef = useRef(columnItems);
-  columnItemsRef.current = columnItems;
-
-  // refで最新のonReorderを保持
-  const onReorderRef = useRef(onReorder);
-  onReorderRef.current = onReorder;
-
   // propsのtasks/columnsが変わったらカラムを再構築
   const [prevTasks, setPrevTasks] = useState(tasks);
   const [prevColumns, setPrevColumns] = useState(columns);
@@ -521,93 +513,112 @@ export function TaskKanbanView({
 
   const activeTask = activeId ? findTaskById(columnItems, activeId) : null;
 
-  const handleDragStart = useCallback((event: DragStartEvent) => {
+  function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
-  }, []);
+  }
 
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
-      const { active, over } = event;
-      if (!over) return;
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over) return;
 
-      const activeItemId = active.id as string;
-      const overId = over.id as string;
+    const activeItemId = active.id as string;
+    const overId = over.id as string;
 
-      // refから最新のcolumnItemsを取得（stale closure防止）
-      const currentItems = columnItemsRef.current;
+    // ドラッグ元カラムを特定
+    const sourceColId = findColumnIdForItem(columnItems, activeItemId);
+    if (sourceColId === undefined) return;
 
-      // ドラッグ元カラムを特定
-      const sourceColId = findColumnIdForItem(currentItems, activeItemId);
-      if (sourceColId === undefined) return;
+    // オーバー先: カラムDnD IDか、別カラムのアイテムIDか判定
+    const targetColId = isColumnDndId(overId)
+      ? dndIdToColumnId(overId)
+      : findColumnIdForItem(columnItems, overId);
 
-      // オーバー先: カラムDnD IDか、別カラムのアイテムIDか判定
-      const targetColId = isColumnDndId(overId)
-        ? dndIdToColumnId(overId)
-        : findColumnIdForItem(currentItems, overId);
+    if (targetColId === undefined) return;
 
-      if (targetColId === undefined) return;
-
-      // 同一カラム内の並び替え（リアルタイムフィードバック）
-      if (sourceColId === targetColId && !isColumnDndId(overId)) {
-        setColumnItems((prev) => {
-          const items = [...(prev[sourceColId] ?? [])];
-          const oldIndex = items.findIndex((i) => i.id === activeItemId);
-          const newIndex = items.findIndex((i) => i.id === overId);
-          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
-          return { ...prev, [sourceColId]: arrayMove(items, oldIndex, newIndex) };
-        });
-        return;
-      }
-
-      if (sourceColId === targetColId) return;
-
-      // カラムをまたいだ移動
+    // 同一カラム内の並び替え（リアルタイムフィードバック）
+    if (sourceColId === targetColId && !isColumnDndId(overId)) {
       setColumnItems((prev) => {
-        const sourceItems = [...(prev[sourceColId] ?? [])];
-        const targetItems = [...(prev[targetColId] ?? [])];
+        const items = [...(prev[sourceColId] ?? [])];
+        const oldIndex = items.findIndex((i) => i.id === activeItemId);
+        const newIndex = items.findIndex((i) => i.id === overId);
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+        return { ...prev, [sourceColId]: arrayMove(items, oldIndex, newIndex) };
+      });
+      return;
+    }
 
-        const sourceIndex = sourceItems.findIndex((i) => i.id === activeItemId);
-        if (sourceIndex === -1) return prev;
+    if (sourceColId === targetColId) return;
 
-        const [moved] = sourceItems.splice(sourceIndex, 1);
+    // カラムをまたいだ移動
+    setColumnItems((prev) => {
+      const sourceItems = [...(prev[sourceColId] ?? [])];
+      const targetItems = [...(prev[targetColId] ?? [])];
 
-        if (!isColumnDndId(overId)) {
-          const overIndex = targetItems.findIndex((i) => i.id === overId);
-          if (overIndex !== -1) {
-            targetItems.splice(overIndex, 0, moved);
-          } else {
-            targetItems.push(moved);
-          }
+      const sourceIndex = sourceItems.findIndex((i) => i.id === activeItemId);
+      if (sourceIndex === -1) return prev;
+
+      const [moved] = sourceItems.splice(sourceIndex, 1);
+
+      if (!isColumnDndId(overId)) {
+        const overIndex = targetItems.findIndex((i) => i.id === overId);
+        if (overIndex !== -1) {
+          targetItems.splice(overIndex, 0, moved);
         } else {
           targetItems.push(moved);
         }
+      } else {
+        targetItems.push(moved);
+      }
 
-        return {
-          ...prev,
-          [sourceColId]: sourceItems,
-          [targetColId]: targetItems,
-        };
-      });
-    },
-    [], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+      return {
+        ...prev,
+        [sourceColId]: sourceItems,
+        [targetColId]: targetItems,
+      };
+    });
+  }
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      setActiveId(null);
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
 
-      if (!over) return;
+    if (!over) return;
 
-      const activeItemId = active.id as string;
-      const overId = over.id as string;
+    const activeItemId = active.id as string;
+    const overId = over.id as string;
 
-      // handleDragOverで既にUI更新済み。最終状態をAPIに送信
-      const allReorderItems = buildReorderPayload(columnItemsRef.current);
-      onReorderRef.current(allReorderItems);
-    },
-    [], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+    const currentColId = findColumnIdForItem(columnItems, activeItemId);
+    if (currentColId === undefined) return;
+
+    const targetColId = isColumnDndId(overId)
+      ? dndIdToColumnId(overId)
+      : findColumnIdForItem(columnItems, overId);
+
+    if (targetColId === undefined) return;
+
+    if (currentColId !== targetColId) {
+      // カラム間移動
+      const allReorderItems = buildReorderPayload(columnItems);
+      onReorder(allReorderItems);
+    } else {
+      // 同一カラム内の並び替え
+      const items = columnItems[currentColId] ?? [];
+      const oldIndex = items.findIndex((i) => i.id === activeItemId);
+      const newIndex = items.findIndex((i) => i.id === overId);
+
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        const reordered = arrayMove(items, oldIndex, newIndex);
+        const updated = { ...columnItems, [currentColId]: reordered };
+        setColumnItems(updated);
+        const allReorderItems = buildReorderPayload(updated);
+        onReorder(allReorderItems);
+      } else {
+        // 同一位置にドロップ or 移動なし — それでもカラム間移動の結果を保存
+        const allReorderItems = buildReorderPayload(columnItems);
+        onReorder(allReorderItems);
+      }
+    }
+  }
 
   return (
     <DndContext
