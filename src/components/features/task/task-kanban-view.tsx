@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -20,8 +20,10 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { TASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/types/task';
-import type { TaskListItem } from '@/types/task';
+import { Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { TASK_PRIORITY_OPTIONS } from '@/types/task';
+import type { TaskListItem, TaskColumn } from '@/types/task';
+import { useTaskDetail } from '@/hooks/use-tasks';
 import { cn } from '@/lib/utils';
 
 // ============================================
@@ -30,9 +32,15 @@ import { cn } from '@/lib/utils';
 
 interface TaskKanbanViewProps {
   tasks: TaskListItem[];
-  onTaskClick: (id: number) => void;
-  onStatusChange: (taskId: number, newStatus: string) => void;
-  onReorder: (items: { id: number; status: string; sortOrder: number }[]) => void;
+  columns: TaskColumn[];
+  onColumnChange: (taskId: number, columnId: number) => void;
+  onReorder: (items: { id: number; columnId: number; sortOrder: number }[]) => void;
+  onTaskClick: (taskId: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onAddColumn: () => void;
+  onEditColumn: (columnId: number) => void;
+  onDeleteColumn: (columnId: number) => void;
+  onReorderColumns: (items: { id: number; sortOrder: number }[]) => void;
 }
 
 // ============================================
@@ -64,6 +72,107 @@ function isOverdue(dueDate: string | null): boolean {
   return d < today;
 }
 
+function columnDndId(columnId: number): string {
+  return `column-${columnId}`;
+}
+
+function isColumnDndId(id: string): boolean {
+  return id.startsWith('column-');
+}
+
+function dndIdToColumnId(id: string): number {
+  return parseInt(id.replace('column-', ''), 10);
+}
+
+function itemIdToTaskId(itemId: string): number {
+  return parseInt(itemId.replace('task-', ''), 10);
+}
+
+// ============================================
+// サブタスク行
+// ============================================
+
+function SubtaskRow({
+  child,
+  isLast,
+  onTaskClick,
+}: {
+  child: TaskListItem;
+  isLast: boolean;
+  onTaskClick?: (id: number) => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1.5 text-xs leading-tight cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5"
+      onClick={(e) => { e.stopPropagation(); onTaskClick?.(child.id); }}
+    >
+      <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">{isLast ? '┗' : '┣'}</span>
+      <span className="flex-shrink-0 text-[11px]">
+        {child.status === 'done' ? '✅' : child.status === 'in_progress' ? '🔄' : '⬜'}
+      </span>
+      <span className="truncate text-muted-foreground">{child.title}</span>
+    </div>
+  );
+}
+
+// ============================================
+// サブタスクリスト（遅延ロード）
+// ============================================
+
+function SubtaskList({ taskId, onTaskClick }: { taskId: number; onTaskClick?: (id: number) => void }) {
+  const { data: detail } = useTaskDetail(taskId);
+  const children = detail?.children ?? [];
+
+  if (children.length === 0) return null;
+
+  return (
+    <div className="space-y-0">
+      {children.map((child, i) => (
+        <SubtaskRow key={child.id} child={child} isLast={i === children.length - 1} onTaskClick={onTaskClick} />
+      ))}
+    </div>
+  );
+}
+
+// ============================================
+// チェックリスト（直接チェック可能）
+// ============================================
+
+function ChecklistItems({
+  taskId,
+  onToggle,
+}: {
+  taskId: number;
+  onToggle?: (taskId: number, index: number, checked: boolean) => void;
+}) {
+  const { data: detail } = useTaskDetail(taskId);
+  const checklist = detail?.checklist ?? [];
+
+  if (checklist.length === 0) return null;
+
+  return (
+    <div className="space-y-0">
+      {checklist.map((item: { id: string; text: string; checked: boolean }, index: number) => (
+        <label
+          key={item.id}
+          className="flex items-center gap-1.5 text-xs leading-tight cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={item.checked}
+            onChange={() => onToggle?.(taskId, index, !item.checked)}
+            className="h-3 w-3 rounded border-muted-foreground/40 flex-shrink-0"
+          />
+          <span className={cn('truncate', item.checked && 'line-through text-muted-foreground/60')}>
+            {item.text}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // ============================================
 // タスクカード（ドラッグ可能）
 // ============================================
@@ -71,10 +180,11 @@ function isOverdue(dueDate: string | null): boolean {
 interface SortableTaskCardProps {
   item: ColumnItem;
   onTaskClick: (id: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
   isDragging?: boolean;
 }
 
-function SortableTaskCard({ item, onTaskClick, isDragging }: SortableTaskCardProps) {
+function SortableTaskCard({ item, onTaskClick, onChecklistToggle, isDragging }: SortableTaskCardProps) {
   const { task } = item;
   const {
     attributes,
@@ -102,7 +212,7 @@ function SortableTaskCard({ item, onTaskClick, isDragging }: SortableTaskCardPro
       )}
       onClick={() => onTaskClick(task.id)}
     >
-      <TaskCardContent task={task} />
+      <TaskCardContent task={task} onTaskClick={onTaskClick} onChecklistToggle={onChecklistToggle} />
     </div>
   );
 }
@@ -111,7 +221,17 @@ function SortableTaskCard({ item, onTaskClick, isDragging }: SortableTaskCardPro
 // カードコンテンツ（オーバーレイ共用）
 // ============================================
 
-function TaskCardContent({ task }: { task: TaskListItem }) {
+function TaskCardContent({
+  task,
+  onTaskClick,
+  onChecklistToggle,
+}: {
+  task: TaskListItem;
+  onTaskClick?: (id: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+}) {
+  const [subtasksOpen, setSubtasksOpen] = useState(false);
+  const [checklistOpen, setChecklistOpen] = useState(false);
   const priorityDef = TASK_PRIORITY_OPTIONS.find((p) => p.value === task.priority);
   const dueDateStr = formatDueDate(task.dueDate);
   const overdue = isOverdue(task.dueDate);
@@ -121,52 +241,72 @@ function TaskCardContent({ task }: { task: TaskListItem }) {
       {/* タイトル */}
       <p className="text-sm font-medium leading-snug line-clamp-2">{task.title}</p>
 
-      {/* 担当者・期日 */}
-      {(task.assigneeName || dueDateStr) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {task.assigneeName && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span>👤</span>
-              <span className="truncate max-w-[80px]">{task.assigneeName}</span>
-            </span>
-          )}
-          {dueDateStr && (
-            <span
-              className={cn(
-                'flex items-center gap-1 text-xs font-medium',
-                overdue ? 'text-red-600' : 'text-muted-foreground',
-              )}
-            >
-              <span>📅</span>
-              <span>{dueDateStr}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* 優先度・サブタスク進捗 */}
+      {/* 担当者・期日・優先度 */}
       <div className="flex items-center gap-2 flex-wrap">
+        {task.assigneeName && (
+          <span className="text-xs text-muted-foreground truncate max-w-[80px]">
+            {task.assigneeName}
+          </span>
+        )}
+        {dueDateStr && (
+          <span
+            className={cn(
+              'text-xs font-medium',
+              overdue ? 'text-red-600' : 'text-muted-foreground',
+            )}
+          >
+            期限：{dueDateStr}
+          </span>
+        )}
         {priorityDef && (
           <span
             className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full"
-            style={{
-              backgroundColor: `${priorityDef.color}20`,
-              color: priorityDef.color,
-            }}
+            style={{ backgroundColor: `${priorityDef.color}20`, color: priorityDef.color }}
           >
             <span
               className="inline-block w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: priorityDef.color }}
             />
-            {priorityDef.label}
-          </span>
-        )}
-        {task.childrenCount > 0 && (
-          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-            子 {task.childrenDoneCount}/{task.childrenCount}
+            優先度：{priorityDef.label}
           </span>
         )}
       </div>
+
+      {/* チェックリスト（折りたたみ式・直接チェック可能） */}
+      {task.checklistTotal > 0 && (
+        <div className="border-t pt-1 mt-1">
+          <button
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full"
+            onClick={(e) => { e.stopPropagation(); setChecklistOpen(!checklistOpen); }}
+          >
+            <span className="text-[10px]">{checklistOpen ? '▼' : '▶'}</span>
+            <span>チェックリスト ({task.checklistDoneCount}/{task.checklistTotal})</span>
+          </button>
+          {checklistOpen && (
+            <div className="mt-1 ml-2">
+              <ChecklistItems taskId={task.id} onToggle={onChecklistToggle} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* サブタスク（折りたたみ式） */}
+      {task.childrenCount > 0 && (
+        <div className={cn(task.checklistTotal === 0 && 'border-t pt-1 mt-1')}>
+          <button
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full"
+            onClick={(e) => { e.stopPropagation(); setSubtasksOpen(!subtasksOpen); }}
+          >
+            <span className="text-[10px]">{subtasksOpen ? '▼' : '▶'}</span>
+            <span>サブタスク ({task.childrenCount})</span>
+          </button>
+          {subtasksOpen && (
+            <div className="mt-1 ml-2 space-y-0.5">
+              <SubtaskList taskId={task.id} onTaskClick={onTaskClick} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* タグ */}
       {task.tags.length > 0 && (
@@ -191,48 +331,115 @@ function TaskCardContent({ task }: { task: TaskListItem }) {
 }
 
 // ============================================
+// カラムヘッダーメニュー
+// ============================================
+
+function ColumnMenu({
+  columnId,
+  onEdit,
+  onDelete,
+}: {
+  columnId: number;
+  onEdit: (id: number) => void;
+  onDelete: (id: number) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className="rounded p-1 hover:bg-black/10 transition-colors"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-popover shadow-md">
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onEdit(columnId);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              列名を編集
+            </button>
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onDelete(columnId);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-accent"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              列を削除
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // カラム（ドロップ可能エリア）
 // ============================================
 
 interface KanbanColumnProps {
-  statusValue: string;
-  statusLabel: string;
-  statusColor: string;
+  column: TaskColumn;
   items: ColumnItem[];
   onTaskClick: (id: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
   activeId: string | null;
+  onEditColumn: (id: number) => void;
+  onDeleteColumn: (id: number) => void;
 }
 
 function KanbanColumn({
-  statusValue,
-  statusLabel,
-  statusColor,
+  column,
   items,
   onTaskClick,
+  onChecklistToggle,
   activeId,
+  onEditColumn,
+  onDeleteColumn,
 }: KanbanColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: statusValue });
+  const dndId = columnDndId(column.id);
+  const { setNodeRef, isOver } = useDroppable({ id: dndId });
+  const color = column.color ?? '#6b7280';
 
   return (
     <div className="flex flex-col min-w-[260px] max-w-[300px] flex-1">
       {/* カラムヘッダー */}
       <div
         className="flex items-center gap-2 px-3 py-2 rounded-t-lg border-t border-x font-semibold text-sm"
-        style={{ borderTopColor: statusColor, backgroundColor: `${statusColor}10` }}
+        style={{ borderTopColor: color, backgroundColor: `${color}10` }}
       >
         <span
           className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: statusColor }}
+          style={{ backgroundColor: color }}
         />
-        <span className="flex-1 truncate" style={{ color: statusColor }}>
-          {statusLabel}
+        <span className="flex-1 truncate" style={{ color }}>
+          {column.name}
         </span>
         <span
           className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
-          style={{ backgroundColor: statusColor }}
+          style={{ backgroundColor: color }}
         >
           {items.length}
         </span>
+        <ColumnMenu
+          columnId={column.id}
+          onEdit={onEditColumn}
+          onDelete={onDeleteColumn}
+        />
       </div>
 
       {/* カード一覧 */}
@@ -252,6 +459,7 @@ function KanbanColumn({
               key={item.id}
               item={item}
               onTaskClick={onTaskClick}
+              onChecklistToggle={onChecklistToggle}
               isDragging={activeId === item.id}
             />
           ))}
@@ -270,127 +478,134 @@ function KanbanColumn({
 
 export function TaskKanbanView({
   tasks,
-  onTaskClick,
-  onStatusChange,
+  columns,
+  onColumnChange,
   onReorder,
+  onTaskClick,
+  onChecklistToggle,
+  onAddColumn,
+  onEditColumn,
+  onDeleteColumn,
+  onReorderColumns,
 }: TaskKanbanViewProps) {
-  // activeId は "task-{id}" 形式
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
-  // ステータス別にグループ化してsortOrder順に並べる
-  const [columnItems, setColumnItems] = useState<Record<string, ColumnItem[]>>(() =>
-    buildColumnItems(tasks),
+  // sortOrder順にソートした列
+  const sortedColumns = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // columnId別にタスクをグループ化
+  const [columnItems, setColumnItems] = useState<Record<number, ColumnItem[]>>(() =>
+    buildColumnItems(tasks, sortedColumns),
   );
 
-  // propsのtasksが変わったらカラムを再構築
-  // （外部からのデータ更新を反映）
-  // NOTE: 親コンポーネントでの楽観的更新と競合しないよう、
-  // ドラッグ操作中は更新しない実装でも十分だが、ここでは
-  // シンプルにprops変化時に同期する
+  // propsのtasks/columnsが変わったらカラムを再構築
   const [prevTasks, setPrevTasks] = useState(tasks);
-  if (tasks !== prevTasks) {
+  const [prevColumns, setPrevColumns] = useState(columns);
+  if (tasks !== prevTasks || columns !== prevColumns) {
     setPrevTasks(tasks);
-    setColumnItems(buildColumnItems(tasks));
+    setPrevColumns(columns);
+    setColumnItems(buildColumnItems(tasks, sortedColumns));
   }
 
   const activeTask = activeId ? findTaskById(columnItems, activeId) : null;
 
-  function handleDragStart(event: DragStartEvent) {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
-  }
+  }, []);
 
-  function handleDragOver(event: DragOverEvent) {
-    const { active, over } = event;
-    if (!over) return;
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over) return;
 
-    const activeItemId = active.id as string;
-    const overId = over.id as string;
+      const activeItemId = active.id as string;
+      const overId = over.id as string;
 
-    // ドラッグ元カラムを特定
-    const sourceStatus = findStatusForItem(columnItems, activeItemId);
-    if (!sourceStatus) return;
+      // ドラッグ元カラムを特定
+      const sourceColId = findColumnIdForItem(columnItems, activeItemId);
+      if (sourceColId === undefined) return;
 
-    // オーバー先: カラムIDか、別カラムのアイテムIDか判定
-    const targetStatus = isColumnId(overId)
-      ? overId
-      : findStatusForItem(columnItems, overId);
+      // オーバー先: カラムDnD IDか、別カラムのアイテムIDか判定
+      const targetColId = isColumnDndId(overId)
+        ? dndIdToColumnId(overId)
+        : findColumnIdForItem(columnItems, overId);
 
-    if (!targetStatus || sourceStatus === targetStatus) return;
+      if (targetColId === undefined) return;
 
-    // カラムをまたいだ移動: アイテムを移動
-    setColumnItems((prev) => {
-      const sourceItems = [...(prev[sourceStatus] ?? [])];
-      const targetItems = [...(prev[targetStatus] ?? [])];
+      // 同一カラム内の並び替え（リアルタイムフィードバック）
+      if (sourceColId === targetColId && !isColumnDndId(overId)) {
+        setColumnItems((prev) => {
+          const items = [...(prev[sourceColId] ?? [])];
+          const oldIndex = items.findIndex((i) => i.id === activeItemId);
+          const newIndex = items.findIndex((i) => i.id === overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+          return { ...prev, [sourceColId]: arrayMove(items, oldIndex, newIndex) };
+        });
+        return;
+      }
 
-      const sourceIndex = sourceItems.findIndex((i) => i.id === activeItemId);
-      if (sourceIndex === -1) return prev;
+      if (sourceColId === targetColId) return;
 
-      const [moved] = sourceItems.splice(sourceIndex, 1);
+      // カラムをまたいだ移動
+      setColumnItems((prev) => {
+        const sourceItems = [...(prev[sourceColId] ?? [])];
+        const targetItems = [...(prev[targetColId] ?? [])];
 
-      // オーバー先がアイテムIDなら、そのアイテムの前に挿入
-      if (!isColumnId(overId)) {
-        const overIndex = targetItems.findIndex((i) => i.id === overId);
-        if (overIndex !== -1) {
-          targetItems.splice(overIndex, 0, moved);
+        const sourceIndex = sourceItems.findIndex((i) => i.id === activeItemId);
+        if (sourceIndex === -1) return prev;
+
+        const [moved] = sourceItems.splice(sourceIndex, 1);
+
+        if (!isColumnDndId(overId)) {
+          const overIndex = targetItems.findIndex((i) => i.id === overId);
+          if (overIndex !== -1) {
+            targetItems.splice(overIndex, 0, moved);
+          } else {
+            targetItems.push(moved);
+          }
         } else {
           targetItems.push(moved);
         }
-      } else {
-        targetItems.push(moved);
-      }
 
-      return {
-        ...prev,
-        [sourceStatus]: sourceItems,
-        [targetStatus]: targetItems,
-      };
-    });
-  }
+        return {
+          ...prev,
+          [sourceColId]: sourceItems,
+          [targetColId]: targetItems,
+        };
+      });
+    },
+    [columnItems],
+  );
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveId(null);
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveId(null);
 
-    if (!over) return;
+      if (!over) return;
 
-    const activeItemId = active.id as string;
-    const overId = over.id as string;
+      const activeItemId = active.id as string;
+      const overId = over.id as string;
 
-    const currentStatus = findStatusForItem(columnItems, activeItemId);
-    if (!currentStatus) return;
+      const currentColId = findColumnIdForItem(columnItems, activeItemId);
+      if (currentColId === undefined) return;
 
-    const targetStatus = isColumnId(overId)
-      ? overId
-      : findStatusForItem(columnItems, overId);
+      const targetColId = isColumnDndId(overId)
+        ? dndIdToColumnId(overId)
+        : findColumnIdForItem(columnItems, overId);
 
-    if (!targetStatus) return;
+      if (targetColId === undefined) return;
 
-    if (currentStatus !== targetStatus) {
-      // ステータス変更を親に通知
-      const taskId = itemIdToTaskId(activeItemId);
-      onStatusChange(taskId, targetStatus);
-
-      // 並び順変更を通知
+      // handleDragOverで既にUI更新済み。最終状態をAPIに送信
       const allReorderItems = buildReorderPayload(columnItems);
       onReorder(allReorderItems);
-    } else {
-      // 同一カラム内の並び替え
-      const items = columnItems[currentStatus] ?? [];
-      const oldIndex = items.findIndex((i) => i.id === activeItemId);
-      const newIndex = items.findIndex((i) => i.id === overId);
-
-      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        const reordered = arrayMove(items, oldIndex, newIndex);
-        setColumnItems((prev) => ({ ...prev, [currentStatus]: reordered }));
-        const allReorderItems = buildReorderPayload({ ...columnItems, [currentStatus]: reordered });
-        onReorder(allReorderItems);
-      }
-    }
-  }
+    },
+    [columnItems, onReorder],
+  );
 
   return (
     <DndContext
@@ -401,17 +616,29 @@ export function TaskKanbanView({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
-        {TASK_STATUS_OPTIONS.map((statusDef) => (
+        {sortedColumns.map((col) => (
           <KanbanColumn
-            key={statusDef.value}
-            statusValue={statusDef.value}
-            statusLabel={statusDef.label}
-            statusColor={statusDef.color}
-            items={columnItems[statusDef.value] ?? []}
+            key={col.id}
+            column={col}
+            items={columnItems[col.id] ?? []}
             onTaskClick={onTaskClick}
+            onChecklistToggle={onChecklistToggle}
             activeId={activeId}
+            onEditColumn={onEditColumn}
+            onDeleteColumn={onDeleteColumn}
           />
         ))}
+
+        {/* 列追加ボタン */}
+        <div className="min-w-[260px] max-w-[300px] flex-1">
+          <button
+            onClick={onAddColumn}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-8 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            列を追加
+          </button>
+        </div>
       </div>
 
       <DragOverlay>
@@ -429,36 +656,54 @@ export function TaskKanbanView({
 // ユーティリティ関数
 // ============================================
 
-function buildColumnItems(tasks: TaskListItem[]): Record<string, ColumnItem[]> {
-  const result: Record<string, ColumnItem[]> = {};
-  for (const statusDef of TASK_STATUS_OPTIONS) {
-    result[statusDef.value] = tasks
-      .filter((t) => t.status === statusDef.value)
-      .sort((a, b) => {
-        // sortOrderはTaskDetailにのみ存在するため、
-        // TaskListItemにはないので createdAt でフォールバック
-        const aOrder = (a as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
-        const bOrder = (b as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      })
-      .map((t) => ({ id: `task-${t.id}`, task: t }));
+function buildColumnItems(
+  tasks: TaskListItem[],
+  columns: TaskColumn[],
+): Record<number, ColumnItem[]> {
+  const result: Record<number, ColumnItem[]> = {};
+
+  // 全カラムを初期化
+  for (const col of columns) {
+    result[col.id] = [];
   }
+
+  // タスクを振り分け
+  for (const task of tasks) {
+    const colId = task.columnId;
+
+    if (colId != null && result[colId] !== undefined) {
+      result[colId].push({ id: `task-${task.id}`, task });
+    } else if (columns.length > 0) {
+      // columnId未設定のタスクは最初の列に入れる
+      result[columns[0].id].push({ id: `task-${task.id}`, task });
+    }
+  }
+
+  // 各カラム内をsortOrder順にソート
+  for (const colId of Object.keys(result)) {
+    result[Number(colId)].sort((a, b) => {
+      const aOrder = (a.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
+      const bOrder = (b.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime();
+    });
+  }
+
   return result;
 }
 
-function findStatusForItem(
-  columnItems: Record<string, ColumnItem[]>,
+function findColumnIdForItem(
+  columnItems: Record<number, ColumnItem[]>,
   itemId: string,
-): string | undefined {
-  for (const [status, items] of Object.entries(columnItems)) {
-    if (items.some((i) => i.id === itemId)) return status;
+): number | undefined {
+  for (const [colId, items] of Object.entries(columnItems)) {
+    if (items.some((i) => i.id === itemId)) return Number(colId);
   }
   return undefined;
 }
 
 function findTaskById(
-  columnItems: Record<string, ColumnItem[]>,
+  columnItems: Record<number, ColumnItem[]>,
   itemId: string,
 ): TaskListItem | null {
   for (const items of Object.values(columnItems)) {
@@ -468,21 +713,17 @@ function findTaskById(
   return null;
 }
 
-function isColumnId(id: string): boolean {
-  return TASK_STATUS_OPTIONS.some((s) => s.value === id);
-}
-
-function itemIdToTaskId(itemId: string): number {
-  return parseInt(itemId.replace('task-', ''), 10);
-}
-
 function buildReorderPayload(
-  columnItems: Record<string, ColumnItem[]>,
-): { id: number; status: string; sortOrder: number }[] {
-  const result: { id: number; status: string; sortOrder: number }[] = [];
-  for (const [status, items] of Object.entries(columnItems)) {
+  columnItems: Record<number, ColumnItem[]>,
+): { id: number; columnId: number; sortOrder: number }[] {
+  const result: { id: number; columnId: number; sortOrder: number }[] = [];
+  for (const [colId, items] of Object.entries(columnItems)) {
     items.forEach((item, index) => {
-      result.push({ id: itemIdToTaskId(item.id), status, sortOrder: index });
+      result.push({
+        id: itemIdToTaskId(item.id),
+        columnId: Number(colId),
+        sortOrder: index,
+      });
     });
   }
   return result;

@@ -46,6 +46,7 @@ export interface TaskListItem {
   parentTaskId: number | null;
   relatedEntityType: string | null;
   relatedEntityId: number | null;
+  columnId: number | null;
   notifyLevel: TaskNotifyLevel;
   taskUrl: string | null;
   isArchived: boolean;
@@ -100,6 +101,17 @@ export const TASK_NOTIFY_LEVEL_OPTIONS: { value: TaskNotifyLevel; label: string 
   { value: 'in_app', label: 'アプリ内' },
   { value: 'in_app_and_email', label: 'アプリ+メール' },
 ];
+
+// ============================================
+// カンバン列
+// ============================================
+
+export interface TaskColumn {
+  id: number;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+}
 
 export const TASK_RELATED_ENTITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'project', label: '案件' },

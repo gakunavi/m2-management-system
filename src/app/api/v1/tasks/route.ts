@@ -14,6 +14,8 @@ import {
 import { createNotification } from '@/lib/notification-helper';
 import { Prisma } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 // ============================================
 // タスク一覧インクルード定義
 // ============================================
@@ -22,6 +24,7 @@ const taskListInclude = {
   assignee: { select: { userName: true } },
   createdBy: { select: { userName: true } },
   business: { select: { businessName: true } },
+  column: { select: { id: true, name: true, color: true } },
   tags: {
     include: {
       tag: { select: { id: true, name: true, color: true } },
@@ -140,6 +143,7 @@ export async function POST(request: NextRequest) {
       parentTaskId,
       scope,
       businessId,
+      columnId,
       checklist,
       notifyTargetUserIds,
       tagIds,
@@ -186,6 +190,7 @@ export async function POST(request: NextRequest) {
         createdById: user.id,
         scope,
         businessId: businessId ?? null,
+        columnId: columnId ?? null,
         parentTaskId: parentTaskId ?? null,
         checklist: checklist as Prisma.InputJsonValue,
         notifyLevel,

@@ -7,6 +7,8 @@ import { updateTaskSchema, formatTaskDetail } from '@/lib/task-helpers';
 import { createNotificationsForUsers } from '@/lib/notification-helper';
 import { Prisma } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 // ============================================
 // タスク詳細インクルード定義
 // ============================================
@@ -15,6 +17,7 @@ const taskDetailInclude = {
   assignee: { select: { userName: true } },
   createdBy: { select: { userName: true } },
   business: { select: { businessName: true } },
+  column: { select: { id: true, name: true, color: true } },
   tags: {
     include: {
       tag: { select: { id: true, name: true, color: true } },
@@ -26,6 +29,7 @@ const taskDetailInclude = {
       assignee: { select: { userName: true } },
       createdBy: { select: { userName: true } },
       business: { select: { businessName: true } },
+      column: { select: { id: true, name: true, color: true } },
       tags: {
         include: {
           tag: { select: { id: true, name: true, color: true } },
@@ -112,7 +116,7 @@ export async function PATCH(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tagIds, notifyTargetUserIds, version: _version, checklist, dueDate, status, ...rest } = data;
+    const { tagIds, notifyTargetUserIds, version: _version, checklist, dueDate, status, columnId, ...rest } = data;
 
     // ステータス変更に伴う completedAt の更新
     let completedAt: Date | null | undefined = undefined;
@@ -162,6 +166,7 @@ export async function PATCH(
         data: {
           ...rest,
           ...(status !== undefined ? { status } : {}),
+          ...(columnId !== undefined ? { columnId: columnId ?? null } : {}),
           ...(checklistValue !== undefined ? { checklist: checklistValue } : {}),
           ...(dueDateValue !== undefined ? { dueDate: dueDateValue } : {}),
           ...(completedAt !== undefined ? { completedAt } : {}),

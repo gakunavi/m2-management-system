@@ -59,6 +59,7 @@ model User {
   createdTasks        Task[]               @relation("TaskCreator")
   ownedTaskTags       TaskTag[]            @relation("TaskTagOwner")
   taskNotifyTargets   TaskNotifyTarget[]
+  createdTaskColumns  TaskColumn[]         @relation("TaskColumnCreator")
   createdTaskBoards   TaskBoard[]          @relation("TaskBoardCreator")
   taskBoardMembers    TaskBoardMember[]
 
@@ -98,6 +99,7 @@ model Business {
   announcements                Announcement[]
   chatConversations            ChatConversation[]
   tasks                        Task[]
+  taskColumns                  TaskColumn[]
 
   @@index([businessIsActive, businessSortOrder])
   @@index([businessCode, businessIsActive], map: "idx_businesses_code_active")
@@ -854,6 +856,7 @@ model Task {
   scope             String    @default("company") @map("scope") @db.VarChar(20)
   businessId        Int?      @map("business_id")
   boardId           Int?      @map("board_id")
+  columnId          Int?      @map("column_id")
   parentTaskId      Int?      @map("parent_task_id")
   checklist         Json      @default("[]") @map("checklist")
   sortOrder         Int       @default(0) @map("sort_order")
@@ -872,6 +875,7 @@ model Task {
   createdBy     User               @relation("TaskCreator", fields: [createdById], references: [id])
   business      Business?          @relation(fields: [businessId], references: [id])
   board         TaskBoard?         @relation(fields: [boardId], references: [id])
+  column        TaskColumn?        @relation(fields: [columnId], references: [id], onDelete: SetNull)
   parentTask    Task?              @relation("TaskParentChild", fields: [parentTaskId], references: [id], onDelete: Cascade)
   children      Task[]             @relation("TaskParentChild")
   tags          TaskTagOnTask[]
@@ -880,6 +884,7 @@ model Task {
   @@index([assigneeId, status, dueDate])
   @@index([businessId, scope, status])
   @@index([boardId, status])
+  @@index([columnId, sortOrder])
   @@index([parentTaskId])
   @@index([relatedEntityType, relatedEntityId])
   @@index([status, dueDate])
@@ -930,6 +935,28 @@ model TaskNotifyTarget {
 // タスクボード
 // ============================================
 
+model TaskColumn {
+  id          Int      @id @default(autoincrement())
+  name        String   @map("name") @db.VarChar(100)
+  color       String?  @map("color") @db.VarChar(20)
+  sortOrder   Int      @default(0) @map("sort_order")
+  scope       String   @map("scope") @db.VarChar(20) // company | business | personal | board
+  businessId  Int?     @map("business_id")
+  boardId     Int?     @map("board_id")
+  createdById Int      @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  business  Business?  @relation(fields: [businessId], references: [id])
+  board     TaskBoard? @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("TaskColumnCreator", fields: [createdById], references: [id])
+  tasks     Task[]
+
+  @@index([scope, businessId])
+  @@index([boardId, sortOrder])
+  @@map("task_columns")
+}
+
 model TaskBoard {
   id          Int      @id @default(autoincrement())
   name        String   @map("name") @db.VarChar(100)
@@ -941,6 +968,7 @@ model TaskBoard {
   createdBy User              @relation("TaskBoardCreator", fields: [createdById], references: [id])
   members   TaskBoardMember[]
   tasks     Task[]
+  columns   TaskColumn[]
 
   @@index([createdById])
   @@map("task_boards")

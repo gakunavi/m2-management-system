@@ -11,7 +11,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useBusiness } from '@/hooks/use-business';
-import { useTaskList, useTaskTags, useTaskDetail, useTaskBoards, useTaskBoardMutations, useTaskMutations } from '@/hooks/use-tasks';
+import { useTaskList, useTaskTags, useTaskDetail, useTaskBoards, useTaskBoardMutations, useTaskMutations, useTaskColumns, useTaskColumnMutations } from '@/hooks/use-tasks';
 import { useDebounce } from '@/hooks/use-debounce';
 import { TaskDetailPanel } from '@/components/features/task/task-detail-panel';
 import { TaskCreateModal } from '@/components/features/task/task-create-modal';
@@ -47,6 +47,22 @@ export function TasksClient() {
   // ボード
   const { data: boards } = useTaskBoards();
   const { createBoard } = useTaskBoardMutations();
+
+  // カラム（カンバン用）
+  const { data: columnsData } = useTaskColumns(
+    scope,
+    scope === 'business' ? currentBusiness?.id : undefined,
+    scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
+  );
+  const { createColumn, updateColumn, deleteColumn, reorderColumns } = useTaskColumnMutations(
+    scope,
+    scope === 'business' ? currentBusiness?.id : undefined,
+    scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
+  );
+  const columns = columnsData ?? [];
+
+  // カラム編集モーダル
+  const [showColumnModal, setShowColumnModal] = useState<'create' | number | null>(null);
 
   // フィルター
   const [search, setSearch] = useState('');
@@ -311,14 +327,55 @@ export function TasksClient() {
       )}
 
       {viewMode === 'kanban' && (
-        <TaskKanbanView
-          tasks={tasks}
-          onTaskClick={setSelectedTaskId}
-          onStatusChange={(taskId, newStatus) => {
-            reorderTasks.mutate([{ id: taskId, status: newStatus, sortOrder: 0 }]);
-          }}
-          onReorder={(items) => reorderTasks.mutate(items)}
-        />
+        <>
+          <TaskKanbanView
+            tasks={tasks}
+            columns={columns}
+            onTaskClick={setSelectedTaskId}
+            onColumnChange={() => {
+              // columnId変更はonReorderのペイロードに含まれるため不要
+            }}
+            onReorder={(items) => {
+              // reorder API は status 必須なので、各タスクの現在の status を引き継ぐ
+              const taskMap = new Map(tasks.map((t) => [t.id, t]));
+              reorderTasks.mutate(
+                items.map((it) => ({
+                  id: it.id,
+                  status: taskMap.get(it.id)?.status ?? 'todo',
+                  sortOrder: it.sortOrder,
+                  columnId: it.columnId,
+                })),
+              );
+            }}
+            onAddColumn={() => setShowColumnModal('create')}
+            onEditColumn={(colId) => setShowColumnModal(colId)}
+            onDeleteColumn={(colId) => {
+              if (confirm('この列を削除しますか？列内のタスクは未分類になります。')) {
+                deleteColumn.mutate(colId);
+              }
+            }}
+            onReorderColumns={(items) => reorderColumns.mutate(items)}
+          />
+          {showColumnModal != null && (
+            <ColumnEditModal
+              mode={showColumnModal === 'create' ? 'create' : 'edit'}
+              column={
+                typeof showColumnModal === 'number'
+                  ? columns.find((c) => c.id === showColumnModal)
+                  : undefined
+              }
+              onClose={() => setShowColumnModal(null)}
+              onSave={async (name, color) => {
+                if (showColumnModal === 'create') {
+                  await createColumn.mutateAsync({ name, color });
+                } else if (typeof showColumnModal === 'number') {
+                  await updateColumn.mutateAsync({ id: showColumnModal, name, color });
+                }
+                setShowColumnModal(null);
+              }}
+            />
+          )}
+        </>
       )}
 
       {viewMode === 'calendar' && (
@@ -408,6 +465,88 @@ function BoardCreateModal({ onClose, onCreate }: { onClose: () => void; onCreate
         <div className="flex justify-end gap-2 border-t px-4 py-3">
           <Button variant="outline" size="sm" onClick={onClose}>キャンセル</Button>
           <Button size="sm" onClick={() => name.trim() && onCreate(name.trim())} disabled={!name.trim()}>作成</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// カラム編集モーダル
+// ============================================
+
+const COLUMN_COLORS = [
+  '#6b7280', '#3b82f6', '#f59e0b', '#22c55e', '#ef4444',
+  '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4',
+];
+
+function ColumnEditModal({
+  mode,
+  column,
+  onClose,
+  onSave,
+}: {
+  mode: 'create' | 'edit';
+  column?: { id: number; name: string; color: string | null };
+  onClose: () => void;
+  onSave: (name: string, color: string | null) => void;
+}) {
+  const [name, setName] = useState(column?.name ?? '');
+  const [color, setColor] = useState(column?.color ?? '#6b7280');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-sm rounded-lg bg-background shadow-xl">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-base font-semibold">
+            {mode === 'create' ? '列を追加' : '列を編集'}
+          </h2>
+          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">列名</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="例: 未着手、進行中、完了..."
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && name.trim()) onSave(name.trim(), color);
+              }}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">カラー</label>
+            <div className="flex flex-wrap gap-2">
+              {COLUMN_COLORS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setColor(c)}
+                  className={`h-7 w-7 rounded-full border-2 transition-transform ${
+                    color === c ? 'border-foreground scale-110' : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            キャンセル
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => name.trim() && onSave(name.trim(), color)}
+            disabled={!name.trim()}
+          >
+            {mode === 'create' ? '追加' : '保存'}
+          </Button>
         </div>
       </div>
     </div>

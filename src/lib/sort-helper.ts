@@ -256,6 +256,7 @@ export const TASK_SORT_FIELDS = [
   'dueDate',
   'assigneeId',
   'scope',
+  'sortOrder',
   'completedAt',
   'updatedAt',
   'createdAt',

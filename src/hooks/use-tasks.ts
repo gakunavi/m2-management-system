@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import type { TaskListItem, TaskDetail, TaskTagItem } from '@/types/task';
+import type { TaskListItem, TaskDetail, TaskTagItem, TaskColumn } from '@/types/task';
 import type { PaginationMeta } from '@/types/api';
 
 // ============================================
@@ -127,7 +127,7 @@ export function useTaskMutations() {
   });
 
   const reorderTasks = useMutation({
-    mutationFn: (items: { id: number; status: string; sortOrder: number }[]) =>
+    mutationFn: (items: { id: number; status: string; sortOrder: number; columnId?: number | null }[]) =>
       apiClient.patch<void>('/tasks/reorder', { items }),
     onSuccess: invalidateTasks,
   });
@@ -260,4 +260,87 @@ export function useTaskBoardMutations() {
   });
 
   return { createBoard, updateBoard, deleteBoard, addMember, removeMember };
+}
+
+// ============================================
+// タスクカラム
+// ============================================
+
+export interface TaskColumnItem extends TaskColumn {
+  scope: string;
+  businessId: number | null;
+  boardId: number | null;
+  createdById: number;
+  taskCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const columnKeys = {
+  all: ['task-columns'] as const,
+  list: (scope: string, businessId?: number, boardId?: number) =>
+    [...columnKeys.all, scope, businessId, boardId] as const,
+};
+
+export function useTaskColumns(scope: string, businessId?: number, boardId?: number) {
+  return useQuery<TaskColumnItem[]>({
+    queryKey: columnKeys.list(scope, businessId, boardId),
+    queryFn: async () => {
+      const params = new URLSearchParams({ scope });
+      if (businessId) params.set('businessId', String(businessId));
+      if (boardId) params.set('boardId', String(boardId));
+      const res = await fetch(`/api/v1/task-columns?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch columns');
+      const json = await res.json();
+      return json.data as TaskColumnItem[];
+    },
+  });
+}
+
+export function useTaskColumnMutations(scope: string, businessId?: number, boardId?: number) {
+  const queryClient = useQueryClient();
+
+  const invalidateColumns = () => {
+    queryClient.invalidateQueries({
+      predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === 'task-columns',
+    });
+  };
+
+  const invalidateAll = () => {
+    invalidateColumns();
+    queryClient.invalidateQueries({
+      predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === 'tasks',
+    });
+  };
+
+  const createColumn = useMutation({
+    mutationFn: (data: { name: string; color?: string | null }) =>
+      apiClient.create<TaskColumnItem>('/task-columns', {
+        ...data,
+        scope,
+        businessId: businessId ?? null,
+        boardId: boardId ?? null,
+      }),
+    onSuccess: invalidateColumns,
+  });
+
+  const updateColumn = useMutation({
+    mutationFn: ({ id, ...data }: { id: number; name?: string; color?: string | null }) =>
+      apiClient.patch<TaskColumnItem>(`/task-columns/${id}`, data),
+    onSuccess: invalidateColumns,
+  });
+
+  const deleteColumn = useMutation({
+    mutationFn: (id: number) =>
+      apiClient.remove('/task-columns', id),
+    onSuccess: invalidateAll,
+  });
+
+  const reorderColumns = useMutation({
+    mutationFn: (items: { id: number; sortOrder: number }[]) =>
+      apiClient.patch<void>('/task-columns/reorder', { items }),
+    onSuccess: invalidateColumns,
+  });
+
+  return { createColumn, updateColumn, deleteColumn, reorderColumns };
 }

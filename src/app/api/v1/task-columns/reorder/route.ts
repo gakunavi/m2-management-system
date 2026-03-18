@@ -13,9 +13,7 @@ export const dynamic = 'force-dynamic';
 
 const reorderItemSchema = z.object({
   id: z.number().int().positive(),
-  status: z.enum(['todo', 'in_progress', 'done', 'on_hold']),
   sortOrder: z.number().int().min(0),
-  columnId: z.number().int().positive().optional().nullable(),
 });
 
 const reorderSchema = z.object({
@@ -23,7 +21,8 @@ const reorderSchema = z.object({
 });
 
 // ============================================
-// PATCH /api/v1/tasks/reorder
+// PATCH /api/v1/task-columns/reorder
+// カラムの一括sortOrder更新
 // ============================================
 
 export async function PATCH(request: NextRequest) {
@@ -32,6 +31,9 @@ export async function PATCH(request: NextRequest) {
     if (!session?.user) throw ApiError.unauthorized();
 
     const user = session.user as { id: number; role: string };
+    if (user.role === 'partner_admin' || user.role === 'partner_staff') {
+      throw ApiError.forbidden();
+    }
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const body = await request.json();
@@ -39,13 +41,9 @@ export async function PATCH(request: NextRequest) {
 
     await prisma.$transaction(
       items.map((item) =>
-        prisma.task.update({
+        prisma.taskColumn.update({
           where: { id: item.id },
-          data: {
-            status: item.status,
-            sortOrder: item.sortOrder,
-            ...(item.columnId !== undefined ? { columnId: item.columnId } : {}),
-          },
+          data: { sortOrder: item.sortOrder },
         }),
       ),
     );
