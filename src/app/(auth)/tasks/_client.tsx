@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X, Users, Settings, GripVertical } from 'lucide-react';
 import {
   DndContext, DragOverlay, closestCenter,
@@ -31,12 +31,17 @@ export function TasksClient() {
   const { reorderTasks } = useTaskMutations();
 
   // ビューモード
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('task-view-mode') as ViewMode) || 'list';
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewModeLoaded, setViewModeLoaded] = useState(false);
+
+  // クライアントでlocalStorageから復元（hydrationミスマッチ防止）
+  useEffect(() => {
+    const saved = localStorage.getItem('task-view-mode') as ViewMode | null;
+    if (saved && ['list', 'kanban', 'calendar'].includes(saved)) {
+      setViewMode(saved);
     }
-    return 'list';
-  });
+    setViewModeLoaded(true);
+  }, []);
 
   // スコープ
   const [scope, setScope] = useState<TaskScope>('company');
