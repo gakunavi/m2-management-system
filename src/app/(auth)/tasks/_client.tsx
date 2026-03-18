@@ -32,7 +32,7 @@ export function TasksClient() {
 
   // ビューモード
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [viewModeLoaded, setViewModeLoaded] = useState(false);
+  const [, setViewModeLoaded] = useState(false);
 
   // クライアントでlocalStorageから復元（hydrationミスマッチ防止）
   useEffect(() => {

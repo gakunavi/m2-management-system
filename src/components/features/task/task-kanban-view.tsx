@@ -559,6 +559,7 @@ function SortableColumn({
 export function TaskKanbanView({
   tasks,
   columns,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onColumnChange,
   onReorder,
   onTaskClick,

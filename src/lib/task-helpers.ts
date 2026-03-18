@@ -174,6 +174,7 @@ export function formatTaskDetail(task: any) {
       userId: nt.userId,
       userName: nt.user?.userName ?? '',
     })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     attachments: (task.attachments ?? []).map((a: any) => ({
       id: a.id,
       fileName: a.fileName,
