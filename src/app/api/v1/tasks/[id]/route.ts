@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 // ============================================
 
 const taskDetailInclude = {
-  assignee: { select: { userName: true } },
+  assignees: { select: { id: true, userId: true, userName: true }, orderBy: { assignedAt: 'asc' as const } },
   createdBy: { select: { userName: true } },
   business: { select: { businessName: true } },
   column: { select: { id: true, name: true, color: true } },
@@ -30,7 +30,7 @@ const taskDetailInclude = {
   },
   children: {
     include: {
-      assignee: { select: { userName: true } },
+      assignees: { select: { id: true, userId: true, userName: true }, orderBy: { assignedAt: 'asc' as const } },
       createdBy: { select: { userName: true } },
       business: { select: { businessName: true } },
       column: { select: { id: true, name: true, color: true } },
@@ -120,7 +120,7 @@ export async function PATCH(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tagIds, notifyTargetUserIds, version: _version, checklist, dueDate, status, columnId, ...rest } = data;
+    const { tagIds, notifyTargetUserIds, assigneeUserIds, assigneeNames, version: _version, checklist, dueDate, status, columnId, ...rest } = data;
 
     // ステータス変更に伴う completedAt の更新
     let completedAt: Date | null | undefined = undefined;
@@ -161,6 +161,29 @@ export async function PATCH(
           await tx.taskNotifyTarget.createMany({
             data: notifyTargetUserIds.map((userId) => ({ taskId, userId })),
           });
+        }
+      }
+
+      // 担当者の更新
+      if (assigneeUserIds !== undefined || assigneeNames !== undefined) {
+        await tx.taskAssignee.deleteMany({ where: { taskId } });
+        const assigneeRecords: { taskId: number; userId?: number; userName: string }[] = [];
+        if (assigneeUserIds && assigneeUserIds.length > 0) {
+          const users = await tx.user.findMany({
+            where: { id: { in: assigneeUserIds } },
+            select: { id: true, userName: true },
+          });
+          for (const u of users) {
+            assigneeRecords.push({ taskId, userId: u.id, userName: u.userName });
+          }
+        }
+        if (assigneeNames && assigneeNames.length > 0) {
+          for (const name of assigneeNames) {
+            assigneeRecords.push({ taskId, userName: name });
+          }
+        }
+        if (assigneeRecords.length > 0) {
+          await tx.taskAssignee.createMany({ data: assigneeRecords });
         }
       }
 

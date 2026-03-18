@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 // ============================================
 
 const taskListInclude = {
-  assignee: { select: { userName: true } },
+  assignees: { select: { id: true, userId: true, userName: true }, orderBy: { assignedAt: 'asc' as const } },
   createdBy: { select: { userName: true } },
   business: { select: { businessName: true } },
   column: { select: { id: true, name: true, color: true } },
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
       ...(businessIdParam ? { businessId: parseInt(businessIdParam, 10) } : {}),
       ...(searchParams.get('boardId') ? { boardId: parseInt(searchParams.get('boardId')!, 10) } : {}),
       ...(searchParams.get('showArchived') !== 'true' ? { isArchived: false } : {}),
-      ...(assigneeIdParam ? { assigneeId: parseInt(assigneeIdParam, 10) } : {}),
+      ...(assigneeIdParam ? { assignees: { some: { userId: parseInt(assigneeIdParam, 10) } } } : {}),
       ...(relatedEntityType ? { relatedEntityType } : {}),
       ...(relatedEntityIdParam ? { relatedEntityId: parseInt(relatedEntityIdParam, 10) } : {}),
       ...(parentOnly ? { parentTaskId: null } : {}),
@@ -139,7 +139,8 @@ export async function POST(request: NextRequest) {
 
     const {
       title,
-      assigneeId,
+      assigneeUserIds,
+      assigneeNames,
       parentTaskId,
       scope,
       businessId,
@@ -172,13 +173,19 @@ export async function POST(request: NextRequest) {
 
     // アサイン先をnotifyTargets に自動追加（作成者以外の場合）
     const resolvedNotifyTargetUserIds = [...notifyTargetUserIds];
-    if (
-      assigneeId &&
-      assigneeId !== user.id &&
-      !resolvedNotifyTargetUserIds.includes(assigneeId)
-    ) {
-      resolvedNotifyTargetUserIds.push(assigneeId);
+    for (const uid of assigneeUserIds) {
+      if (uid !== user.id && !resolvedNotifyTargetUserIds.includes(uid)) {
+        resolvedNotifyTargetUserIds.push(uid);
+      }
     }
+
+    // アカウントユーザーの名前を取得
+    const assigneeUserRecords = assigneeUserIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: assigneeUserIds } },
+          select: { id: true, userName: true },
+        })
+      : [];
 
     const taskNo = await generateTaskNo();
 
@@ -186,7 +193,6 @@ export async function POST(request: NextRequest) {
       data: {
         taskNo,
         title,
-        assigneeId: assigneeId ?? null,
         createdById: user.id,
         scope,
         businessId: businessId ?? null,
@@ -196,6 +202,14 @@ export async function POST(request: NextRequest) {
         notifyLevel,
         ...rest,
         dueDate: rest.dueDate ? new Date(rest.dueDate) : null,
+        assignees: {
+          create: [
+            // アカウントユーザー
+            ...assigneeUserRecords.map((u) => ({ userId: u.id, userName: u.userName })),
+            // フリーテキスト担当者
+            ...assigneeNames.map((name) => ({ userName: name })),
+          ],
+        },
         notifyTargets: {
           create: resolvedNotifyTargetUserIds.map((userId) => ({ userId })),
         },
@@ -207,15 +221,18 @@ export async function POST(request: NextRequest) {
     });
 
     // アサイン通知（アサイン先が自分以外の場合）
-    if (notifyLevel !== 'none' && assigneeId && assigneeId !== user.id) {
-      await createNotification({
-        userId: assigneeId,
-        type: 'task_assigned',
-        title: 'タスクが割り当てられました',
-        message: `「${title}」が割り当てられました`,
-        relatedEntity: 'task',
-        relatedEntityId: created.id,
-      });
+    if (notifyLevel !== 'none' && assigneeUserIds.length > 0) {
+      const notifyAssigneeIds = assigneeUserIds.filter((uid) => uid !== user.id);
+      for (const uid of notifyAssigneeIds) {
+        await createNotification({
+          userId: uid,
+          type: 'task_assigned',
+          title: 'タスクが割り当てられました',
+          message: `「${title}」が割り当てられました`,
+          relatedEntity: 'task',
+          relatedEntityId: created.id,
+        });
+      }
     }
 
     return NextResponse.json({ success: true, data: formatTaskListItem(created) }, { status: 201 });

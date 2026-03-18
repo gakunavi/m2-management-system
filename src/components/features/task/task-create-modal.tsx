@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useTaskMutations } from '@/hooks/use-tasks';
 import { TaskTagInput } from './task-tag-input';
 import { TaskNotifySettings } from './task-notify-settings';
+import { TaskAssigneeSelect } from './task-assignee-select';
 import {
   TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
@@ -44,7 +45,8 @@ export function TaskCreateModal({
   const [status, setStatus] = useState('todo');
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState('');
-  const [assigneeId] = useState<number | null>(null);
+  const [taskUrl, setTaskUrl] = useState('');
+  const [assigneeUserIds, setAssigneeUserIds] = useState<number[]>([]);
   const [scope, setScope] = useState<TaskScope>(defaultScope);
   const [businessId] = useState<number | undefined>(defaultBusinessId);
   const [relatedEntityType] = useState(defaultRelatedType ?? '');
@@ -71,7 +73,8 @@ export function TaskCreateModal({
         status,
         priority,
         dueDate: dueDate || null,
-        assigneeId,
+        taskUrl: taskUrl.trim() || null,
+        assigneeUserIds,
         scope,
         businessId: scope === 'business' ? businessId : null,
         boardId: scope === 'board' ? defaultBoardId : null,
@@ -112,7 +115,7 @@ export function TaskCreateModal({
             </div>
           )}
 
-          {/* タスク名 */}
+          {/* 1. タスク名 */}
           <div>
             <label className="mb-1 block text-sm font-medium">タスク名 <span className="text-destructive">*</span></label>
             <input
@@ -125,29 +128,7 @@ export function TaskCreateModal({
             />
           </div>
 
-          {/* 説明 */}
-          <div>
-            <label className="mb-1 block text-sm font-medium">説明</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full min-h-[60px] resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="詳細を入力..."
-            />
-          </div>
-
-          {/* メモ（備考） */}
-          <div>
-            <label className="mb-1 block text-sm font-medium">メモ（備考）</label>
-            <textarea
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full min-h-[60px] resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="備考・メモを入力..."
-            />
-          </div>
-
-          {/* ステータス + 優先度 */}
+          {/* 2. ステータス + 優先度 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium">ステータス</label>
@@ -175,7 +156,16 @@ export function TaskCreateModal({
             </div>
           </div>
 
-          {/* 期限 */}
+          {/* 3. 担当者 */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">担当者</label>
+            <TaskAssigneeSelect
+              selectedUserIds={assigneeUserIds}
+              onChange={setAssigneeUserIds}
+            />
+          </div>
+
+          {/* 4. 期限 */}
           <div>
             <label className="mb-1 block text-sm font-medium">期限</label>
             <div className="flex items-center gap-2">
@@ -197,7 +187,19 @@ export function TaskCreateModal({
             </div>
           </div>
 
-          {/* スコープ */}
+          {/* 5. URL */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">URL</label>
+            <input
+              type="url"
+              value={taskUrl}
+              onChange={(e) => setTaskUrl(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="https://..."
+            />
+          </div>
+
+          {/* 6. スコープ */}
           {!parentTaskId && (
             <div>
               <label className="mb-1 block text-sm font-medium">スコープ</label>
@@ -213,13 +215,35 @@ export function TaskCreateModal({
             </div>
           )}
 
-          {/* タグ */}
+          {/* 7. タグ */}
           <div>
             <label className="mb-1 block text-sm font-medium">タグ</label>
             <TaskTagInput selectedTagIds={tagIds} onChange={setTagIds} />
           </div>
 
-          {/* 通知設定 */}
+          {/* 8. 説明 */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">説明</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full min-h-[60px] resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="詳細を入力..."
+            />
+          </div>
+
+          {/* 9. メモ（備考） */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">メモ（備考）</label>
+            <textarea
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              className="w-full min-h-[60px] resize-y rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="備考・メモを入力..."
+            />
+          </div>
+
+          {/* 10. 通知設定 */}
           <TaskNotifySettings
             notifyLevel={notifyLevel}
             notifyTargetUserIds={notifyTargetUserIds}

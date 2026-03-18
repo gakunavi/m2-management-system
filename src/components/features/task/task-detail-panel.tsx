@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight, ExternalLink, Archive } from 'lucide-react';
+import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight, ExternalLink, Archive, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTaskDetail, useTaskMutations } from '@/hooks/use-tasks';
 import { useTaskAttachments } from '@/hooks/use-task-attachments';
@@ -10,6 +10,7 @@ import { TaskChecklist } from './task-checklist';
 import { TaskSubtasks } from './task-subtasks';
 import { TaskTagInput } from './task-tag-input';
 import { TaskNotifySettings } from './task-notify-settings';
+import { TaskAssigneeSelect } from './task-assignee-select';
 import { TaskAttachments } from './task-attachments';
 import type { TaskAttachmentItem } from './task-attachments';
 import {
@@ -223,30 +224,42 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
                 ))}
               </select>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">担当者</label>
-              <span className="block text-sm">{task.assigneeName ?? '未設定'}</span>
+            <div className="col-span-2">
+              <label className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                <Users className="h-3 w-3" />
+                担当者
+              </label>
+              <TaskAssigneeSelect
+                selectedUserIds={(task.assignees ?? []).map((a: { id: number }) => a.id)}
+                onChange={(ids) => handleFieldUpdate('assigneeUserIds', ids)}
+                existingAssignees={(task.assignees ?? []).map((a: { id: number; userName: string }) => ({
+                  id: a.id,
+                  userName: a.userName,
+                }))}
+              />
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">期限</label>
-              <div className="flex items-center gap-1">
-                <input
-                  type="date"
-                  defaultValue={task.dueDate ?? ''}
-                  key={`date-${currentTaskId}-${task.version}`}
-                  onBlur={(e) => handleFieldUpdate('dueDate', e.target.value || null)}
-                  className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                />
-                {task.dueDate && (
-                  <button
-                    type="button"
-                    onClick={() => handleFieldUpdate('dueDate', null)}
-                    className="rounded border border-input px-1.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                  >
-                    なし
-                  </button>
-                )}
-              </div>
+          </div>
+
+          {/* 期限 */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">期限</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                defaultValue={task.dueDate ?? ''}
+                key={`date-${currentTaskId}-${task.version}`}
+                onBlur={(e) => handleFieldUpdate('dueDate', e.target.value || null)}
+                className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+              />
+              {task.dueDate && (
+                <button
+                  type="button"
+                  onClick={() => handleFieldUpdate('dueDate', null)}
+                  className="rounded border border-input px-1.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  なし
+                </button>
+              )}
             </div>
           </div>
 

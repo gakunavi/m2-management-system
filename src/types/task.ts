@@ -36,8 +36,7 @@ export interface TaskListItem {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate: string | null;
-  assigneeId: number | null;
-  assigneeName: string | null;
+  assignees: { id: number; userId: number | null; userName: string }[];
   createdById: number;
   creatorName: string;
   scope: TaskScope;

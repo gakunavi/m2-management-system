@@ -257,9 +257,16 @@ function TaskCardContent({
             {statusDef?.label ?? task.status}
           </span>
         )}
-        {task.assigneeName && (
-          <span className="text-xs text-muted-foreground truncate max-w-[80px]">{task.assigneeName}</span>
-        )}
+        {(() => {
+          const assignees = (task as unknown as { assignees?: { id: number; userName: string }[] }).assignees;
+          if (!assignees || assignees.length === 0) return null;
+          const label = assignees.length === 1
+            ? assignees[0].userName
+            : `${assignees[0].userName} +${assignees.length - 1}`;
+          return (
+            <span className="text-xs text-muted-foreground truncate max-w-[100px]">{label}</span>
+          );
+        })()}
         {dueDateStr && (
           <span className={cn('text-xs font-medium', overdue ? 'text-red-600' : 'text-muted-foreground')}>
             期限：{dueDateStr}

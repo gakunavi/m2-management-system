@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         notifyTargets: { select: { userId: true } },
+        assignees: { select: { userId: true } },
       },
     });
 
@@ -68,8 +69,8 @@ export async function POST(request: NextRequest) {
         const userIds =
           targetUserIds.length > 0
             ? targetUserIds
-            : task.assigneeId
-              ? [task.assigneeId]
+            : task.assignees.length > 0
+              ? task.assignees.map((a) => a.userId).filter((id): id is number => id !== null)
               : [];
 
         if (userIds.length === 0) continue;
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         notifyTargets: { select: { userId: true } },
+        assignees: { select: { userId: true } },
       },
     });
 
@@ -130,8 +132,8 @@ export async function POST(request: NextRequest) {
         const userIds =
           targetUserIds.length > 0
             ? targetUserIds
-            : task.assigneeId
-              ? [task.assigneeId]
+            : task.assignees.length > 0
+              ? task.assignees.map((a) => a.userId).filter((id): id is number => id !== null)
               : [];
 
         if (userIds.length === 0) continue;

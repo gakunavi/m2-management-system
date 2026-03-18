@@ -44,7 +44,8 @@ export const createTaskSchema = z.object({
   status: z.enum(['todo', 'in_progress', 'done', 'on_hold']).default('todo'),
   priority: z.enum(['urgent', 'high', 'medium', 'low']).default('medium'),
   dueDate: z.string().optional().nullable(),
-  assigneeId: z.number().int().positive().optional().nullable(),
+  assigneeUserIds: z.array(z.number().int().positive()).optional().default([]),
+  assigneeNames: z.array(z.string().min(1).max(100)).optional().default([]),
   scope: z.enum(['company', 'business', 'personal', 'board']).default('company'),
   businessId: z.number().int().positive().optional().nullable(),
   boardId: z.number().int().positive().optional().nullable(),
@@ -69,7 +70,8 @@ export const updateTaskSchema = z.object({
   status: z.enum(['todo', 'in_progress', 'done', 'on_hold']).optional(),
   priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
   dueDate: z.string().optional().nullable(),
-  assigneeId: z.number().int().positive().optional().nullable(),
+  assigneeUserIds: z.array(z.number().int().positive()).optional(),
+  assigneeNames: z.array(z.string().min(1).max(100)).optional(),
   scope: z.enum(['company', 'business', 'personal', 'board']).optional(),
   businessId: z.number().int().positive().optional().nullable(),
   boardId: z.number().int().positive().optional().nullable(),
@@ -109,7 +111,7 @@ export function buildTaskVisibilityWhere(user: SessionUser) {
       { scope: 'business' }, // 事業スコープは businessId フィルターで追加制限可能
       { scope: 'personal', createdById: user.id },
       { scope: 'board', board: { members: { some: { userId: user.id } } } }, // ボードメンバーのみ
-      { assigneeId: user.id }, // アサインされたタスクは常に見える
+      { assignees: { some: { userId: user.id } } }, // アサインされたタスクは常に見える
     ],
   };
 }
@@ -128,8 +130,11 @@ export function formatTaskListItem(task: any) {
     status: task.status,
     priority: task.priority,
     dueDate: task.dueDate ? task.dueDate.toISOString().split('T')[0] : null,
-    assigneeId: task.assigneeId,
-    assigneeName: task.assignee?.userName ?? null,
+    assignees: (task.assignees ?? []).map((a: { id: number; userId: number | null; userName: string }) => ({
+      id: a.id,
+      userId: a.userId,
+      userName: a.userName,
+    })),
     createdById: task.createdById,
     creatorName: task.createdBy?.userName ?? '',
     scope: task.scope,

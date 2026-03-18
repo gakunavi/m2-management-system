@@ -88,8 +88,8 @@ export function TaskSubtasks({ taskId, subtasks: children, parentTask, onNavigat
             <span className={`flex-1 text-sm ${child.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
               {child.title}
             </span>
-            {child.assigneeName && (
-              <span className="text-xs text-muted-foreground">{child.assigneeName}</span>
+            {child.assignees.length > 0 && (
+              <span className="text-xs text-muted-foreground">{child.assignees.map(a => a.userName).join(', ')}</span>
             )}
             {child.dueDate && (
               <span className={`text-xs ${

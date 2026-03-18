@@ -8,7 +8,7 @@ import { formatTaskListItem } from '@/lib/task-helpers';
 export const dynamic = 'force-dynamic';
 
 const taskListInclude = {
-  assignee: { select: { userName: true } },
+  assignees: { select: { id: true, userId: true, userName: true }, orderBy: { assignedAt: 'asc' as const } },
   createdBy: { select: { userName: true } },
   business: { select: { businessName: true } },
   column: { select: { id: true, name: true, color: true } },
@@ -37,7 +37,7 @@ export async function GET() {
     sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
 
     const baseWhere = {
-      assigneeId: user.id,
+      assignees: { some: { userId: user.id } },
       isArchived: false,
       parentTaskId: null,
     };
