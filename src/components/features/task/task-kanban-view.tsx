@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -8,7 +8,6 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  useDroppable,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -21,7 +20,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, ChevronRight, ChevronDown } from 'lucide-react';
 import { TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem, TaskColumn } from '@/types/task';
 import { useTaskDetail } from '@/hooks/use-tasks';
@@ -45,16 +44,21 @@ interface TaskKanbanViewProps {
 }
 
 // ============================================
-// 型
+// ID ヘルパー（列 vs カード識別）
 // ============================================
 
-interface ColumnItem {
-  id: string; // `task-${task.id}` 形式
-  task: TaskListItem;
-}
+const COLUMN_PREFIX = 'column-';
+const TASK_PREFIX = 'task-';
+
+function columnDndId(id: number): string { return `${COLUMN_PREFIX}${id}`; }
+function taskDndId(id: number): string { return `${TASK_PREFIX}${id}`; }
+function isColumnId(id: string): boolean { return id.startsWith(COLUMN_PREFIX); }
+function isTaskId(id: string): boolean { return id.startsWith(TASK_PREFIX); }
+function parseColumnId(id: string): number { return parseInt(id.replace(COLUMN_PREFIX, ''), 10); }
+function parseTaskId(id: string): number { return parseInt(id.replace(TASK_PREFIX, ''), 10); }
 
 // ============================================
-// ヘルパー
+// 表示ヘルパー
 // ============================================
 
 function formatDueDate(dueDate: string | null): string | null {
@@ -64,8 +68,8 @@ function formatDueDate(dueDate: string | null): string | null {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function isOverdue(dueDate: string | null): boolean {
-  if (!dueDate) return false;
+function isOverdue(dueDate: string | null, status: string): boolean {
+  if (!dueDate || status === 'done') return false;
   const d = new Date(dueDate);
   if (isNaN(d.getTime())) return false;
   const today = new Date();
@@ -73,66 +77,64 @@ function isOverdue(dueDate: string | null): boolean {
   return d < today;
 }
 
-// 列の並び替え用（useSortable）
-function columnSortId(columnId: number): string {
-  return `col-sort-${columnId}`;
-}
-
-function isColumnSortId(id: string): boolean {
-  return id.startsWith('col-sort-');
-}
-
-function sortIdToColumnId(id: string): number {
-  return parseInt(id.replace('col-sort-', ''), 10);
-}
-
-// カードのドロップ先用（useDroppable）
-function columnDropId(columnId: number): string {
-  return `col-drop-${columnId}`;
-}
-
-function isColumnDropId(id: string): boolean {
-  return id.startsWith('col-drop-');
-}
-
-function dropIdToColumnId(id: string): number {
-  return parseInt(id.replace('col-drop-', ''), 10);
-}
-
-// いずれかの列関連IDか
-function isAnyColumnId(id: string): boolean {
-  return isColumnSortId(id) || isColumnDropId(id);
-}
-
-function itemIdToTaskId(itemId: string): number {
-  return parseInt(itemId.replace('task-', ''), 10);
-}
-
 // ============================================
-// サブタスク行
+// ColumnItems 型とビルダー
 // ============================================
 
-function SubtaskRow({
-  child,
-  isLast,
-  onTaskClick,
-}: {
-  child: TaskListItem;
-  isLast: boolean;
-  onTaskClick?: (id: number) => void;
-}) {
-  return (
-    <div
-      className="flex items-center gap-1.5 text-xs leading-tight cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5"
-      onClick={(e) => { e.stopPropagation(); onTaskClick?.(child.id); }}
-    >
-      <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">{isLast ? '┗' : '┣'}</span>
-      <span className="flex-shrink-0 text-[11px]">
-        {child.status === 'done' ? '✅' : child.status === 'in_progress' ? '🔄' : '⬜'}
-      </span>
-      <span className="truncate text-muted-foreground">{child.title}</span>
-    </div>
-  );
+interface ColumnItem {
+  id: string; // task-{taskId}
+  task: TaskListItem;
+}
+
+function buildColumnItems(
+  tasks: TaskListItem[],
+  columns: TaskColumn[],
+): Record<number, ColumnItem[]> {
+  const result: Record<number, ColumnItem[]> = {};
+  for (const col of columns) {
+    result[col.id] = [];
+  }
+  for (const task of tasks) {
+    const colId = task.columnId;
+    if (colId != null && result[colId] !== undefined) {
+      result[colId].push({ id: taskDndId(task.id), task });
+    } else if (columns.length > 0) {
+      result[columns[0].id].push({ id: taskDndId(task.id), task });
+    }
+  }
+  for (const colId of Object.keys(result)) {
+    result[Number(colId)].sort((a, b) => {
+      const aOrder = (a.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
+      const bOrder = (b.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
+      return aOrder !== bOrder ? aOrder - bOrder : new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime();
+    });
+  }
+  return result;
+}
+
+function findColumnForItem(items: Record<number, ColumnItem[]>, itemId: string): number | undefined {
+  for (const [colId, colItems] of Object.entries(items)) {
+    if (colItems.some((i) => i.id === itemId)) return Number(colId);
+  }
+  return undefined;
+}
+
+function findTaskInItems(items: Record<number, ColumnItem[]>, itemId: string): TaskListItem | null {
+  for (const colItems of Object.values(items)) {
+    const found = colItems.find((i) => i.id === itemId);
+    if (found) return found.task;
+  }
+  return null;
+}
+
+function buildReorderPayload(items: Record<number, ColumnItem[]>): { id: number; columnId: number; sortOrder: number }[] {
+  const result: { id: number; columnId: number; sortOrder: number }[] = [];
+  for (const [colId, colItems] of Object.entries(items)) {
+    colItems.forEach((item, index) => {
+      result.push({ id: parseTaskId(item.id), columnId: Number(colId), sortOrder: index });
+    });
+  }
+  return result;
 }
 
 // ============================================
@@ -142,13 +144,24 @@ function SubtaskRow({
 function SubtaskList({ taskId, onTaskClick }: { taskId: number; onTaskClick?: (id: number) => void }) {
   const { data: detail } = useTaskDetail(taskId);
   const children = detail?.children ?? [];
-
   if (children.length === 0) return null;
 
   return (
     <div className="space-y-0">
       {children.map((child, i) => (
-        <SubtaskRow key={child.id} child={child} isLast={i === children.length - 1} onTaskClick={onTaskClick} />
+        <div
+          key={child.id}
+          className="flex items-center gap-1.5 text-xs leading-tight cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5"
+          onClick={(e) => { e.stopPropagation(); onTaskClick?.(child.id); }}
+        >
+          <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">
+            {i === children.length - 1 ? '┗' : '┣'}
+          </span>
+          <span className="flex-shrink-0 text-[11px]">
+            {child.status === 'done' ? '✅' : child.status === 'in_progress' ? '🔄' : '⬜'}
+          </span>
+          <span className="truncate text-muted-foreground">{child.title}</span>
+        </div>
       ))}
     </div>
   );
@@ -167,7 +180,6 @@ function ChecklistItems({
 }) {
   const { data: detail } = useTaskDetail(taskId);
   const checklist = detail?.checklist ?? [];
-
   if (checklist.length === 0) return null;
 
   return (
@@ -194,51 +206,7 @@ function ChecklistItems({
 }
 
 // ============================================
-// タスクカード（ドラッグ可能）
-// ============================================
-
-interface SortableTaskCardProps {
-  item: ColumnItem;
-  onTaskClick: (id: number) => void;
-  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
-  isDragging?: boolean;
-}
-
-function SortableTaskCard({ item, onTaskClick, onChecklistToggle, isDragging }: SortableTaskCardProps) {
-  const { task } = item;
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging: isSortableDragging,
-  } = useSortable({ id: item.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={cn(
-        'rounded-lg border bg-background shadow-sm p-3 cursor-grab active:cursor-grabbing select-none',
-        (isSortableDragging || isDragging) && 'opacity-40',
-      )}
-      onClick={() => onTaskClick(task.id)}
-    >
-      <TaskCardContent task={task} onTaskClick={onTaskClick} onChecklistToggle={onChecklistToggle} />
-    </div>
-  );
-}
-
-// ============================================
-// カードコンテンツ（オーバーレイ共用）
+// カードコンテンツ（カード本体＋DragOverlay共用）
 // ============================================
 
 function TaskCardContent({
@@ -250,31 +218,22 @@ function TaskCardContent({
   onTaskClick?: (id: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
 }) {
-  const [subtasksOpen, setSubtasksOpen] = useState(false);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [subtasksOpen, setSubtasksOpen] = useState(false);
   const priorityDef = TASK_PRIORITY_OPTIONS.find((p) => p.value === task.priority);
   const dueDateStr = formatDueDate(task.dueDate);
-  const overdue = isOverdue(task.dueDate);
+  const overdue = isOverdue(task.dueDate, task.status);
 
   return (
     <div className="space-y-1.5">
-      {/* タイトル */}
       <p className="text-sm font-medium leading-snug line-clamp-2">{task.title}</p>
 
-      {/* 担当者・期日・優先度 */}
       <div className="flex items-center gap-2 flex-wrap">
         {task.assigneeName && (
-          <span className="text-xs text-muted-foreground truncate max-w-[80px]">
-            {task.assigneeName}
-          </span>
+          <span className="text-xs text-muted-foreground truncate max-w-[80px]">{task.assigneeName}</span>
         )}
         {dueDateStr && (
-          <span
-            className={cn(
-              'text-xs font-medium',
-              overdue ? 'text-red-600' : 'text-muted-foreground',
-            )}
-          >
+          <span className={cn('text-xs font-medium', overdue ? 'text-red-600' : 'text-muted-foreground')}>
             期限：{dueDateStr}
           </span>
         )}
@@ -283,23 +242,20 @@ function TaskCardContent({
             className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full"
             style={{ backgroundColor: `${priorityDef.color}20`, color: priorityDef.color }}
           >
-            <span
-              className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: priorityDef.color }}
-            />
+            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: priorityDef.color }} />
             優先度：{priorityDef.label}
           </span>
         )}
       </div>
 
-      {/* チェックリスト（折りたたみ式・直接チェック可能） */}
+      {/* チェックリスト（折りたたみ式） */}
       {task.checklistTotal > 0 && (
         <div className="border-t pt-1 mt-1">
           <button
-            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full"
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full text-left"
             onClick={(e) => { e.stopPropagation(); setChecklistOpen(!checklistOpen); }}
           >
-            <span className="text-[10px]">{checklistOpen ? '▼' : '▶'}</span>
+            {checklistOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             <span>チェックリスト ({task.checklistDoneCount}/{task.checklistTotal})</span>
           </button>
           {checklistOpen && (
@@ -314,10 +270,10 @@ function TaskCardContent({
       {task.childrenCount > 0 && (
         <div className={cn(task.checklistTotal === 0 && 'border-t pt-1 mt-1')}>
           <button
-            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full"
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full text-left"
             onClick={(e) => { e.stopPropagation(); setSubtasksOpen(!subtasksOpen); }}
           >
-            <span className="text-[10px]">{subtasksOpen ? '▼' : '▶'}</span>
+            {subtasksOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             <span>サブタスク ({task.childrenCount})</span>
           </button>
           {subtasksOpen && (
@@ -335,17 +291,56 @@ function TaskCardContent({
             <span
               key={tag.id}
               className="text-xs px-1.5 py-0.5 rounded-full font-medium"
-              style={{
-                backgroundColor: `${tag.color}20`,
-                color: tag.color,
-                border: `1px solid ${tag.color}40`,
-              }}
+              style={{ backgroundColor: `${tag.color}20`, color: tag.color, border: `1px solid ${tag.color}40` }}
             >
               {tag.name}
             </span>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================
+// ソータブルタスクカード
+// ============================================
+
+function SortableTaskCard({
+  item,
+  columnId,
+  onTaskClick,
+  onChecklistToggle,
+}: {
+  item: ColumnItem;
+  columnId: number;
+  onTaskClick: (id: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    data: { type: 'task', task: item.task, columnId },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        'rounded-lg border bg-background shadow-sm p-3 cursor-grab active:cursor-grabbing select-none',
+        isDragging && 'opacity-40',
+      )}
+      onClick={() => onTaskClick(item.task.id)}
+    >
+      <TaskCardContent task={item.task} onTaskClick={onTaskClick} onChecklistToggle={onChecklistToggle} />
     </div>
   );
 }
@@ -368,34 +363,24 @@ function ColumnMenu({
   return (
     <div className="relative">
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
         className="rounded p-1 hover:bg-black/10 transition-colors"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
-
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-popover shadow-md">
             <button
-              onClick={() => {
-                setIsOpen(false);
-                onEdit(columnId);
-              }}
+              onClick={() => { setIsOpen(false); onEdit(columnId); }}
               className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
             >
               <Pencil className="h-3.5 w-3.5" />
               列名を編集
             </button>
             <button
-              onClick={() => {
-                setIsOpen(false);
-                onDelete(columnId);
-              }}
+              onClick={() => { setIsOpen(false); onDelete(columnId); }}
               className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-accent"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -409,105 +394,93 @@ function ColumnMenu({
 }
 
 // ============================================
-// カラム（ドロップ可能エリア）
+// ソータブルカラム（列自体がドラッグ可能）
 // ============================================
 
-interface KanbanColumnProps {
-  column: TaskColumn;
-  items: ColumnItem[];
-  onTaskClick: (id: number) => void;
-  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
-  activeId: string | null;
-  onEditColumn: (id: number) => void;
-  onDeleteColumn: (id: number) => void;
-}
-
-function KanbanColumn({
+function SortableColumn({
   column,
   items,
   onTaskClick,
   onChecklistToggle,
-  activeId,
   onEditColumn,
   onDeleteColumn,
-}: KanbanColumnProps) {
-  const sortId = columnSortId(column.id);
-  const dropId = columnDropId(column.id);
-  const {
-    attributes: colAttributes,
-    listeners: colListeners,
-    setNodeRef: setColNodeRef,
-    transform: colTransform,
-    transition: colTransition,
-    isDragging: isColDragging,
-  } = useSortable({ id: sortId });
-  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: dropId });
+}: {
+  column: TaskColumn;
+  items: ColumnItem[];
+  onTaskClick: (id: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onEditColumn: (id: number) => void;
+  onDeleteColumn: (id: number) => void;
+}) {
+  const dndId = columnDndId(column.id);
   const color = column.color ?? '#6b7280';
 
-  const colStyle = {
-    transform: CSS.Transform.toString(colTransform),
-    transition: colTransition,
-    opacity: isColDragging ? 0.4 : 1,
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    over,
+  } = useSortable({
+    id: dndId,
+    data: { type: 'column', column },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
   };
+
+  // この列にカードがドラッグされているか
+  const isCardOver = over && isTaskId(over.id as string) && !isDragging;
 
   return (
     <div
-      ref={setColNodeRef}
-      style={colStyle}
+      ref={setNodeRef}
+      style={style}
       className="flex flex-col min-w-[260px] max-w-[300px] flex-1"
     >
-      {/* カラムヘッダー */}
+      {/* カラムヘッダー（列のドラッグハンドルを含む） */}
       <div
         className="flex items-center gap-1 px-2 py-2 rounded-t-lg border-t border-x font-semibold text-sm"
         style={{ borderTopColor: color, backgroundColor: `${color}10` }}
       >
-        {/* 列ドラッグハンドル */}
         <div
           className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-black/10"
-          {...colAttributes}
-          {...colListeners}
+          {...attributes}
+          {...listeners}
         >
           <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
         </div>
-        <span
-          className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: color }}
-        />
-        <span className="flex-1 truncate" style={{ color }}>
-          {column.name}
-        </span>
+        <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <span className="flex-1 truncate" style={{ color }}>{column.name}</span>
         <span
           className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
           style={{ backgroundColor: color }}
         >
           {items.length}
         </span>
-        <ColumnMenu
-          columnId={column.id}
-          onEdit={onEditColumn}
-          onDelete={onDeleteColumn}
-        />
+        <ColumnMenu columnId={column.id} onEdit={onEditColumn} onDelete={onDeleteColumn} />
       </div>
 
-      {/* カード一覧 */}
+      {/* カード一覧（SortableContextで内部のカードをソート可能に） */}
       <div
-        ref={setDropRef}
         className={cn(
           'flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 overflow-y-auto min-h-[120px] transition-colors',
-          isOver ? 'bg-accent/60' : 'bg-muted/20',
+          isCardOver ? 'bg-accent/60' : 'bg-muted/20',
         )}
       >
-        <SortableContext
-          items={items.map((i) => i.id)}
-          strategy={verticalListSortingStrategy}
-        >
+        <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
           {items.map((item) => (
             <SortableTaskCard
               key={item.id}
               item={item}
+              columnId={column.id}
               onTaskClick={onTaskClick}
               onChecklistToggle={onChecklistToggle}
-              isDragging={activeId === item.id}
             />
           ))}
         </SortableContext>
@@ -538,87 +511,108 @@ export function TaskKanbanView({
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
-  // ローカルの列順序（即時反映用）
-  const [localColumns, setLocalColumns] = useState(() =>
+  // ローカル列順序（D&D即時反映用）
+  const [localColumns, setLocalColumns] = useState<TaskColumn[]>(() =>
     [...columns].sort((a, b) => a.sortOrder - b.sortOrder),
   );
 
-  // columnId別にタスクをグループ化
+  // カラム別タスク（D&D即時反映用）
   const [columnItems, setColumnItems] = useState<Record<number, ColumnItem[]>>(() =>
     buildColumnItems(tasks, localColumns),
   );
 
-  // propsのtasks/columnsが変わったらローカル状態を再構築
-  const [prevTasks, setPrevTasks] = useState(tasks);
-  const [prevColumns, setPrevColumns] = useState(columns);
-  if (tasks !== prevTasks || columns !== prevColumns) {
-    setPrevTasks(tasks);
-    setPrevColumns(columns);
-    const sorted = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
-    setLocalColumns(sorted);
-    setColumnItems(buildColumnItems(tasks, sorted));
-  }
+  // props変更時にローカルstateを同期（ref比較で無限ループ防止）
+  const prevTasksRef = useRef(tasks);
+  const prevColumnsRef = useRef(columns);
+  useEffect(() => {
+    if (tasks !== prevTasksRef.current || columns !== prevColumnsRef.current) {
+      prevTasksRef.current = tasks;
+      prevColumnsRef.current = columns;
+      const sorted = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
+      setLocalColumns(sorted);
+      setColumnItems(buildColumnItems(tasks, sorted));
+    }
+  }, [tasks, columns]);
 
-  const activeTask = activeId && !isAnyColumnId(activeId) ? findTaskById(columnItems, activeId) : null;
-  const activeColumn = activeId && isColumnSortId(activeId) ? localColumns.find(c => columnSortId(c.id) === activeId) : null;
+  // 最新のcolumnItemsをrefで保持（コールバック内でstale closureを防ぐ）
+  const columnItemsRef = useRef(columnItems);
+  columnItemsRef.current = columnItems;
 
-  // 列の並び替え用ID一覧
-  const columnSortIds = localColumns.map(c => columnSortId(c.id));
+  const localColumnsRef = useRef(localColumns);
+  localColumnsRef.current = localColumns;
 
-  function handleDragStart(event: DragStartEvent) {
+  // アクティブなドラッグ対象
+  const activeTask = activeId && isTaskId(activeId) ? findTaskInItems(columnItems, activeId) : null;
+  const activeColumn = activeId && isColumnId(activeId) ? localColumns.find(c => columnDndId(c.id) === activeId) : null;
+
+  // 列のDnD ID一覧
+  const columnDndIds = localColumns.map(c => columnDndId(c.id));
+
+  // ======== DnDハンドラー ========
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
-  }
+  }, []);
 
-  function handleDragOver(event: DragOverEvent) {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
     const activeItemId = active.id as string;
+    const overItemId = over.id as string;
 
-    // 列のドラッグ中はカード移動ロジックをスキップ
-    if (isColumnSortId(activeItemId)) return;
-    const overId = over.id as string;
+    // 列ドラッグ中はカード移動しない
+    if (isColumnId(activeItemId)) return;
 
-    // ドラッグ元カラムを特定
-    const sourceColId = findColumnIdForItem(columnItems, activeItemId);
+    // カードドラッグ中のみ処理
+    if (!isTaskId(activeItemId)) return;
+
+    const currentItems = columnItemsRef.current;
+
+    // ドラッグ元列を特定
+    const sourceColId = findColumnForItem(currentItems, activeItemId);
     if (sourceColId === undefined) return;
 
-    // オーバー先: カラムドロップIDか、別カラムのアイテムIDか判定
-    const targetColId = isColumnDropId(overId)
-      ? dropIdToColumnId(overId)
-      : findColumnIdForItem(columnItems, overId);
+    // ドロップ先列を特定
+    let targetColId: number | undefined;
+    if (isColumnId(overItemId)) {
+      // 列の上にドラッグ → その列に移動
+      targetColId = parseColumnId(overItemId);
+    } else if (isTaskId(overItemId)) {
+      // 別カードの上にドラッグ → そのカードの所属列に移動
+      targetColId = findColumnForItem(currentItems, overItemId);
+    }
 
     if (targetColId === undefined) return;
 
-    // 同一カラム内の並び替え（リアルタイムフィードバック）
-    if (sourceColId === targetColId && !isColumnDropId(overId)) {
-      setColumnItems((prev) => {
-        const items = [...(prev[sourceColId] ?? [])];
-        const oldIndex = items.findIndex((i) => i.id === activeItemId);
-        const newIndex = items.findIndex((i) => i.id === overId);
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
-        return { ...prev, [sourceColId]: arrayMove(items, oldIndex, newIndex) };
-      });
+    // 同一列内の並び替え
+    if (sourceColId === targetColId) {
+      if (isTaskId(overItemId)) {
+        setColumnItems((prev) => {
+          const items = [...(prev[sourceColId] ?? [])];
+          const oldIndex = items.findIndex((i) => i.id === activeItemId);
+          const newIndex = items.findIndex((i) => i.id === overItemId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+          return { ...prev, [sourceColId]: arrayMove(items, oldIndex, newIndex) };
+        });
+      }
       return;
     }
 
-    if (sourceColId === targetColId) return;
-
-    // カラムをまたいだ移動
+    // 列をまたぐ移動
     setColumnItems((prev) => {
       const sourceItems = [...(prev[sourceColId] ?? [])];
-      const targetItems = [...(prev[targetColId] ?? [])];
-
+      const targetItems = [...(prev[targetColId!] ?? [])];
       const sourceIndex = sourceItems.findIndex((i) => i.id === activeItemId);
       if (sourceIndex === -1) return prev;
 
       const [moved] = sourceItems.splice(sourceIndex, 1);
 
-      if (!isColumnDropId(overId)) {
-        const overIndex = targetItems.findIndex((i) => i.id === overId);
+      if (isTaskId(overItemId)) {
+        const overIndex = targetItems.findIndex((i) => i.id === overItemId);
         if (overIndex !== -1) {
           targetItems.splice(overIndex, 0, moved);
         } else {
@@ -628,66 +622,46 @@ export function TaskKanbanView({
         targetItems.push(moved);
       }
 
-      return {
-        ...prev,
-        [sourceColId]: sourceItems,
-        [targetColId]: targetItems,
-      };
+      return { ...prev, [sourceColId]: sourceItems, [targetColId!]: targetItems };
     });
-  }
+  }, []);
 
-  function handleDragEnd(event: DragEndEvent) {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
-
     if (!over) return;
 
     const activeItemId = active.id as string;
-    const overId = over.id as string;
+    const overItemId = over.id as string;
 
-    // 列のドラッグ完了
-    if (isColumnSortId(activeItemId) && isColumnSortId(overId)) {
-      const oldIndex = localColumns.findIndex(c => columnSortId(c.id) === activeItemId);
-      const newIndex = localColumns.findIndex(c => columnSortId(c.id) === overId);
+    // 列の並び替え完了
+    if (isColumnId(activeItemId) && isColumnId(overItemId)) {
+      const cols = localColumnsRef.current;
+      const oldIndex = cols.findIndex(c => columnDndId(c.id) === activeItemId);
+      const newIndex = cols.findIndex(c => columnDndId(c.id) === overItemId);
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        const reordered = arrayMove(localColumns, oldIndex, newIndex);
-        // ローカルstateを即時更新（APIレスポンス前に次のドラッグに対応）
-        setLocalColumns(reordered.map((c, i) => ({ ...c, sortOrder: i })));
-        onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
+        const reordered = arrayMove(cols, oldIndex, newIndex);
+        const withOrder = reordered.map((c, i) => ({ ...c, sortOrder: i }));
+        setLocalColumns(withOrder);
+        onReorderColumns(withOrder.map((c, i) => ({ id: c.id, sortOrder: i })));
       }
       return;
     }
 
-    // タスクカードのドラッグ完了
-    const currentColId = findColumnIdForItem(columnItems, activeItemId);
-    if (currentColId === undefined) return;
-
-    const targetColId = isColumnDropId(overId)
-      ? dropIdToColumnId(overId)
-      : findColumnIdForItem(columnItems, overId);
-
-    if (targetColId === undefined) return;
-
-    if (currentColId !== targetColId) {
-      const allReorderItems = buildReorderPayload(columnItems);
-      onReorder(allReorderItems);
-    } else {
-      const items = columnItems[currentColId] ?? [];
-      const oldIndex = items.findIndex((i) => i.id === activeItemId);
-      const newIndex = items.findIndex((i) => i.id === overId);
-
-      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        const reordered = arrayMove(items, oldIndex, newIndex);
-        const updated = { ...columnItems, [currentColId]: reordered };
-        setColumnItems(updated);
-        const allReorderItems = buildReorderPayload(updated);
-        onReorder(allReorderItems);
-      } else {
-        const allReorderItems = buildReorderPayload(columnItems);
-        onReorder(allReorderItems);
-      }
+    // カードの移動完了 → APIに送信
+    if (isTaskId(activeItemId)) {
+      const payload = buildReorderPayload(columnItemsRef.current);
+      onReorder(payload);
     }
-  }
+  }, [onReorderColumns, onReorder]);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null);
+    // ドラッグキャンセル時にpropsから再構築
+    const sorted = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
+    setLocalColumns(sorted);
+    setColumnItems(buildColumnItems(tasks, sorted));
+  }, [columns, tasks]);
 
   return (
     <DndContext
@@ -696,17 +670,17 @@ export function TaskKanbanView({
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
-        <SortableContext items={columnSortIds} strategy={horizontalListSortingStrategy}>
+        <SortableContext items={columnDndIds} strategy={horizontalListSortingStrategy}>
           {localColumns.map((col) => (
-            <KanbanColumn
+            <SortableColumn
               key={col.id}
               column={col}
               items={columnItems[col.id] ?? []}
               onTaskClick={onTaskClick}
               onChecklistToggle={onChecklistToggle}
-              activeId={activeId}
               onEditColumn={onEditColumn}
               onDeleteColumn={onDeleteColumn}
             />
@@ -714,7 +688,7 @@ export function TaskKanbanView({
         </SortableContext>
 
         {/* 列追加ボタン */}
-        <div className="min-w-[260px] max-w-[300px] flex-1">
+        <div className="min-w-[260px] max-w-[300px] flex-1 flex-shrink-0">
           <button
             onClick={onAddColumn}
             className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-8 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors"
@@ -725,6 +699,7 @@ export function TaskKanbanView({
         </div>
       </div>
 
+      {/* ドラッグ中のオーバーレイ */}
       <DragOverlay>
         {activeTask && (
           <div className="rounded-lg border bg-background shadow-xl p-3 w-[260px] rotate-1 opacity-95">
@@ -733,10 +708,10 @@ export function TaskKanbanView({
         )}
         {activeColumn && (
           <div
-            className="rounded-lg border shadow-xl w-[260px] rotate-1 opacity-90"
+            className="rounded-lg border shadow-xl w-[260px] rotate-1 opacity-90 p-3"
             style={{ backgroundColor: `${activeColumn.color ?? '#6b7280'}10`, borderColor: activeColumn.color ?? '#6b7280' }}
           >
-            <div className="flex items-center gap-2 px-3 py-2 font-semibold text-sm" style={{ color: activeColumn.color ?? '#6b7280' }}>
+            <div className="flex items-center gap-2 font-semibold text-sm" style={{ color: activeColumn.color ?? '#6b7280' }}>
               <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: activeColumn.color ?? '#6b7280' }} />
               {activeColumn.name}
             </div>
@@ -745,81 +720,4 @@ export function TaskKanbanView({
       </DragOverlay>
     </DndContext>
   );
-}
-
-// ============================================
-// ユーティリティ関数
-// ============================================
-
-function buildColumnItems(
-  tasks: TaskListItem[],
-  columns: TaskColumn[],
-): Record<number, ColumnItem[]> {
-  const result: Record<number, ColumnItem[]> = {};
-
-  // 全カラムを初期化
-  for (const col of columns) {
-    result[col.id] = [];
-  }
-
-  // タスクを振り分け
-  for (const task of tasks) {
-    const colId = task.columnId;
-
-    if (colId != null && result[colId] !== undefined) {
-      result[colId].push({ id: `task-${task.id}`, task });
-    } else if (columns.length > 0) {
-      // columnId未設定のタスクは最初の列に入れる
-      result[columns[0].id].push({ id: `task-${task.id}`, task });
-    }
-  }
-
-  // 各カラム内をsortOrder順にソート
-  for (const colId of Object.keys(result)) {
-    result[Number(colId)].sort((a, b) => {
-      const aOrder = (a.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
-      const bOrder = (b.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
-      if (aOrder !== bOrder) return aOrder - bOrder;
-      return new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime();
-    });
-  }
-
-  return result;
-}
-
-function findColumnIdForItem(
-  columnItems: Record<number, ColumnItem[]>,
-  itemId: string,
-): number | undefined {
-  for (const [colId, items] of Object.entries(columnItems)) {
-    if (items.some((i) => i.id === itemId)) return Number(colId);
-  }
-  return undefined;
-}
-
-function findTaskById(
-  columnItems: Record<number, ColumnItem[]>,
-  itemId: string,
-): TaskListItem | null {
-  for (const items of Object.values(columnItems)) {
-    const found = items.find((i) => i.id === itemId);
-    if (found) return found.task;
-  }
-  return null;
-}
-
-function buildReorderPayload(
-  columnItems: Record<number, ColumnItem[]>,
-): { id: number; columnId: number; sortOrder: number }[] {
-  const result: { id: number; columnId: number; sortOrder: number }[] = [];
-  for (const [colId, items] of Object.entries(columnItems)) {
-    items.forEach((item, index) => {
-      result.push({
-        id: itemIdToTaskId(item.id),
-        columnId: Number(colId),
-        sortOrder: index,
-      });
-    });
-  }
-  return result;
 }
