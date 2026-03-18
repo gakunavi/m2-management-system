@@ -30,7 +30,7 @@ const taskListInclude = {
       tag: { select: { id: true, name: true, color: true } },
     },
   },
-  _count: { select: { children: true } },
+  _count: { select: { children: true, attachments: true } },
   children: { select: { id: true, status: true } },
 } as const;
 

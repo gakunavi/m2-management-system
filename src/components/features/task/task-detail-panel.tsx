@@ -4,10 +4,14 @@ import { useState, useCallback } from 'react';
 import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight, ExternalLink, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTaskDetail, useTaskMutations } from '@/hooks/use-tasks';
+import { useTaskAttachments } from '@/hooks/use-task-attachments';
+import { useAuth } from '@/hooks/use-auth';
 import { TaskChecklist } from './task-checklist';
 import { TaskSubtasks } from './task-subtasks';
 import { TaskTagInput } from './task-tag-input';
 import { TaskNotifySettings } from './task-notify-settings';
+import { TaskAttachments } from './task-attachments';
+import type { TaskAttachmentItem } from './task-attachments';
 import {
   TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
@@ -33,6 +37,8 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
     : (task?.parentTaskId ?? null);
   const { data: parentTask } = useTaskDetail(parentIdForBreadcrumb);
   const { updateTask, deleteTask } = useTaskMutations();
+  const { upload: attachmentUpload, remove: attachmentRemove } = useTaskAttachments(currentTaskId);
+  const { user, isAdmin } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
 
   // 子タスクに遷移
@@ -361,6 +367,16 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
               />
             </div>
           )}
+
+          {/* 添付ファイル */}
+          <TaskAttachments
+            taskId={currentTaskId}
+            attachments={(task as unknown as { attachments?: TaskAttachmentItem[] }).attachments ?? []}
+            canDelete={isAdmin || task.createdById === user?.id}
+            onUpload={(file) => attachmentUpload.mutate(file)}
+            onDelete={(id) => attachmentRemove.mutate(id)}
+            isUploading={attachmentUpload.isPending}
+          />
 
           {/* 通知設定 */}
           <TaskNotifySettings

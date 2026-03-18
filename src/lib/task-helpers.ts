@@ -150,6 +150,7 @@ export function formatTaskListItem(task: any) {
       color: tt.tag.color,
     })),
     childrenCount: task._count?.children ?? 0,
+    attachmentCount: task._count?.attachments ?? 0,
     childrenDoneCount: (task.children ?? []).filter((c: { status: string }) => c.status === 'done').length,
     checklistTotal: checklist.length,
     checklistDoneCount: checklist.filter((c: { checked: boolean }) => c.checked).length,
@@ -172,6 +173,16 @@ export function formatTaskDetail(task: any) {
     notifyTargets: (task.notifyTargets ?? []).map((nt: { userId: number; user: { userName: string } }) => ({
       userId: nt.userId,
       userName: nt.user?.userName ?? '',
+    })),
+    attachments: (task.attachments ?? []).map((a: any) => ({
+      id: a.id,
+      fileName: a.fileName,
+      fileKey: a.fileKey,
+      fileSize: a.fileSize,
+      mimeType: a.mimeType,
+      uploadedById: a.uploadedById,
+      uploaderName: a.uploadedBy?.userName ?? '',
+      createdAt: a.createdAt.toISOString(),
     })),
   };
 }

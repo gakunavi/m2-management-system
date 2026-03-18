@@ -58,8 +58,20 @@ export interface TaskListItem {
   checklistDoneCount: number;
   sortOrder: number;
   completedAt: string | null;
+  attachmentCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TaskAttachmentItem {
+  id: number;
+  fileName: string;
+  fileKey: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedById: number;
+  uploaderName: string;
+  createdAt: string;
 }
 
 /** 詳細表示用（子タスク・チェックリスト含む） */
@@ -70,6 +82,7 @@ export interface TaskDetail extends TaskListItem {
   version: number;
   children: TaskListItem[];
   notifyTargets: TaskNotifyTargetItem[];
+  attachments: TaskAttachmentItem[];
 }
 
 // ============================================

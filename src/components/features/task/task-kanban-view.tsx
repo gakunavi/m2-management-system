@@ -23,7 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, ChevronRight, ChevronDown } from 'lucide-react';
-import { TASK_PRIORITY_OPTIONS } from '@/types/task';
+import { TASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem, TaskColumn } from '@/types/task';
 import { useTaskDetail } from '@/hooks/use-tasks';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,8 @@ interface TaskKanbanViewProps {
   onReorder: (items: { id: number; columnId: number; sortOrder: number }[]) => void;
   onTaskClick: (taskId: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onStatusChange?: (taskId: number, status: string) => void;
+  onPriorityChange?: (taskId: number, priority: string) => void;
   onAddTaskToColumn: (columnId: number) => void;
   onAddColumn: () => void;
   onEditColumn: (columnId: number) => void;
@@ -216,13 +218,18 @@ function TaskCardContent({
   task,
   onTaskClick,
   onChecklistToggle,
+  onStatusChange,
+  onPriorityChange,
 }: {
   task: TaskListItem;
   onTaskClick?: (id: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onStatusChange?: (taskId: number, status: string) => void;
+  onPriorityChange?: (taskId: number, priority: string) => void;
 }) {
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [subtasksOpen, setSubtasksOpen] = useState(false);
+  const statusDef = TASK_STATUS_OPTIONS.find((s) => s.value === task.status);
   const priorityDef = TASK_PRIORITY_OPTIONS.find((p) => p.value === task.priority);
   const dueDateStr = formatDueDate(task.dueDate);
   const overdue = isOverdue(task.dueDate, task.status);
@@ -232,6 +239,24 @@ function TaskCardContent({
       <p className="text-sm font-medium leading-snug line-clamp-2">{task.title}</p>
 
       <div className="flex items-center gap-2 flex-wrap">
+        {/* ステータス */}
+        {onStatusChange ? (
+          <select
+            value={task.status}
+            onChange={(e) => { e.stopPropagation(); onStatusChange(task.id, e.target.value); }}
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white border-0 cursor-pointer appearance-none"
+            style={{ backgroundColor: statusDef?.color ?? '#94a3b8' }}
+          >
+            {TASK_STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white" style={{ backgroundColor: statusDef?.color ?? '#94a3b8' }}>
+            {statusDef?.label ?? task.status}
+          </span>
+        )}
         {task.assigneeName && (
           <span className="text-xs text-muted-foreground truncate max-w-[80px]">{task.assigneeName}</span>
         )}
@@ -240,7 +265,20 @@ function TaskCardContent({
             期限：{dueDateStr}
           </span>
         )}
-        {priorityDef && (
+        {/* 優先度 */}
+        {onPriorityChange ? (
+          <select
+            value={task.priority}
+            onChange={(e) => { e.stopPropagation(); onPriorityChange(task.id, e.target.value); }}
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-full px-1.5 py-0.5 text-[11px] font-medium border-0 cursor-pointer appearance-none"
+            style={{ backgroundColor: `${priorityDef?.color ?? '#94a3b8'}20`, color: priorityDef?.color ?? '#94a3b8' }}
+          >
+            {TASK_PRIORITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        ) : priorityDef && (
           <span
             className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full"
             style={{ backgroundColor: `${priorityDef.color}20`, color: priorityDef.color }}
@@ -314,11 +352,15 @@ function SortableTaskCard({
   columnId,
   onTaskClick,
   onChecklistToggle,
+  onStatusChange,
+  onPriorityChange,
 }: {
   item: ColumnItem;
   columnId: number;
   onTaskClick: (id: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onStatusChange?: (taskId: number, status: string) => void;
+  onPriorityChange?: (taskId: number, priority: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -343,7 +385,7 @@ function SortableTaskCard({
       )}
       onClick={() => onTaskClick(item.task.id)}
     >
-      <TaskCardContent task={item.task} onTaskClick={onTaskClick} onChecklistToggle={onChecklistToggle} />
+      <TaskCardContent task={item.task} onTaskClick={onTaskClick} onChecklistToggle={onChecklistToggle} onStatusChange={onStatusChange} onPriorityChange={onPriorityChange} />
     </div>
   );
 }
@@ -405,6 +447,8 @@ function SortableColumn({
   items,
   onTaskClick,
   onChecklistToggle,
+  onStatusChange,
+  onPriorityChange,
   onAddTask,
   onEditColumn,
   onDeleteColumn,
@@ -413,6 +457,8 @@ function SortableColumn({
   items: ColumnItem[];
   onTaskClick: (id: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onStatusChange?: (taskId: number, status: string) => void;
+  onPriorityChange?: (taskId: number, priority: string) => void;
   onAddTask: () => void;
   onEditColumn: (id: number) => void;
   onDeleteColumn: (id: number) => void;
@@ -486,6 +532,8 @@ function SortableColumn({
               columnId={column.id}
               onTaskClick={onTaskClick}
               onChecklistToggle={onChecklistToggle}
+              onStatusChange={onStatusChange}
+              onPriorityChange={onPriorityChange}
             />
           ))}
         </SortableContext>
@@ -515,6 +563,8 @@ export function TaskKanbanView({
   onReorder,
   onTaskClick,
   onChecklistToggle,
+  onStatusChange,
+  onPriorityChange,
   onAddTaskToColumn,
   onAddColumn,
   onEditColumn,
@@ -703,6 +753,8 @@ export function TaskKanbanView({
               items={columnItems[col.id] ?? []}
               onTaskClick={onTaskClick}
               onChecklistToggle={onChecklistToggle}
+              onStatusChange={onStatusChange}
+              onPriorityChange={onPriorityChange}
               onAddTask={() => onAddTaskToColumn(col.id)}
               onEditColumn={onEditColumn}
               onDeleteColumn={onDeleteColumn}

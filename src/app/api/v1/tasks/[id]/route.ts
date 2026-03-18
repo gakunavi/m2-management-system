@@ -23,7 +23,11 @@ const taskDetailInclude = {
       tag: { select: { id: true, name: true, color: true } },
     },
   },
-  _count: { select: { children: true } },
+  _count: { select: { children: true, attachments: true } },
+  attachments: {
+    include: { uploadedBy: { select: { userName: true } } },
+    orderBy: { createdAt: 'asc' as const },
+  },
   children: {
     include: {
       assignee: { select: { userName: true } },

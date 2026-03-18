@@ -62,6 +62,7 @@ model User {
   createdTaskColumns  TaskColumn[]         @relation("TaskColumnCreator")
   createdTaskBoards   TaskBoard[]          @relation("TaskBoardCreator")
   taskBoardMembers    TaskBoardMember[]
+  taskAttachments     TaskAttachment[]    @relation("TaskAttachmentUploader")
 
   @@index([userRole])
   @@index([userIsActive])
@@ -880,6 +881,7 @@ model Task {
   children      Task[]             @relation("TaskParentChild")
   tags          TaskTagOnTask[]
   notifyTargets TaskNotifyTarget[]
+  attachments   TaskAttachment[]
 
   @@index([assigneeId, status, dueDate])
   @@index([businessId, scope, status])
@@ -890,6 +892,23 @@ model Task {
   @@index([status, dueDate])
   @@index([isArchived, status])
   @@map("tasks")
+}
+
+model TaskAttachment {
+  id           Int      @id @default(autoincrement())
+  taskId       Int      @map("task_id")
+  fileName     String   @map("file_name") @db.VarChar(255)
+  fileKey      String   @map("file_key") @db.VarChar(500)
+  fileSize     Int      @map("file_size")
+  mimeType     String   @map("mime_type") @db.VarChar(100)
+  uploadedById Int      @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([taskId])
+  @@map("task_attachments")
 }
 
 model TaskTag {

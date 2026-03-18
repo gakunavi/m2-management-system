@@ -28,7 +28,7 @@ type ViewMode = 'list' | 'kanban' | 'calendar';
 
 export function TasksClient() {
   const { currentBusiness } = useBusiness();
-  const { reorderTasks } = useTaskMutations();
+  const { updateTask, reorderTasks } = useTaskMutations();
 
   // ビューモード
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -338,6 +338,8 @@ export function TasksClient() {
             columns={columns}
             onTaskClick={setSelectedTaskId}
             onColumnChange={() => {}}
+            onStatusChange={(taskId, status) => updateTask.mutate({ id: taskId, status, version: 1 })}
+            onPriorityChange={(taskId, priority) => updateTask.mutate({ id: taskId, priority, version: 1 })}
             onAddTaskToColumn={(columnId) => setShowCreateModal({ open: true, columnId })}
             onReorder={(items) => {
               const taskMap = new Map(tasks.map((t) => [t.id, t]));
@@ -597,6 +599,14 @@ function TaskListView({
     updateTask.mutate({ id: taskId, isArchived, version: 1 });
   }, [updateTask]);
 
+  const handleStatusChange = useCallback((taskId: number, status: string) => {
+    updateTask.mutate({ id: taskId, status, version: 1 });
+  }, [updateTask]);
+
+  const handlePriorityChange = useCallback((taskId: number, priority: string) => {
+    updateTask.mutate({ id: taskId, priority, version: 1 });
+  }, [updateTask]);
+
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(Number(event.active.id));
     setExpandedTasks(new Set());
@@ -705,7 +715,7 @@ function TaskListView({
     );
   }
 
-  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(180px,1fr)_80px_56px_80px_96px_minmax(80px,160px)_72px_84px]';
+  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(140px,1fr)_100px_76px_80px_96px_minmax(80px,150px)_72px_84px]';
 
   return (
     <div>
@@ -749,6 +759,8 @@ function TaskListView({
                     onToggleExpand={() => toggleExpand(task.id)}
                     onTaskClick={onTaskClick}
                     onArchiveToggle={handleArchiveToggle}
+                    onStatusChange={handleStatusChange}
+                    onPriorityChange={handlePriorityChange}
                     gridCols={GRID_COLS}
                   />
                 ))}
@@ -804,6 +816,8 @@ function TaskRowWithChildren({
   onToggleExpand,
   onTaskClick,
   onArchiveToggle,
+  onStatusChange,
+  onPriorityChange,
   gridCols,
 }: {
   task: TaskListItem;
@@ -811,6 +825,8 @@ function TaskRowWithChildren({
   onToggleExpand: () => void;
   onTaskClick: (id: number) => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
+  onStatusChange: (id: number, status: string) => void;
+  onPriorityChange: (id: number, priority: string) => void;
   gridCols: string;
 }) {
   const { data: detail } = useTaskDetail(isExpanded ? task.id : null);
@@ -824,6 +840,8 @@ function TaskRowWithChildren({
         onToggleExpand={onToggleExpand}
         onClick={() => onTaskClick(task.id)}
         onArchiveToggle={onArchiveToggle}
+        onStatusChange={onStatusChange}
+        onPriorityChange={onPriorityChange}
         gridCols={gridCols}
       />
       {isExpanded && children.map((child, index) => (
@@ -846,6 +864,8 @@ function ParentTaskRow({
   onToggleExpand,
   onClick,
   onArchiveToggle,
+  onStatusChange,
+  onPriorityChange,
   gridCols,
 }: {
   task: TaskListItem;
@@ -853,6 +873,8 @@ function ParentTaskRow({
   onToggleExpand: () => void;
   onClick: () => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
+  onStatusChange: (id: number, status: string) => void;
+  onPriorityChange: (id: number, priority: string) => void;
   gridCols: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
@@ -903,15 +925,29 @@ function ParentTaskRow({
           )}
         </div>
       </div>
-      <div className="px-3 py-2 whitespace-nowrap">
-        <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
-          {statusOpt?.label ?? task.status}
-        </span>
+      <div className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+        <select
+          value={task.status}
+          onChange={(e) => onStatusChange(task.id, e.target.value)}
+          className="w-full rounded-full px-2 py-0.5 text-xs font-medium text-white border-0 cursor-pointer appearance-none text-center"
+          style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}
+        >
+          {TASK_STATUS_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
-      <div className="px-3 py-2 whitespace-nowrap">
-        <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: priorityOpt?.color ?? '#94a3b8' }}>
-          {priorityOpt?.label ?? task.priority}
-        </span>
+      <div className="px-2 py-1" onClick={(e) => e.stopPropagation()}>
+        <select
+          value={task.priority}
+          onChange={(e) => onPriorityChange(task.id, e.target.value)}
+          className="w-full rounded-full px-2 py-0.5 text-xs font-medium text-white border-0 cursor-pointer appearance-none text-center"
+          style={{ backgroundColor: priorityOpt?.color ?? '#94a3b8' }}
+        >
+          {TASK_PRIORITY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
       <div className="px-3 py-2 truncate whitespace-nowrap">{task.assigneeName ?? '-'}</div>
       <div className={`px-3 py-2 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
