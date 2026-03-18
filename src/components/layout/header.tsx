@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 export function Header() {
   const pathname = usePathname();
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isPartner, signOut } = useAuth();
   const { toggle } = useMobileMenu();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -37,9 +37,10 @@ export function Header() {
     setUserMenuOpen(false);
   }, [pathname]);
 
-  const visibleMenuItems = userMenuItems.filter(
-    (item) => !item.adminOnly || isAdmin,
-  );
+  const visibleMenuItems = isPartner
+    ? []
+    : userMenuItems.filter((item) => !item.adminOnly || isAdmin);
+  const visibleQuickItems = isPartner ? [] : headerQuickItems;
 
   return (
     <header className="flex h-14 lg:h-16 items-center justify-between lg:justify-end gap-2 lg:gap-4 border-b bg-white px-3 lg:px-6 shadow-sm">
@@ -54,7 +55,7 @@ export function Header() {
 
       {/* モバイル: クイックアクセス（アイコンのみ） */}
       <div className="flex lg:hidden items-center gap-1">
-        {headerQuickItems.map((item) => (
+        {visibleQuickItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
@@ -75,7 +76,7 @@ export function Header() {
       <div className="flex items-center gap-1 lg:gap-2">
         {/* デスクトップ: クイックアクセス（ラベル付き） */}
         <div className="hidden lg:flex items-center gap-1 mr-2">
-          {headerQuickItems.map((item) => (
+          {visibleQuickItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
