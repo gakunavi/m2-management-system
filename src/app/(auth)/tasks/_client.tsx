@@ -17,6 +17,8 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { TaskDetailPanel } from '@/components/features/task/task-detail-panel';
 import { TaskCreateModal } from '@/components/features/task/task-create-modal';
 import { TaskBoardSettingsPanel } from '@/components/features/task/task-board-settings-panel';
+import { TaskKanbanView } from '@/components/features/task/task-kanban-view';
+import { TaskCalendarView } from '@/components/features/task/task-calendar-view';
 import {
   TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
@@ -27,6 +29,7 @@ type ViewMode = 'list' | 'kanban' | 'calendar';
 
 export function TasksClient() {
   const { currentBusiness } = useBusiness();
+  const { reorderTasks } = useTaskMutations();
 
   // ビューモード
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -309,15 +312,21 @@ export function TasksClient() {
       )}
 
       {viewMode === 'kanban' && (
-        <div className="rounded-lg border border-dashed border-muted-foreground/30 p-12 text-center text-muted-foreground">
-          カンバンビューは Phase 2 で実装予定です
-        </div>
+        <TaskKanbanView
+          tasks={tasks}
+          onTaskClick={setSelectedTaskId}
+          onStatusChange={(taskId, newStatus) => {
+            reorderTasks.mutate([{ id: taskId, status: newStatus, sortOrder: 0 }]);
+          }}
+          onReorder={(items) => reorderTasks.mutate(items)}
+        />
       )}
 
       {viewMode === 'calendar' && (
-        <div className="rounded-lg border border-dashed border-muted-foreground/30 p-12 text-center text-muted-foreground">
-          カレンダービューは Phase 2 で実装予定です
-        </div>
+        <TaskCalendarView
+          tasks={tasks}
+          onTaskClick={setSelectedTaskId}
+        />
       )}
 
       {/* 詳細パネル */}
