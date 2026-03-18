@@ -55,6 +55,10 @@ model User {
   updatedUsers        User[]                   @relation("UserUpdatedBy")
   partner             Partner?                 @relation("UserPartner", fields: [userPartnerId], references: [id])
   chatConversations   ChatConversation[]
+  assignedTasks       Task[]               @relation("TaskAssignee")
+  createdTasks        Task[]               @relation("TaskCreator")
+  ownedTaskTags       TaskTag[]            @relation("TaskTagOwner")
+  taskNotifyTargets   TaskNotifyTarget[]
 
   @@index([userRole])
   @@index([userIsActive])
@@ -91,6 +95,7 @@ model Business {
   documents                   BusinessDocument[]
   announcements                Announcement[]
   chatConversations            ChatConversation[]
+  tasks                        Task[]
 
   @@index([businessIsActive, businessSortOrder])
   @@index([businessCode, businessIsActive], map: "idx_businesses_code_active")
@@ -829,3 +834,87 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+// ============================================
+// タスク管理
+// ============================================
+
+model Task {
+  id                Int       @id @default(autoincrement())
+  taskNo            String    @unique @map("task_no") @db.VarChar(20)
+  title             String    @map("title") @db.VarChar(200)
+  description       String?   @map("description") @db.Text
+  status            String    @default("todo") @map("status") @db.VarChar(20)
+  priority          String    @default("medium") @map("priority") @db.VarChar(20)
+  dueDate           DateTime? @map("due_date") @db.Date
+  assigneeId        Int?      @map("assignee_id")
+  createdById       Int       @map("created_by_id")
+  scope             String    @default("company") @map("scope") @db.VarChar(20)
+  businessId        Int?      @map("business_id")
+  parentTaskId      Int?      @map("parent_task_id")
+  checklist         Json      @default("[]") @map("checklist")
+  sortOrder         Int       @default(0) @map("sort_order")
+  relatedEntityType String?   @map("related_entity_type") @db.VarChar(20)
+  relatedEntityId   Int?      @map("related_entity_id")
+  notifyLevel       String    @default("in_app") @map("notify_level") @db.VarChar(20)
+  memo              String?   @map("memo") @db.Text
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(6)
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assignee      User?              @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy     User               @relation("TaskCreator", fields: [createdById], references: [id])
+  business      Business?          @relation(fields: [businessId], references: [id])
+  parentTask    Task?              @relation("TaskParentChild", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  children      Task[]             @relation("TaskParentChild")
+  tags          TaskTagOnTask[]
+  notifyTargets TaskNotifyTarget[]
+
+  @@index([assigneeId, status, dueDate])
+  @@index([businessId, scope, status])
+  @@index([parentTaskId])
+  @@index([relatedEntityType, relatedEntityId])
+  @@index([status, dueDate])
+  @@map("tasks")
+}
+
+model TaskTag {
+  id        Int      @id @default(autoincrement())
+  name      String   @map("name") @db.VarChar(100)
+  color     String   @map("color") @db.VarChar(20)
+  scope     String   @map("scope") @db.VarChar(20)
+  ownerId   Int      @map("owner_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner User            @relation("TaskTagOwner", fields: [ownerId], references: [id])
+  tasks TaskTagOnTask[]
+
+  @@unique([name, scope, ownerId])
+  @@index([scope])
+  @@map("task_tags")
+}
+
+model TaskTagOnTask {
+  taskId Int @map("task_id")
+  tagId  Int @map("tag_id")
+
+  task Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  TaskTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+  @@map("task_tag_on_tasks")
+}
+
+model TaskNotifyTarget {
+  taskId Int @map("task_id")
+  userId Int @map("user_id")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_notify_targets")
+}
+

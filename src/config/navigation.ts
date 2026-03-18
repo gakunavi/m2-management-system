@@ -1,4 +1,4 @@
-import { LayoutDashboard, Briefcase, Users, Building2, UserCog, FolderKanban, BarChart3, BookOpen, MessageSquare, FileBarChart, Megaphone, Bot, Settings } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, Building2, UserCog, FolderKanban, BarChart3, BookOpen, MessageSquare, FileBarChart, Megaphone, Bot, Settings, CheckSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -24,6 +24,7 @@ export const mainNavItems: NavItem[] = [
   { label: 'QA/ナレッジ', href: '/qa', icon: BookOpen },
   { label: '問い合わせ', href: '/inquiries', icon: MessageSquare },
   { label: 'AIアシスタント', href: '/ai-assistant', icon: Bot },
+  { label: 'タスク管理', href: '/tasks', icon: CheckSquare },
   { label: 'お知らせ管理', href: '/announcements', icon: Megaphone },
   { label: 'ユーザー管理', href: '/admin/users', icon: UserCog, adminOnly: true },
   { label: 'システム設定', href: '/admin/settings', icon: Settings, adminOnly: true },

@@ -248,6 +248,19 @@ export const BUSINESS_SORT_FIELDS = [
   'createdAt',
 ] as const;
 
+export const TASK_SORT_FIELDS = [
+  'taskNo',
+  'title',
+  'status',
+  'priority',
+  'dueDate',
+  'assigneeId',
+  'scope',
+  'completedAt',
+  'updatedAt',
+  'createdAt',
+] as const;
+
 export const PARTNER_SORT_FIELDS = [
   'partnerCode',
   'partnerTier',

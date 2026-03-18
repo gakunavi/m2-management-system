@@ -1,4 +1,4 @@
-export type NotificationType = 'status_change' | 'overdue' | 'stagnation' | 'system' | 'document_notification';
+export type NotificationType = 'status_change' | 'overdue' | 'stagnation' | 'system' | 'document_notification' | 'task_assigned' | 'task_completed' | 'task_overdue';
 
 export interface NotificationItem {
   id: number;

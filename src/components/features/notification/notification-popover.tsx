@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, CheckCheck, ArrowRightCircle, Info, AlertTriangle, Clock, Settings, FileText } from 'lucide-react';
+import { Bell, CheckCheck, ArrowRightCircle, Info, AlertTriangle, Clock, Settings, FileText, CheckSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +15,9 @@ const TYPE_CONFIG: Record<NotificationType, { icon: typeof Bell; className: stri
   stagnation: { icon: Clock, className: 'text-amber-500' },
   system: { icon: Settings, className: 'text-gray-500' },
   document_notification: { icon: FileText, className: 'text-emerald-500' },
+  task_assigned: { icon: CheckSquare, className: 'text-blue-500' },
+  task_completed: { icon: CheckSquare, className: 'text-green-500' },
+  task_overdue: { icon: AlertTriangle, className: 'text-red-500' },
 };
 
 function getEntityPath(entity: string | null, entityId: number | null): string | null {
@@ -25,6 +28,7 @@ function getEntityPath(entity: string | null, entityId: number | null): string |
     partner: '/partners',
     inquiry: '/inquiries',
     business_document: '/portal',
+    task: '/tasks',
   };
   const base = pathMap[entity];
   return base ? `${base}/${entityId}` : null;
