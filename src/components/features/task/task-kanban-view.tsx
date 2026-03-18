@@ -7,7 +7,6 @@ import {
   closestCorners,
   closestCenter,
   PointerSensor,
-  TouchSensor,
   useSensor,
   useSensors,
   type DragStartEvent,
@@ -62,24 +61,6 @@ function isColumnId(id: string): boolean { return id.startsWith(COLUMN_PREFIX); 
 function isTaskId(id: string): boolean { return id.startsWith(TASK_PREFIX); }
 function parseColumnId(id: string): number { return parseInt(id.replace(COLUMN_PREFIX, ''), 10); }
 function parseTaskId(id: string): number { return parseInt(id.replace(TASK_PREFIX, ''), 10); }
-
-// ============================================
-// useMediaQuery フック
-// ============================================
-
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)');
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  return isMobile;
-}
 
 // ============================================
 // 表示ヘルパー
@@ -218,7 +199,7 @@ function ChecklistItems({
             type="checkbox"
             checked={item.checked}
             onChange={() => onToggle?.(taskId, index, !item.checked)}
-            className="h-3 w-3 rounded border-muted-foreground/40 flex-shrink-0 sm:h-3 sm:w-3"
+            className="h-3 w-3 rounded border-muted-foreground/40 flex-shrink-0"
           />
           <span className={cn('truncate', item.checked && 'line-through text-muted-foreground/60')}>
             {item.text}
@@ -518,7 +499,7 @@ function SortableColumn({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex flex-col min-w-[260px] max-w-[300px] flex-1"
+      className="flex flex-col min-w-[calc(100vw-2rem)] sm:min-w-[260px] sm:max-w-[300px] flex-shrink-0 sm:flex-1 snap-start sm:snap-align-none"
     >
       {/* カラムヘッダー（列のドラッグハンドルを含む） */}
       <div
@@ -579,89 +560,6 @@ function SortableColumn({
 }
 
 // ============================================
-// モバイル用カラムコンテンツ（D&Dなし、フルワイド）
-// ============================================
-
-function MobileColumnContent({
-  column,
-  items,
-  onTaskClick,
-  onChecklistToggle,
-  onStatusChange,
-  onPriorityChange,
-  onAddTask,
-  onEditColumn,
-  onDeleteColumn,
-}: {
-  column: TaskColumn;
-  items: ColumnItem[];
-  onTaskClick: (id: number) => void;
-  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
-  onStatusChange?: (taskId: number, status: string) => void;
-  onPriorityChange?: (taskId: number, priority: string) => void;
-  onAddTask: () => void;
-  onEditColumn: (id: number) => void;
-  onDeleteColumn: (id: number) => void;
-}) {
-  const color = column.color ?? '#6b7280';
-
-  return (
-    <div className="flex flex-col">
-      {/* カラムヘッダー */}
-      <div
-        className="flex items-center gap-1 px-2 py-2 rounded-t-lg border-t border-x font-semibold text-sm"
-        style={{ borderTopColor: color, backgroundColor: `${color}10` }}
-      >
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
-        <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-        <span className="flex-1 truncate" style={{ color }}>{column.name}</span>
-        <span
-          className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
-          style={{ backgroundColor: color }}
-        >
-          {items.length}
-        </span>
-        <ColumnMenu columnId={column.id} onEdit={onEditColumn} onDelete={onDeleteColumn} />
-      </div>
-
-      {/* カード一覧 */}
-      <div className="flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 bg-muted/20">
-        <DndContext
-          sensors={useSensors(
-            useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-            useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
-          )}
-        >
-          <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            {items.map((item) => (
-              <SortableTaskCard
-                key={item.id}
-                item={item}
-                columnId={column.id}
-                onTaskClick={onTaskClick}
-                onChecklistToggle={onChecklistToggle}
-                onStatusChange={onStatusChange}
-                onPriorityChange={onPriorityChange}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
-        {items.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-4">タスクなし</p>
-        )}
-        <button
-          onClick={(e) => { e.stopPropagation(); onAddTask(); }}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-muted-foreground/30 py-3 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px]"
-        >
-          <Plus className="h-4 w-4" />
-          タスクを追加
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ============================================
 // メインコンポーネント
 // ============================================
 
@@ -682,8 +580,6 @@ export function TaskKanbanView({
   onReorderColumns,
 }: TaskKanbanViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [mobileColumnIdx, setMobileColumnIdx] = useState(0);
-  const isMobile = useIsMobile();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -728,13 +624,6 @@ export function TaskKanbanView({
       setColumnItems(rebuilt);
     }
   }, [tasks, columns]);
-
-  // mobileColumnIdx が列数を超えないようにクランプ
-  useEffect(() => {
-    if (mobileColumnIdx >= localColumns.length && localColumns.length > 0) {
-      setMobileColumnIdx(localColumns.length - 1);
-    }
-  }, [localColumns.length, mobileColumnIdx]);
 
   // 最新のcolumnItemsをrefで保持（コールバック内でstale closureを防ぐ）
   const columnItemsRef = useRef(columnItems);
@@ -854,75 +743,7 @@ export function TaskKanbanView({
     setColumnItems(buildColumnItems(tasks, sorted));
   }, [columns, tasks]);
 
-  // モバイル用の現在列
-  const mobileColumn = localColumns[mobileColumnIdx];
-  const mobileItems = mobileColumn ? (columnItems[mobileColumn.id] ?? []) : [];
-
-  // ======== モバイルレイアウト ========
-  if (isMobile) {
-    return (
-      <div className="flex flex-col gap-3">
-        {/* 列タブ */}
-        <div className="flex overflow-x-auto gap-1.5 pb-1 -mx-1 px-1">
-          {localColumns.map((col, i) => {
-            const colColor = col.color ?? '#6b7280';
-            const colItems = columnItems[col.id] ?? [];
-            const isActive = i === mobileColumnIdx;
-            return (
-              <button
-                key={col.id}
-                onClick={() => setMobileColumnIdx(i)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 rounded-full text-sm whitespace-nowrap transition-colors min-h-[44px] flex-shrink-0',
-                  isActive
-                    ? 'text-white font-semibold shadow-sm'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
-                )}
-                style={isActive ? { backgroundColor: colColor } : undefined}
-              >
-                {!isActive && (
-                  <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: colColor }} />
-                )}
-                <span>{col.name}</span>
-                <span className={cn(
-                  'text-xs font-bold px-1.5 py-0.5 rounded-full',
-                  isActive ? 'bg-white/25' : 'bg-background',
-                )}>
-                  {colItems.length}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 選択中のカラムコンテンツ */}
-        {mobileColumn && (
-          <MobileColumnContent
-            column={mobileColumn}
-            items={mobileItems}
-            onTaskClick={onTaskClick}
-            onChecklistToggle={onChecklistToggle}
-            onStatusChange={onStatusChange}
-            onPriorityChange={onPriorityChange}
-            onAddTask={() => onAddTaskToColumn(mobileColumn.id)}
-            onEditColumn={onEditColumn}
-            onDeleteColumn={onDeleteColumn}
-          />
-        )}
-
-        {/* 列追加ボタン */}
-        <button
-          onClick={onAddColumn}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-4 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px]"
-        >
-          <Plus className="h-4 w-4" />
-          列を追加
-        </button>
-      </div>
-    );
-  }
-
-  // ======== デスクトップレイアウト ========
+  // ======== 単一レイアウト（scroll-snap でモバイル横スワイプ対応） ========
   return (
     <DndContext
       sensors={sensors}
@@ -932,7 +753,10 @@ export function TaskKanbanView({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
+      <div
+        className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 min-h-[400px] snap-x snap-mandatory sm:snap-none"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         <SortableContext items={columnDndIds} strategy={horizontalListSortingStrategy}>
           {localColumns.map((col) => (
             <SortableColumn
@@ -951,10 +775,10 @@ export function TaskKanbanView({
         </SortableContext>
 
         {/* 列追加ボタン */}
-        <div className="min-w-[260px] max-w-[300px] flex-1 flex-shrink-0">
+        <div className="min-w-[calc(100vw-2rem)] sm:min-w-[260px] sm:max-w-[300px] sm:flex-1 flex-shrink-0 snap-start sm:snap-align-none">
           <button
             onClick={onAddColumn}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-8 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-8 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px]"
           >
             <Plus className="h-4 w-4" />
             列を追加

@@ -16,24 +16,6 @@ interface TaskCalendarViewProps {
 }
 
 // ============================================
-// useMediaQuery フック
-// ============================================
-
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)');
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  return isMobile;
-}
-
-// ============================================
 // ローカル日付ヘルパー
 // ============================================
 
@@ -143,7 +125,7 @@ function CalendarTaskCard({ task, onClick }: CalendarTaskCardProps) {
   return (
     <button
       type="button"
-      className="w-full text-left rounded px-1 py-0.5 text-xs truncate flex items-center gap-1 hover:opacity-80 transition-opacity"
+      className="w-full text-left rounded px-1 py-0.5 text-[10px] sm:text-xs truncate flex items-center gap-1 hover:opacity-80 transition-opacity"
       style={{ backgroundColor: `${color}20`, borderLeft: `3px solid ${color}` }}
       onClick={(e) => {
         e.stopPropagation();
@@ -160,7 +142,7 @@ function CalendarTaskCard({ task, onClick }: CalendarTaskCardProps) {
 }
 
 // ============================================
-// 日セル
+// 日セル（単一コンポーネント、CSS-only responsive）
 // ============================================
 
 interface DayCellProps {
@@ -169,73 +151,36 @@ interface DayCellProps {
   isToday: boolean;
   tasksForDay: TaskListItem[];
   onTaskClick: (id: number) => void;
-  isMobile?: boolean;
   isSelected?: boolean;
   onDayClick?: () => void;
 }
 
-const MAX_TASKS_VISIBLE = 3;
+const MAX_TASKS_DESKTOP = 3;
 
-function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick, isMobile, isSelected, onDayClick }: DayCellProps) {
+function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick, isSelected, onDayClick }: DayCellProps) {
   const dayNum = date.getDate();
-  const visible = tasksForDay.slice(0, MAX_TASKS_VISIBLE);
-  const overflow = tasksForDay.length - MAX_TASKS_VISIBLE;
+  const visibleDesktop = tasksForDay.slice(0, MAX_TASKS_DESKTOP);
+  const overflowDesktop = tasksForDay.length - MAX_TASKS_DESKTOP;
 
   // 曜日インデックス（月曜=0）
   const dowIndex = (date.getDay() + 6) % 7;
   const isSaturday = dowIndex === 5;
   const isSunday = dowIndex === 6;
 
-  if (isMobile) {
-    return (
-      <div
-        className={cn(
-          'min-h-[60px] border border-border p-1 flex flex-col items-center gap-0.5 cursor-pointer transition-colors',
-          !isCurrentMonth && 'bg-muted/30',
-          isToday && 'ring-2 ring-blue-400 ring-inset',
-          isSelected && 'bg-accent',
-        )}
-        onClick={onDayClick}
-      >
-        {/* 日付番号 */}
-        <div
-          className={cn(
-            'text-sm font-semibold leading-none w-7 h-7 flex items-center justify-center rounded-full',
-            !isCurrentMonth && 'text-muted-foreground',
-            isCurrentMonth && isSaturday && 'text-blue-500',
-            isCurrentMonth && isSunday && 'text-red-500',
-            isCurrentMonth && !isSaturday && !isSunday && 'text-foreground',
-            isToday && 'bg-blue-500 text-white',
-          )}
-        >
-          {dayNum}
-        </div>
-
-        {/* タスク数ドット */}
-        {tasksForDay.length > 0 && (
-          <div className="flex items-center gap-0.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            {tasksForDay.length > 1 && (
-              <span className="text-[10px] text-muted-foreground">{tasksForDay.length}</span>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div
       className={cn(
-        'min-h-[90px] border border-border p-1 flex flex-col gap-0.5',
+        'min-h-[56px] sm:min-h-[90px] border border-border p-1 flex flex-col gap-0.5 cursor-pointer sm:cursor-default transition-colors',
         !isCurrentMonth && 'bg-muted/30',
         isToday && 'ring-2 ring-blue-400 ring-inset',
+        isSelected && 'bg-accent',
       )}
+      onClick={onDayClick}
     >
       {/* 日付番号 */}
       <div
         className={cn(
-          'text-xs font-semibold leading-none mb-0.5 w-5 h-5 flex items-center justify-center rounded-full',
+          'text-sm sm:text-xs font-semibold leading-none w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded-full',
           !isCurrentMonth && 'text-muted-foreground',
           isCurrentMonth && isSaturday && 'text-blue-500',
           isCurrentMonth && isSunday && 'text-red-500',
@@ -246,28 +191,43 @@ function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick, isMo
         {dayNum}
       </div>
 
-      {/* タスクカード */}
-      {visible.map((task) => (
-        <CalendarTaskCard
-          key={task.id}
-          task={task}
-          onClick={() => onTaskClick(task.id)}
-        />
-      ))}
+      {/* モバイル: タスクドット + 件数（カード非表示） */}
+      <div className="sm:hidden flex items-center gap-0.5">
+        {tasksForDay.length > 0 && (
+          <>
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            {tasksForDay.length > 1 && (
+              <span className="text-[10px] text-muted-foreground">{tasksForDay.length}</span>
+            )}
+          </>
+        )}
+      </div>
 
-      {/* +N more */}
-      {overflow > 0 && (
-        <span className="text-xs text-muted-foreground pl-1">+{overflow} 件</span>
-      )}
+      {/* デスクトップ: タスクカード表示 */}
+      <div className="hidden sm:flex sm:flex-col sm:gap-0.5">
+        {visibleDesktop.map((task) => (
+          <CalendarTaskCard
+            key={task.id}
+            task={task}
+            onClick={() => onTaskClick(task.id)}
+          />
+        ))}
+        {overflowDesktop > 0 && (
+          <span className="text-xs text-muted-foreground pl-1">+{overflowDesktop} 件</span>
+        )}
+      </div>
+
+      {/* モバイル中間サイズ: 少数カード表示（sm以下で非表示だがタップで下に展開） */}
+      {/* モバイルではタップで選択→下部に一覧を出すので、セル内カード不要 */}
     </div>
   );
 }
 
 // ============================================
-// モバイル用 選択日のタスク一覧
+// 選択日のタスク一覧（モバイル用、CSS で sm 以上は非表示）
 // ============================================
 
-function MobileDayTaskList({
+function SelectedDayTaskList({
   date,
   tasks,
   onTaskClick,
@@ -279,7 +239,7 @@ function MobileDayTaskList({
   const dayLabel = `${date.getMonth() + 1}月${date.getDate()}日`;
 
   return (
-    <div className="border rounded-lg bg-background p-3 space-y-2">
+    <div className="sm:hidden border rounded-lg bg-background p-3 space-y-2">
       <p className="text-sm font-semibold">{dayLabel} のタスク</p>
       {tasks.length === 0 ? (
         <p className="text-xs text-muted-foreground py-2">タスクなし</p>
@@ -326,7 +286,6 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
   const todayStr = toLocalDateStr(new Date());
   const [currentYearMonth, setCurrentYearMonth] = useState(getCurrentMonth);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const isMobile = useIsMobile();
 
   // 月変更時に選択日をクリア
   useEffect(() => {
@@ -356,7 +315,7 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
 
   const isCurrentMonthNow = currentYearMonth === getCurrentMonth();
 
-  // 選択日のタスク一覧（モバイル用）
+  // 選択日のタスク一覧
   const selectedDayTasks = selectedDay ? (tasksByDate.get(selectedDay) ?? []) : [];
   const selectedDayDate = selectedDay ? (() => {
     const [sy, sm, sd] = selectedDay.split('-').map(Number);
@@ -425,18 +384,17 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
                 isToday={dateStr === todayStr}
                 tasksForDay={tasksForDay}
                 onTaskClick={onTaskClick}
-                isMobile={isMobile}
-                isSelected={isMobile && selectedDay === dateStr}
-                onDayClick={isMobile ? () => setSelectedDay(selectedDay === dateStr ? null : dateStr) : undefined}
+                isSelected={selectedDay === dateStr}
+                onDayClick={() => setSelectedDay(selectedDay === dateStr ? null : dateStr)}
               />
             </div>
           );
         })}
       </div>
 
-      {/* モバイル: 選択日のタスク一覧 */}
-      {isMobile && selectedDay && selectedDayDate && (
-        <MobileDayTaskList
+      {/* 選択日のタスク一覧（モバイルのみ表示、sm以上はCSS非表示） */}
+      {selectedDay && selectedDayDate && (
+        <SelectedDayTaskList
           date={selectedDayDate}
           tasks={selectedDayTasks}
           onTaskClick={onTaskClick}

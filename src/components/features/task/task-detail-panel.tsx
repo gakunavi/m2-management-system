@@ -118,7 +118,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
 
   if (isLoading || !task) {
     return (
-      <div className="fixed inset-y-0 right-0 z-50 w-full md:max-w-lg border-l bg-background shadow-xl">
+      <div className="fixed inset-y-0 right-0 z-50 w-full md:max-w-lg overflow-y-auto border-l bg-background shadow-xl">
         <div className="flex h-full items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
@@ -424,7 +424,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
           </div>
 
           {/* 削除ボタン */}
-          <div className="border-t pt-3 pb-6 sm:pb-0">
+          <div className="border-t pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-0">
             <Button
               variant="destructive"
               size="sm"
