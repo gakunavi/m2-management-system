@@ -554,7 +554,9 @@ export function TaskKanbanView({
   // ======== DnDハンドラー ========
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    const id = event.active.id as string;
+    console.log('[DnD] dragStart', { id, type: isColumnId(id) ? 'COLUMN' : isTaskId(id) ? 'TASK' : 'UNKNOWN' });
+    setActiveId(id);
   }, []);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
@@ -564,8 +566,18 @@ export function TaskKanbanView({
     const activeItemId = active.id as string;
     const overItemId = over.id as string;
 
+    console.log('[DnD] dragOver', {
+      active: activeItemId,
+      activeType: isColumnId(activeItemId) ? 'COLUMN' : 'TASK',
+      over: overItemId,
+      overType: isColumnId(overItemId) ? 'COLUMN' : 'TASK',
+    });
+
     // 列ドラッグ中はカード移動しない
-    if (isColumnId(activeItemId)) return;
+    if (isColumnId(activeItemId)) {
+      console.log('[DnD] dragOver: column drag, skipping card logic');
+      return;
+    }
 
     // カードドラッグ中のみ処理
     if (!isTaskId(activeItemId)) return;
@@ -574,19 +586,25 @@ export function TaskKanbanView({
 
     // ドラッグ元列を特定
     const sourceColId = findColumnForItem(currentItems, activeItemId);
-    if (sourceColId === undefined) return;
+    if (sourceColId === undefined) {
+      console.log('[DnD] dragOver: sourceColId not found for', activeItemId);
+      return;
+    }
 
     // ドロップ先列を特定
     let targetColId: number | undefined;
     if (isColumnId(overItemId)) {
-      // 列の上にドラッグ → その列に移動
       targetColId = parseColumnId(overItemId);
     } else if (isTaskId(overItemId)) {
-      // 別カードの上にドラッグ → そのカードの所属列に移動
       targetColId = findColumnForItem(currentItems, overItemId);
     }
 
-    if (targetColId === undefined) return;
+    if (targetColId === undefined) {
+      console.log('[DnD] dragOver: targetColId not found for', overItemId);
+      return;
+    }
+
+    console.log('[DnD] dragOver: sourceCol=', sourceColId, 'targetCol=', targetColId);
 
     // 同一列内の並び替え
     if (sourceColId === targetColId) {
@@ -596,6 +614,7 @@ export function TaskKanbanView({
           const oldIndex = items.findIndex((i) => i.id === activeItemId);
           const newIndex = items.findIndex((i) => i.id === overItemId);
           if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+          console.log('[DnD] dragOver: same-column reorder', { oldIndex, newIndex });
           return { ...prev, [sourceColId]: arrayMove(items, oldIndex, newIndex) };
         });
       }
@@ -603,6 +622,7 @@ export function TaskKanbanView({
     }
 
     // 列をまたぐ移動
+    console.log('[DnD] dragOver: cross-column move', sourceColId, '->', targetColId);
     setColumnItems((prev) => {
       const sourceItems = [...(prev[sourceColId] ?? [])];
       const targetItems = [...(prev[targetColId!] ?? [])];
@@ -629,33 +649,53 @@ export function TaskKanbanView({
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
-    if (!over) return;
+    if (!over) {
+      console.log('[DnD] dragEnd: no over target, cancelled');
+      return;
+    }
 
     const activeItemId = active.id as string;
     const overItemId = over.id as string;
+
+    console.log('[DnD] dragEnd', {
+      active: activeItemId,
+      activeType: isColumnId(activeItemId) ? 'COLUMN' : 'TASK',
+      over: overItemId,
+      overType: isColumnId(overItemId) ? 'COLUMN' : 'TASK',
+    });
 
     // 列の並び替え完了
     if (isColumnId(activeItemId) && isColumnId(overItemId)) {
       const cols = localColumnsRef.current;
       const oldIndex = cols.findIndex(c => columnDndId(c.id) === activeItemId);
       const newIndex = cols.findIndex(c => columnDndId(c.id) === overItemId);
+      console.log('[DnD] dragEnd: column reorder', { oldIndex, newIndex, same: oldIndex === newIndex });
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
         const reordered = arrayMove(cols, oldIndex, newIndex);
         const withOrder = reordered.map((c, i) => ({ ...c, sortOrder: i }));
         setLocalColumns(withOrder);
         onReorderColumns(withOrder.map((c, i) => ({ id: c.id, sortOrder: i })));
+        console.log('[DnD] dragEnd: column reorder SUCCESS');
       }
+      return;
+    }
+
+    // 列の上にカードをドロップ（列ドラッグ中にカードが列の上にある場合）
+    if (isColumnId(activeItemId) && isTaskId(overItemId)) {
+      console.log('[DnD] dragEnd: column dropped on task, treating as column reorder cancelled');
       return;
     }
 
     // カードの移動完了 → APIに送信
     if (isTaskId(activeItemId)) {
       const payload = buildReorderPayload(columnItemsRef.current);
+      console.log('[DnD] dragEnd: card reorder, payload items:', payload.length);
       onReorder(payload);
     }
   }, [onReorderColumns, onReorder]);
 
   const handleDragCancel = useCallback(() => {
+    console.log('[DnD] dragCancel');
     setActiveId(null);
     // ドラッグキャンセル時にpropsから再構築
     const sorted = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
