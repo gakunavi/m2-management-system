@@ -44,7 +44,9 @@ export function TasksClient() {
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('');
   const [tagFilter, setTagFilter] = useState<number[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   // ページネーション & ソート
   const [page, setPage] = useState(1);
@@ -64,11 +66,12 @@ export function TasksClient() {
     scope,
     businessId: scope === 'business' ? currentBusiness?.id : undefined,
     boardId: scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
-    status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
+    status: statusFilter.length > 0 ? statusFilter.join(',') : (!showArchived ? 'todo,in_progress,on_hold' : undefined),
     priority: priorityFilter.length > 0 ? priorityFilter.join(',') : undefined,
+    assigneeId: assigneeFilter ? Number(assigneeFilter) : undefined,
     tagIds: tagFilter.length > 0 ? tagFilter.join(',') : undefined,
     parentOnly: viewMode !== 'list' ? true : undefined,
-  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, tagFilter, viewMode]);
+  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, assigneeFilter, tagFilter, viewMode, showArchived]);
 
   const { data: taskData, isLoading } = useTaskList(listParams);
   const { data: tags } = useTaskTags();
@@ -241,12 +244,35 @@ export function TasksClient() {
           />
         )}
 
+        {/* 担当者フィルター（テキスト入力でユーザーID/名前） */}
+        <div className="relative">
+          <input
+            type="text"
+            value={assigneeFilter}
+            onChange={(e) => { setAssigneeFilter(e.target.value); setPage(1); }}
+            placeholder="担当者ID"
+            className="w-24 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          />
+        </div>
+
+        {/* アーカイブ表示トグル */}
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
+            className="accent-primary"
+          />
+          完了含む
+        </label>
+
         {/* フィルタークリア */}
-        {(statusFilter.length > 0 || priorityFilter.length > 0 || tagFilter.length > 0 || search) && (
+        {(statusFilter.length > 0 || priorityFilter.length > 0 || tagFilter.length > 0 || assigneeFilter || search) && (
           <button
             onClick={() => {
               setStatusFilter([]);
               setPriorityFilter([]);
+              setAssigneeFilter('');
               setTagFilter([]);
               setSearch('');
               setPage(1);

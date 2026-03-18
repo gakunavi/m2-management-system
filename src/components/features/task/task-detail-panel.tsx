@@ -25,6 +25,9 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
   const currentTaskId = navigationStack[navigationStack.length - 1];
 
   const { data: task, isLoading } = useTaskDetail(currentTaskId);
+  // パンくず表示用: 親タスクの情報を取得（子タスク表示中のみ）
+  const parentTaskIdForBreadcrumb = navigationStack.length > 1 ? navigationStack[0] : null;
+  const { data: parentTask } = useTaskDetail(parentTaskIdForBreadcrumb);
   const { updateTask, deleteTask } = useTaskMutations();
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -131,22 +134,22 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
         <div className="sticky top-0 z-10 border-b bg-background">
           {/* パンくずナビゲーション（子タスク表示時） */}
           {isChildView && (
-            <div className="flex items-center gap-1 border-b px-4 py-2 text-xs">
-              {navigationStack.map((navId, index) => (
-                <span key={navId} className="flex items-center gap-1">
-                  {index > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                  {index < navigationStack.length - 1 ? (
-                    <button
-                      onClick={() => navigateBack(index)}
-                      className="text-primary hover:underline"
-                    >
-                      {navId === initialTaskId ? `TASK-${String(task.parentTaskId ? '' : task.taskNo).replace('TASK-', '')}` : `#${navId}`}
-                    </button>
-                  ) : (
-                    <span className="font-medium text-foreground">{task.taskNo}</span>
-                  )}
+            <div className="flex items-center gap-1.5 border-b px-4 py-2 text-xs bg-muted/30">
+              {/* 親タスクリンク */}
+              <button
+                onClick={() => navigateBack(0)}
+                className="flex items-center gap-1 text-primary hover:underline font-medium"
+              >
+                {parentTask?.taskNo ?? `#${navigationStack[0]}`}
+                <span className="text-muted-foreground font-normal truncate max-w-[150px]">
+                  {parentTask?.title ?? ''}
                 </span>
-              ))}
+              </button>
+              <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              {/* 現在の子タスク */}
+              <span className="font-medium text-foreground">
+                {task.taskNo} {task.title}
+              </span>
             </div>
           )}
 
