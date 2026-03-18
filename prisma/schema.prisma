@@ -59,6 +59,8 @@ model User {
   createdTasks        Task[]               @relation("TaskCreator")
   ownedTaskTags       TaskTag[]            @relation("TaskTagOwner")
   taskNotifyTargets   TaskNotifyTarget[]
+  createdTaskBoards   TaskBoard[]          @relation("TaskBoardCreator")
+  taskBoardMembers    TaskBoardMember[]
 
   @@index([userRole])
   @@index([userIsActive])
@@ -851,6 +853,7 @@ model Task {
   createdById       Int       @map("created_by_id")
   scope             String    @default("company") @map("scope") @db.VarChar(20)
   businessId        Int?      @map("business_id")
+  boardId           Int?      @map("board_id")
   parentTaskId      Int?      @map("parent_task_id")
   checklist         Json      @default("[]") @map("checklist")
   sortOrder         Int       @default(0) @map("sort_order")
@@ -866,6 +869,7 @@ model Task {
   assignee      User?              @relation("TaskAssignee", fields: [assigneeId], references: [id])
   createdBy     User               @relation("TaskCreator", fields: [createdById], references: [id])
   business      Business?          @relation(fields: [businessId], references: [id])
+  board         TaskBoard?         @relation(fields: [boardId], references: [id])
   parentTask    Task?              @relation("TaskParentChild", fields: [parentTaskId], references: [id], onDelete: Cascade)
   children      Task[]             @relation("TaskParentChild")
   tags          TaskTagOnTask[]
@@ -873,6 +877,7 @@ model Task {
 
   @@index([assigneeId, status, dueDate])
   @@index([businessId, scope, status])
+  @@index([boardId, status])
   @@index([parentTaskId])
   @@index([relatedEntityType, relatedEntityId])
   @@index([status, dueDate])
@@ -918,3 +923,35 @@ model TaskNotifyTarget {
   @@map("task_notify_targets")
 }
 
+// ============================================
+// タスクボード
+// ============================================
+
+model TaskBoard {
+  id          Int      @id @default(autoincrement())
+  name        String   @map("name") @db.VarChar(100)
+  description String?  @map("description") @db.Text
+  createdById Int      @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy User              @relation("TaskBoardCreator", fields: [createdById], references: [id])
+  members   TaskBoardMember[]
+  tasks     Task[]
+
+  @@index([createdById])
+  @@map("task_boards")
+}
+
+model TaskBoardMember {
+  boardId  Int      @map("board_id")
+  userId   Int      @map("user_id")
+  role     String   @default("member") @map("role") @db.VarChar(20)
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  board TaskBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([boardId, userId])
+  @@map("task_board_members")
+}

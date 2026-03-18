@@ -45,8 +45,9 @@ export const createTaskSchema = z.object({
   priority: z.enum(['urgent', 'high', 'medium', 'low']).default('medium'),
   dueDate: z.string().optional().nullable(),
   assigneeId: z.number().int().positive().optional().nullable(),
-  scope: z.enum(['company', 'business', 'personal']).default('company'),
+  scope: z.enum(['company', 'business', 'personal', 'board']).default('company'),
   businessId: z.number().int().positive().optional().nullable(),
+  boardId: z.number().int().positive().optional().nullable(),
   parentTaskId: z.number().int().positive().optional().nullable(),
   checklist: z.array(checklistItemSchema).default([]),
   relatedEntityType: z.enum(['project', 'customer', 'partner']).optional().nullable(),
@@ -65,8 +66,9 @@ export const updateTaskSchema = z.object({
   priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
   dueDate: z.string().optional().nullable(),
   assigneeId: z.number().int().positive().optional().nullable(),
-  scope: z.enum(['company', 'business', 'personal']).optional(),
+  scope: z.enum(['company', 'business', 'personal', 'board']).optional(),
   businessId: z.number().int().positive().optional().nullable(),
+  boardId: z.number().int().positive().optional().nullable(),
   checklist: z.array(checklistItemSchema).optional(),
   sortOrder: z.number().int().optional(),
   relatedEntityType: z.enum(['project', 'customer', 'partner']).optional().nullable(),
@@ -101,6 +103,7 @@ export function buildTaskVisibilityWhere(user: SessionUser) {
       { scope: 'company' },
       { scope: 'business' }, // 事業スコープは businessId フィルターで追加制限可能
       { scope: 'personal', createdById: user.id },
+      { scope: 'board', board: { members: { some: { userId: user.id } } } }, // ボードメンバーのみ
       { assigneeId: user.id }, // アサインされたタスクは常に見える
     ],
   };

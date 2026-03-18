@@ -16,6 +16,7 @@ import type { TaskScope, TaskDetail } from '@/types/task';
 interface TaskCreateModalProps {
   defaultScope?: TaskScope;
   defaultBusinessId?: number;
+  defaultBoardId?: number;
   parentTaskId?: number;
   relatedEntityType?: string;
   relatedEntityId?: number;
@@ -26,6 +27,7 @@ interface TaskCreateModalProps {
 export function TaskCreateModal({
   defaultScope = 'company',
   defaultBusinessId,
+  defaultBoardId,
   parentTaskId,
   relatedEntityType: defaultRelatedType,
   relatedEntityId: defaultRelatedId,
@@ -70,6 +72,7 @@ export function TaskCreateModal({
         assigneeId,
         scope,
         businessId: scope === 'business' ? businessId : null,
+        boardId: scope === 'board' ? defaultBoardId : null,
         parentTaskId: parentTaskId ?? null,
         relatedEntityType: relatedEntityType || null,
         relatedEntityId: relatedEntityId ?? null,

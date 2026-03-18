@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
       ...(whereIn(searchParams, 'scope') ?? {}),
       ...(whereDateRange(searchParams, 'dueDate') ?? {}),
       ...(businessIdParam ? { businessId: parseInt(businessIdParam, 10) } : {}),
+      ...(searchParams.get('boardId') ? { boardId: parseInt(searchParams.get('boardId')!, 10) } : {}),
       ...(assigneeIdParam ? { assigneeId: parseInt(assigneeIdParam, 10) } : {}),
       ...(relatedEntityType ? { relatedEntityType } : {}),
       ...(relatedEntityIdParam ? { relatedEntityId: parseInt(relatedEntityIdParam, 10) } : {}),

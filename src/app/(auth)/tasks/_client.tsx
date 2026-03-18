@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X, Users, Settings } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useBusiness } from '@/hooks/use-business';
-import { useTaskList, useTaskTags, useTaskDetail } from '@/hooks/use-tasks';
+import { useTaskList, useTaskTags, useTaskDetail, useTaskBoards, useTaskBoardMutations } from '@/hooks/use-tasks';
 import { useDebounce } from '@/hooks/use-debounce';
 import { TaskDetailPanel } from '@/components/features/task/task-detail-panel';
 import { TaskCreateModal } from '@/components/features/task/task-create-modal';
+import { TaskBoardSettingsPanel } from '@/components/features/task/task-board-settings-panel';
 import {
   TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
@@ -30,6 +31,13 @@ export function TasksClient() {
 
   // スコープ
   const [scope, setScope] = useState<TaskScope>('company');
+  const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
+  const [showBoardSettings, setShowBoardSettings] = useState<number | null>(null);
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
+
+  // ボード
+  const { data: boards } = useTaskBoards();
+  const { createBoard } = useTaskBoardMutations();
 
   // フィルター
   const [search, setSearch] = useState('');
@@ -55,11 +63,12 @@ export function TasksClient() {
     sort,
     scope,
     businessId: scope === 'business' ? currentBusiness?.id : undefined,
+    boardId: scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
     status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
     priority: priorityFilter.length > 0 ? priorityFilter.join(',') : undefined,
     tagIds: tagFilter.length > 0 ? tagFilter.join(',') : undefined,
     parentOnly: viewMode !== 'list' ? true : undefined,
-  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, statusFilter, priorityFilter, tagFilter, viewMode]);
+  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, tagFilter, viewMode]);
 
   const { data: taskData, isLoading } = useTaskList(listParams);
   const { data: tags } = useTaskTags();
@@ -72,8 +81,9 @@ export function TasksClient() {
     localStorage.setItem('task-view-mode', mode);
   }, []);
 
-  const handleScopeChange = useCallback((newScope: TaskScope) => {
+  const handleScopeChange = useCallback((newScope: TaskScope, boardId?: number) => {
     setScope(newScope);
+    setSelectedBoardId(boardId ?? null);
     setPage(1);
   }, []);
 
@@ -101,25 +111,68 @@ export function TasksClient() {
 
       {/* スコープ切替 + ビューモード切替 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {/* スコープ */}
-        <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-          {[
-            { value: 'company' as const, label: '全社' },
-            { value: 'business' as const, label: '事業別' },
-            { value: 'personal' as const, label: 'マイタスク' },
-          ].map((s) => (
-            <button
-              key={s.value}
-              onClick={() => handleScopeChange(s.value)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                scope === s.value
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {s.label}
-            </button>
+        {/* スコープ + ボードタブ */}
+        <div className="flex items-center gap-2 overflow-x-auto">
+          {/* 標準スコープ */}
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+            {[
+              { value: 'company' as const, label: '全社' },
+              { value: 'business' as const, label: '事業別' },
+              { value: 'personal' as const, label: 'マイタスク' },
+            ].map((s) => (
+              <button
+                key={s.value}
+                onClick={() => handleScopeChange(s.value)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                  scope === s.value && !selectedBoardId
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ボードタブ区切り */}
+          {(boards ?? []).length > 0 && (
+            <span className="text-muted-foreground/40">|</span>
+          )}
+
+          {/* ボードタブ */}
+          {(boards ?? []).map((board) => (
+            <div key={board.id} className="flex items-center gap-0.5">
+              <button
+                onClick={() => handleScopeChange('board', board.id)}
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                  scope === 'board' && selectedBoardId === board.id
+                    ? 'bg-primary/10 text-primary border border-primary/30'
+                    : 'text-muted-foreground hover:text-foreground border border-transparent'
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                {board.name}
+              </button>
+              {scope === 'board' && selectedBoardId === board.id && (
+                <button
+                  onClick={() => setShowBoardSettings(board.id)}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+                  title="ボード設定"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           ))}
+
+          {/* ボード作成ボタン */}
+          <button
+            onClick={() => setShowCreateBoard(true)}
+            className="flex items-center gap-1 rounded-md border border-dashed border-muted-foreground/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 whitespace-nowrap"
+          >
+            <Plus className="h-3 w-3" />
+            ボード
+          </button>
         </div>
 
         {/* ビューモード */}
@@ -247,6 +300,7 @@ export function TasksClient() {
         <TaskCreateModal
           defaultScope={scope}
           defaultBusinessId={scope === 'business' ? currentBusiness?.id : undefined}
+          defaultBoardId={scope === 'board' ? selectedBoardId ?? undefined : undefined}
           onClose={() => setShowCreateModal(false)}
           onCreated={(task) => {
             setShowCreateModal(false);
@@ -254,6 +308,67 @@ export function TasksClient() {
           }}
         />
       )}
+
+      {/* ボード設定パネル */}
+      {showBoardSettings != null && (
+        <TaskBoardSettingsPanel
+          boardId={showBoardSettings}
+          onClose={() => setShowBoardSettings(null)}
+          onDeleted={() => {
+            setShowBoardSettings(null);
+            handleScopeChange('company');
+          }}
+        />
+      )}
+
+      {/* ボード作成モーダル */}
+      {showCreateBoard && (
+        <BoardCreateModal
+          onClose={() => setShowCreateBoard(false)}
+          onCreate={async (name) => {
+            const board = await createBoard.mutateAsync({ name });
+            setShowCreateBoard(false);
+            handleScopeChange('board', (board as { id: number }).id);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// ボード作成モーダル
+// ============================================
+
+function BoardCreateModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => void }) {
+  const [name, setName] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="w-full max-w-sm rounded-lg bg-background shadow-xl">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-base font-semibold">タスクボード作成</h2>
+          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">ボード名</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="例: 営業チーム、役員ボード..."
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onCreate(name.trim()); }}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button variant="outline" size="sm" onClick={onClose}>キャンセル</Button>
+          <Button size="sm" onClick={() => name.trim() && onCreate(name.trim())} disabled={!name.trim()}>作成</Button>
+        </div>
+      </div>
     </div>
   );
 }

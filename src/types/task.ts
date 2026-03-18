@@ -4,7 +4,7 @@
 
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'on_hold';
 export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low';
-export type TaskScope = 'company' | 'business' | 'personal';
+export type TaskScope = 'company' | 'business' | 'personal' | 'board';
 export type TaskNotifyLevel = 'none' | 'in_app' | 'in_app_and_email';
 export type TaskTagScope = 'shared' | 'personal';
 
@@ -90,6 +90,7 @@ export const TASK_SCOPE_OPTIONS: { value: TaskScope; label: string }[] = [
   { value: 'company', label: '全社' },
   { value: 'business', label: '事業別' },
   { value: 'personal', label: '個人' },
+  { value: 'board', label: 'ボード' },
 ];
 
 export const TASK_NOTIFY_LEVEL_OPTIONS: { value: TaskNotifyLevel; label: string }[] = [

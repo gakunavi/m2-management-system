@@ -30,6 +30,7 @@ export interface TaskListParams {
   sort?: string;
   scope?: string;
   businessId?: number;
+  boardId?: number;
   status?: string;
   priority?: string;
   assigneeId?: number;
@@ -49,6 +50,7 @@ function buildTaskQueryString(params: TaskListParams): string {
   if (params.sort) sp.set('sort', params.sort);
   if (params.scope) sp.set('scope', params.scope);
   if (params.businessId) sp.set('businessId', String(params.businessId));
+  if (params.boardId) sp.set('boardId', String(params.boardId));
   if (params.status) sp.set('status', params.status);
   if (params.priority) sp.set('priority', params.priority);
   if (params.assigneeId) sp.set('assigneeId', String(params.assigneeId));
@@ -176,4 +178,84 @@ export function useTaskTagMutations() {
   });
 
   return { createTag, updateTag, deleteTag };
+}
+
+// ============================================
+// タスクボード
+// ============================================
+
+export interface TaskBoardItem {
+  id: number;
+  name: string;
+  description: string | null;
+  createdById: number;
+  creatorName: string;
+  memberCount: number;
+  taskCount: number;
+  members: { userId: number; userName: string; role: string; joinedAt: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const boardKeys = {
+  all: ['task-boards'] as const,
+  list: () => [...boardKeys.all, 'list'] as const,
+  detail: (id: number) => [...boardKeys.all, id] as const,
+};
+
+export function useTaskBoards() {
+  return useQuery<TaskBoardItem[]>({
+    queryKey: boardKeys.list(),
+    queryFn: () => apiClient.get<TaskBoardItem[]>('/task-boards'),
+  });
+}
+
+export function useTaskBoardDetail(id: number | null) {
+  return useQuery<TaskBoardItem>({
+    queryKey: boardKeys.detail(id!),
+    queryFn: () => apiClient.get<TaskBoardItem>(`/task-boards/${id}`),
+    enabled: id != null,
+  });
+}
+
+export function useTaskBoardMutations() {
+  const queryClient = useQueryClient();
+
+  const invalidateBoards = () => {
+    queryClient.invalidateQueries({
+      predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === 'task-boards',
+    });
+  };
+
+  const createBoard = useMutation({
+    mutationFn: (data: { name: string; description?: string }) =>
+      apiClient.create<TaskBoardItem>('/task-boards', data),
+    onSuccess: invalidateBoards,
+  });
+
+  const updateBoard = useMutation({
+    mutationFn: ({ id, ...data }: { id: number; name?: string; description?: string }) =>
+      apiClient.patch<TaskBoardItem>(`/task-boards/${id}`, data),
+    onSuccess: invalidateBoards,
+  });
+
+  const deleteBoard = useMutation({
+    mutationFn: (id: number) =>
+      apiClient.remove('/task-boards', id),
+    onSuccess: invalidateBoards,
+  });
+
+  const addMember = useMutation({
+    mutationFn: ({ boardId, userId }: { boardId: number; userId: number }) =>
+      apiClient.create<void>(`/task-boards/${boardId}/members`, { userId }),
+    onSuccess: invalidateBoards,
+  });
+
+  const removeMember = useMutation({
+    mutationFn: ({ boardId, userId }: { boardId: number; userId: number }) =>
+      apiClient.remove(`/task-boards/${boardId}/members`, userId),
+    onSuccess: invalidateBoards,
+  });
+
+  return { createBoard, updateBoard, deleteBoard, addMember, removeMember };
 }
