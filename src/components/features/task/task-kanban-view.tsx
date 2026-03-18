@@ -20,7 +20,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem, TaskColumn } from '@/types/task';
 import { useTaskDetail } from '@/hooks/use-tasks';
@@ -338,10 +338,18 @@ function ColumnMenu({
   columnId,
   onEdit,
   onDelete,
+  onMoveLeft,
+  onMoveRight,
+  isFirst,
+  isLast,
 }: {
   columnId: number;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  isFirst: boolean;
+  isLast: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -360,7 +368,25 @@ function ColumnMenu({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-popover shadow-md">
+          <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-md border bg-popover shadow-md">
+            {!isFirst && (
+              <button
+                onClick={() => { setIsOpen(false); onMoveLeft(); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                左に移動
+              </button>
+            )}
+            {!isLast && (
+              <button
+                onClick={() => { setIsOpen(false); onMoveRight(); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+                右に移動
+              </button>
+            )}
             <button
               onClick={() => {
                 setIsOpen(false);
@@ -400,6 +426,10 @@ interface KanbanColumnProps {
   activeId: string | null;
   onEditColumn: (id: number) => void;
   onDeleteColumn: (id: number) => void;
+  onMoveLeft: () => void;
+  onMoveRight: () => void;
+  isFirst: boolean;
+  isLast: boolean;
 }
 
 function KanbanColumn({
@@ -410,6 +440,10 @@ function KanbanColumn({
   activeId,
   onEditColumn,
   onDeleteColumn,
+  onMoveLeft,
+  onMoveRight,
+  isFirst,
+  isLast,
 }: KanbanColumnProps) {
   const dndId = columnDndId(column.id);
   const { setNodeRef, isOver } = useDroppable({ id: dndId });
@@ -439,6 +473,10 @@ function KanbanColumn({
           columnId={column.id}
           onEdit={onEditColumn}
           onDelete={onDeleteColumn}
+          onMoveLeft={onMoveLeft}
+          onMoveRight={onMoveRight}
+          isFirst={isFirst}
+          isLast={isLast}
         />
       </div>
 
@@ -629,7 +667,7 @@ export function TaskKanbanView({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
-        {sortedColumns.map((col) => (
+        {sortedColumns.map((col, idx) => (
           <KanbanColumn
             key={col.id}
             column={col}
@@ -639,6 +677,20 @@ export function TaskKanbanView({
             activeId={activeId}
             onEditColumn={onEditColumn}
             onDeleteColumn={onDeleteColumn}
+            isFirst={idx === 0}
+            isLast={idx === sortedColumns.length - 1}
+            onMoveLeft={() => {
+              if (idx === 0) return;
+              const reordered = [...sortedColumns];
+              [reordered[idx - 1], reordered[idx]] = [reordered[idx], reordered[idx - 1]];
+              onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
+            }}
+            onMoveRight={() => {
+              if (idx === sortedColumns.length - 1) return;
+              const reordered = [...sortedColumns];
+              [reordered[idx], reordered[idx + 1]] = [reordered[idx + 1], reordered[idx]];
+              onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
+            }}
           />
         ))}
 
