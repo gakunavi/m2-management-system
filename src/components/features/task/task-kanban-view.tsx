@@ -521,28 +521,32 @@ export function TaskKanbanView({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
-  // sortOrder順にソートした列
-  const sortedColumns = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
+  // ローカルの列順序（即時反映用）
+  const [localColumns, setLocalColumns] = useState(() =>
+    [...columns].sort((a, b) => a.sortOrder - b.sortOrder),
+  );
 
   // columnId別にタスクをグループ化
   const [columnItems, setColumnItems] = useState<Record<number, ColumnItem[]>>(() =>
-    buildColumnItems(tasks, sortedColumns),
+    buildColumnItems(tasks, localColumns),
   );
 
-  // propsのtasks/columnsが変わったらカラムを再構築
+  // propsのtasks/columnsが変わったらローカル状態を再構築
   const [prevTasks, setPrevTasks] = useState(tasks);
   const [prevColumns, setPrevColumns] = useState(columns);
   if (tasks !== prevTasks || columns !== prevColumns) {
     setPrevTasks(tasks);
     setPrevColumns(columns);
-    setColumnItems(buildColumnItems(tasks, sortedColumns));
+    const sorted = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
+    setLocalColumns(sorted);
+    setColumnItems(buildColumnItems(tasks, sorted));
   }
 
   const activeTask = activeId && !isColumnDndId(activeId) ? findTaskById(columnItems, activeId) : null;
-  const activeColumn = activeId && isColumnDndId(activeId) ? sortedColumns.find(c => columnDndId(c.id) === activeId) : null;
+  const activeColumn = activeId && isColumnDndId(activeId) ? localColumns.find(c => columnDndId(c.id) === activeId) : null;
 
   // 列のDnD ID一覧
-  const columnDndIds = sortedColumns.map(c => columnDndId(c.id));
+  const columnDndIds = localColumns.map(c => columnDndId(c.id));
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
@@ -623,10 +627,12 @@ export function TaskKanbanView({
 
     // 列のドラッグ完了
     if (isColumnDndId(activeItemId) && isColumnDndId(overId)) {
-      const oldIndex = sortedColumns.findIndex(c => columnDndId(c.id) === activeItemId);
-      const newIndex = sortedColumns.findIndex(c => columnDndId(c.id) === overId);
+      const oldIndex = localColumns.findIndex(c => columnDndId(c.id) === activeItemId);
+      const newIndex = localColumns.findIndex(c => columnDndId(c.id) === overId);
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        const reordered = arrayMove(sortedColumns, oldIndex, newIndex);
+        const reordered = arrayMove(localColumns, oldIndex, newIndex);
+        // ローカルstateを即時更新（APIレスポンス前に次のドラッグに対応）
+        setLocalColumns(reordered.map((c, i) => ({ ...c, sortOrder: i })));
         onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
       }
       return;
@@ -673,7 +679,7 @@ export function TaskKanbanView({
     >
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
         <SortableContext items={columnDndIds} strategy={horizontalListSortingStrategy}>
-          {sortedColumns.map((col) => (
+          {localColumns.map((col) => (
             <KanbanColumn
               key={col.id}
               column={col}
