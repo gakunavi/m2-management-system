@@ -5,7 +5,7 @@ import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X 
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useBusiness } from '@/hooks/use-business';
-import { useTaskList, useTaskTags } from '@/hooks/use-tasks';
+import { useTaskList, useTaskTags, useTaskDetail } from '@/hooks/use-tasks';
 import { useDebounce } from '@/hooks/use-debounce';
 import { TaskDetailPanel } from '@/components/features/task/task-detail-panel';
 import { TaskCreateModal } from '@/components/features/task/task-create-modal';
@@ -348,13 +348,12 @@ function TaskListView({
           </thead>
           <tbody>
             {tasks.map((task) => (
-              <TaskRow
+              <TaskRowWithChildren
                 key={task.id}
                 task={task}
                 isExpanded={expandedTasks.has(task.id)}
                 onToggleExpand={() => toggleExpand(task.id)}
-                onClick={() => onTaskClick(task.id)}
-                indent={0}
+                onTaskClick={onTaskClick}
               />
             ))}
           </tbody>
@@ -389,21 +388,57 @@ function TaskListView({
 }
 
 // ============================================
-// タスク行
+// タスク行（親 + 子タスクツリー表示）
 // ============================================
 
-function TaskRow({
+function TaskRowWithChildren({
+  task,
+  isExpanded,
+  onToggleExpand,
+  onTaskClick,
+}: {
+  task: TaskListItem;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  onTaskClick: (id: number) => void;
+}) {
+  // 展開時に親タスクの詳細（子タスク含む）を取得
+  const { data: detail } = useTaskDetail(isExpanded ? task.id : null);
+  const children = detail?.children ?? [];
+
+  return (
+    <>
+      {/* 親タスク行 */}
+      <ParentTaskRow
+        task={task}
+        isExpanded={isExpanded}
+        onToggleExpand={onToggleExpand}
+        onClick={() => onTaskClick(task.id)}
+      />
+
+      {/* 子タスク行（展開時） */}
+      {isExpanded && children.map((child, index) => (
+        <ChildTaskRow
+          key={child.id}
+          task={child}
+          isLast={index === children.length - 1}
+          onClick={() => onTaskClick(child.id)}
+        />
+      ))}
+    </>
+  );
+}
+
+function ParentTaskRow({
   task,
   isExpanded,
   onToggleExpand,
   onClick,
-  indent,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onClick: () => void;
-  indent: number;
 }) {
   const hasChildren = task.childrenCount > 0;
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
@@ -415,91 +450,97 @@ function TaskRow({
       className="border-b transition-colors hover:bg-muted/50 cursor-pointer"
       onClick={onClick}
     >
-      {/* 展開ボタン */}
-      <td className="px-2 py-2" style={{ paddingLeft: `${8 + indent * 20}px` }}>
+      <td className="px-2 py-2">
         {hasChildren ? (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
             className="rounded p-0.5 hover:bg-muted"
           >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" />
-            )}
+            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
         ) : (
           <span className="inline-block w-4" />
         )}
       </td>
-
-      {/* No. */}
       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.taskNo}</td>
-
-      {/* タスク名 */}
       <td className="px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="font-medium">{task.title}</span>
           {hasChildren && (
-            <span className="text-xs text-muted-foreground">
-              ({task.childrenDoneCount}/{task.childrenCount})
-            </span>
+            <span className="text-xs text-muted-foreground">({task.childrenDoneCount}/{task.childrenCount})</span>
           )}
           {task.checklistTotal > 0 && (
-            <span className="text-xs text-muted-foreground">
-              ☑{task.checklistDoneCount}/{task.checklistTotal}
-            </span>
+            <span className="text-xs text-muted-foreground">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
           )}
         </div>
       </td>
-
-      {/* ステータス */}
       <td className="px-3 py-2">
-        <span
-          className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white"
-          style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}
-        >
+        <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
           {statusOpt?.label ?? task.status}
         </span>
       </td>
-
-      {/* 優先度 */}
       <td className="px-3 py-2">
-        <span
-          className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white"
-          style={{ backgroundColor: priorityOpt?.color ?? '#94a3b8' }}
-        >
+        <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: priorityOpt?.color ?? '#94a3b8' }}>
           {priorityOpt?.label ?? task.priority}
         </span>
       </td>
-
-      {/* 担当者 */}
       <td className="px-3 py-2 text-sm">{task.assigneeName ?? '-'}</td>
-
-      {/* 期限 */}
-      <td className={`px-3 py-2 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
-        {task.dueDate ?? '-'}
-      </td>
-
-      {/* タグ */}
+      <td className={`px-3 py-2 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap gap-1">
           {task.tags.map((tag) => (
-            <span
-              key={tag.id}
-              className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
-              style={{ backgroundColor: tag.color }}
-            >
-              {tag.name}
-            </span>
+            <span key={tag.id} className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium text-white" style={{ backgroundColor: tag.color }}>{tag.name}</span>
           ))}
         </div>
       </td>
+      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</td>
+    </tr>
+  );
+}
 
-      {/* 更新日 */}
-      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-        {task.updatedAt.split('T')[0]}
+function ChildTaskRow({
+  task,
+  isLast,
+  onClick,
+}: {
+  task: TaskListItem;
+  isLast: boolean;
+  onClick: () => void;
+}) {
+  const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
+  const statusOpt = TASK_STATUS_OPTIONS.find((o) => o.value === task.status);
+
+  return (
+    <tr
+      className="border-b transition-colors hover:bg-muted/30 cursor-pointer bg-muted/10"
+      onClick={onClick}
+    >
+      {/* ツリー記号 */}
+      <td className="px-2 py-1.5">
+        <span className="inline-block w-4" />
       </td>
+      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
+        <span className="mr-1 text-muted-foreground/60 font-mono">{isLast ? '┗' : '┣'}</span>
+        {task.taskNo}
+      </td>
+      <td className="px-3 py-1.5">
+        <div className="flex items-center gap-2 pl-2 border-l-2 border-muted-foreground/20">
+          <span className="text-sm">{task.title}</span>
+          {task.checklistTotal > 0 && (
+            <span className="text-xs text-muted-foreground">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-1.5">
+        <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
+          {statusOpt?.label ?? task.status}
+        </span>
+      </td>
+      <td className="px-3 py-1.5 text-xs text-muted-foreground">—</td>
+      <td className="px-3 py-1.5 text-sm">{task.assigneeName ?? '-'}</td>
+      <td className={`px-3 py-1.5 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</td>
+      <td className="px-3 py-1.5" />
+      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</td>
     </tr>
   );
 }

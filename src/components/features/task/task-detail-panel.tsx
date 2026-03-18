@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { X, CheckSquare, ListTodo, Link2, StickyNote } from 'lucide-react';
+import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTaskDetail, useTaskMutations } from '@/hooks/use-tasks';
 import { TaskChecklist } from './task-checklist';
@@ -19,17 +19,31 @@ interface TaskDetailPanelProps {
   onClose: () => void;
 }
 
-export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
-  const { data: task, isLoading } = useTaskDetail(taskId);
+export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPanelProps) {
+  // パネル内ナビゲーション: 親→子タスクの遷移
+  const [navigationStack, setNavigationStack] = useState<number[]>([initialTaskId]);
+  const currentTaskId = navigationStack[navigationStack.length - 1];
+
+  const { data: task, isLoading } = useTaskDetail(currentTaskId);
   const { updateTask, deleteTask } = useTaskMutations();
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // 子タスクに遷移
+  const navigateToChild = useCallback((childId: number) => {
+    setNavigationStack((prev) => [...prev, childId]);
+  }, []);
+
+  // パンくずクリックで戻る
+  const navigateBack = useCallback((index: number) => {
+    setNavigationStack((prev) => prev.slice(0, index + 1));
+  }, []);
 
   const handleFieldUpdate = useCallback(
     async (field: string, value: unknown) => {
       if (!task) return;
       try {
         await updateTask.mutateAsync({
-          id: taskId,
+          id: currentTaskId,
           [field]: value,
           version: task.version,
         });
@@ -37,52 +51,57 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
         // 楽観的ロックエラーはmutation側で処理
       }
     },
-    [task, taskId, updateTask],
+    [task, currentTaskId, updateTask],
   );
 
   const handleChecklistUpdate = useCallback(
     async (checklist: ChecklistItem[]) => {
       if (!task) return;
       await updateTask.mutateAsync({
-        id: taskId,
+        id: currentTaskId,
         checklist,
         version: task.version,
       });
     },
-    [task, taskId, updateTask],
+    [task, currentTaskId, updateTask],
   );
 
   const handleTagsUpdate = useCallback(
     async (tagIds: number[]) => {
       if (!task) return;
       await updateTask.mutateAsync({
-        id: taskId,
+        id: currentTaskId,
         tagIds,
         version: task.version,
       });
     },
-    [task, taskId, updateTask],
+    [task, currentTaskId, updateTask],
   );
 
   const handleNotifyUpdate = useCallback(
     async (notifyLevel: string, notifyTargetUserIds: number[]) => {
       if (!task) return;
       await updateTask.mutateAsync({
-        id: taskId,
+        id: currentTaskId,
         notifyLevel,
         notifyTargetUserIds,
         version: task.version,
       });
     },
-    [task, taskId, updateTask],
+    [task, currentTaskId, updateTask],
   );
 
   const handleDelete = async () => {
     if (!confirm('このタスクを削除しますか？サブタスクも全て削除されます。')) return;
     setIsDeleting(true);
     try {
-      await deleteTask.mutateAsync(taskId);
-      onClose();
+      await deleteTask.mutateAsync(currentTaskId);
+      // 子タスク表示中なら親に戻る、ルートなら閉じる
+      if (navigationStack.length > 1) {
+        setNavigationStack((prev) => prev.slice(0, -1));
+      } else {
+        onClose();
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -99,6 +118,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   }
 
   const statusOpt = TASK_STATUS_OPTIONS.find((o) => o.value === task.status);
+  const isChildView = navigationStack.length > 1;
 
   return (
     <>
@@ -107,20 +127,49 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
 
       {/* パネル */}
       <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg overflow-y-auto border-l bg-background shadow-xl">
-        {/* ヘッダー */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{task.taskNo}</span>
-            <span
-              className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white"
-              style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}
-            >
-              {statusOpt?.label ?? task.status}
-            </span>
+        {/* ヘッダー + パンくず */}
+        <div className="sticky top-0 z-10 border-b bg-background">
+          {/* パンくずナビゲーション（子タスク表示時） */}
+          {isChildView && (
+            <div className="flex items-center gap-1 border-b px-4 py-2 text-xs">
+              {navigationStack.map((navId, index) => (
+                <span key={navId} className="flex items-center gap-1">
+                  {index > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                  {index < navigationStack.length - 1 ? (
+                    <button
+                      onClick={() => navigateBack(index)}
+                      className="text-primary hover:underline"
+                    >
+                      {navId === initialTaskId ? `TASK-${String(task.parentTaskId ? '' : task.taskNo).replace('TASK-', '')}` : `#${navId}`}
+                    </button>
+                  ) : (
+                    <span className="font-medium text-foreground">{task.taskNo}</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* ステータス + 閉じるボタン */}
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{task.taskNo}</span>
+              <span
+                className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}
+              >
+                {statusOpt?.label ?? task.status}
+              </span>
+              {isChildView && (
+                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                  子タスク
+                </span>
+              )}
+            </div>
+            <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="space-y-5 p-4">
@@ -128,6 +177,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           <input
             type="text"
             defaultValue={task.title}
+            key={`title-${currentTaskId}-${task.version}`}
             onBlur={(e) => {
               if (e.target.value !== task.title) handleFieldUpdate('title', e.target.value);
             }}
@@ -170,6 +220,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
                 <input
                   type="date"
                   defaultValue={task.dueDate ?? ''}
+                  key={`date-${currentTaskId}-${task.version}`}
                   onBlur={(e) => handleFieldUpdate('dueDate', e.target.value || null)}
                   className="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
                 />
@@ -213,6 +264,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             <label className="mb-1 block text-xs font-medium text-muted-foreground">説明</label>
             <textarea
               defaultValue={task.description ?? ''}
+              key={`desc-${currentTaskId}-${task.version}`}
               onBlur={(e) => {
                 if (e.target.value !== (task.description ?? '')) {
                   handleFieldUpdate('description', e.target.value || null);
@@ -223,11 +275,12 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             />
           </div>
 
-          {/* チェックリスト */}
-          <div>
-            <div className="mb-1 flex items-center gap-1.5">
-              <CheckSquare className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">チェックリスト</span>
+          {/* 手順チェック ☑ */}
+          <div className="rounded-lg border border-muted p-3">
+            <div className="mb-2 flex items-center gap-1.5">
+              <CheckSquare className="h-4 w-4 text-amber-500" />
+              <span className="text-sm font-medium">手順チェック</span>
+              <span className="text-xs text-muted-foreground">— 作業手順のメモ</span>
             </div>
             <TaskChecklist
               items={task.checklist}
@@ -235,16 +288,22 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             />
           </div>
 
-          {/* サブタスク */}
+          {/* 子タスク 📋（親タスクの場合のみ表示） */}
           {!task.parentTaskId && (
-            <div>
-              <div className="mb-1 flex items-center gap-1.5">
-                <ListTodo className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">
-                  サブタスク ({task.childrenDoneCount}/{task.childrenCount})
+            <div className="rounded-lg border border-muted p-3">
+              <div className="mb-2 flex items-center gap-1.5">
+                <ListTodo className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-medium">子タスク</span>
+                <span className="text-xs text-muted-foreground">
+                  — 担当者・期限付きの作業単位 ({task.childrenDoneCount}/{task.childrenCount})
                 </span>
               </div>
-              <TaskSubtasks taskId={taskId} subtasks={task.children} parentTask={task} />
+              <TaskSubtasks
+                taskId={currentTaskId}
+                subtasks={task.children}
+                parentTask={task}
+                onNavigateToChild={navigateToChild}
+              />
             </div>
           )}
 
@@ -269,6 +328,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             </div>
             <textarea
               defaultValue={task.memo ?? ''}
+              key={`memo-${currentTaskId}-${task.version}`}
               onBlur={(e) => {
                 if (e.target.value !== (task.memo ?? '')) {
                   handleFieldUpdate('memo', e.target.value || null);

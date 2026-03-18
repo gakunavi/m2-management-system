@@ -60,8 +60,44 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
     if (!isOpen) setShowNewTagForm(false);
   }, [isOpen]);
 
+  const sharedTags = (allTags ?? []).filter((t) => t.scope === 'shared');
+  const handleToggleTag = (tagId: number) => {
+    if (selectedTagIds.includes(tagId)) {
+      onChange(selectedTagIds.filter((id) => id !== tagId));
+    } else {
+      onChange([...selectedTagIds, tagId]);
+    }
+  };
+
   return (
     <div className="relative">
+      {/* 共通タグ チップ一覧（クリックでトグル付与/解除） */}
+      {sharedTags.length > 0 && (
+        <div className="mb-1.5 flex flex-wrap gap-1">
+          {sharedTags.map((tag) => {
+            const isSelected = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => handleToggleTag(tag.id)}
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-all ${
+                  isSelected
+                    ? 'text-white ring-2 ring-offset-1 ring-offset-background'
+                    : 'text-white opacity-50 hover:opacity-80'
+                }`}
+                style={{
+                  backgroundColor: tag.color,
+                  ...(isSelected ? { ringColor: tag.color } : {}),
+                }}
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* 選択済みタグ + 入力 */}
       <div className="flex flex-wrap items-center gap-1 rounded-md border border-input bg-background px-2 py-1.5 min-h-[36px]">
         {selectedTags.map((tag) => (

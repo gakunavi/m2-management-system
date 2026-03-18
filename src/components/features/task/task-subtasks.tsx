@@ -10,6 +10,7 @@ interface TaskSubtasksProps {
   taskId: number;
   subtasks: TaskListItem[];
   parentTask: TaskDetail;
+  onNavigateToChild?: (childId: number) => void;
 }
 
 const STATUS_ICONS: Record<string, typeof Check> = {
@@ -19,7 +20,7 @@ const STATUS_ICONS: Record<string, typeof Check> = {
   on_hold: Pause,
 };
 
-export function TaskSubtasks({ taskId, subtasks: children, parentTask }: TaskSubtasksProps) {
+export function TaskSubtasks({ taskId, subtasks: children, parentTask, onNavigateToChild }: TaskSubtasksProps) {
   const { createTask } = useTaskMutations();
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -77,7 +78,8 @@ export function TaskSubtasks({ taskId, subtasks: children, parentTask }: TaskSub
         return (
           <div
             key={child.id}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50 cursor-pointer"
+            onClick={() => onNavigateToChild?.(child.id)}
           >
             <StatusIcon
               className="h-4 w-4 flex-shrink-0"
