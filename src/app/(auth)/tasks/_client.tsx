@@ -516,10 +516,26 @@ function TaskListView({
   const taskIds = useMemo(() => tasks.map((t) => t.id), [tasks]);
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
   const [sortField, sortDir] = sort.split(':');
+  // 3段階切替: 昇順 → 降順 → 手動順に戻る
+  const handleSortClick = useCallback((field: string) => {
+    if (sortField === field) {
+      if (sortDir === 'asc') {
+        // 昇順 → 降順
+        onSort(field); // toggleで降順になる
+      } else {
+        // 降順 → 手動順に戻る
+        onSort('sortOrder');
+      }
+    } else {
+      // 別の列 → その列の昇順
+      onSort(field);
+    }
+  }, [sortField, sortDir, onSort]);
+
   const SortHeader = ({ field, label }: { field: string; label: string }) => (
     <div
       className="cursor-pointer px-3 py-2 hover:text-foreground"
-      onClick={() => onSort(field)}
+      onClick={() => handleSortClick(field)}
     >
       <span className="flex items-center gap-1">
         {label}
@@ -560,7 +576,13 @@ function TaskListView({
         <div className="rounded-lg border">
           {/* ヘッダー（スクロール外に固定） */}
           <div className={`grid ${GRID_COLS} border-b bg-muted text-xs font-medium text-muted-foreground`}>
-            <div className="px-1 py-2" />
+            <div
+              className={`px-1 py-2 cursor-pointer hover:text-foreground ${sortField === 'sortOrder' ? 'text-foreground' : ''}`}
+              onClick={() => { if (sortField !== 'sortOrder') onSort('sortOrder'); }}
+              title="手動順に戻す"
+            >
+              <GripVertical className="h-3.5 w-3.5 mx-auto" />
+            </div>
             <div className="px-2 py-2" />
             <SortHeader field="taskNo" label="No." />
             <SortHeader field="title" label="タスク名" />
