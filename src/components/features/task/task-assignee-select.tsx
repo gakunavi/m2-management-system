@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Search, UserPlus } from 'lucide-react';
+import { X, UserPlus } from 'lucide-react';
 
 interface UserOption {
   id: number;
