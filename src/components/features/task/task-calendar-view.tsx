@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem } from '@/types/task';
@@ -13,6 +13,24 @@ import { cn } from '@/lib/utils';
 interface TaskCalendarViewProps {
   tasks: TaskListItem[];
   onTaskClick: (id: number) => void;
+}
+
+// ============================================
+// useMediaQuery フック
+// ============================================
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  return isMobile;
 }
 
 // ============================================
@@ -151,11 +169,14 @@ interface DayCellProps {
   isToday: boolean;
   tasksForDay: TaskListItem[];
   onTaskClick: (id: number) => void;
+  isMobile?: boolean;
+  isSelected?: boolean;
+  onDayClick?: () => void;
 }
 
 const MAX_TASKS_VISIBLE = 3;
 
-function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick }: DayCellProps) {
+function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick, isMobile, isSelected, onDayClick }: DayCellProps) {
   const dayNum = date.getDate();
   const visible = tasksForDay.slice(0, MAX_TASKS_VISIBLE);
   const overflow = tasksForDay.length - MAX_TASKS_VISIBLE;
@@ -164,6 +185,44 @@ function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick }: Da
   const dowIndex = (date.getDay() + 6) % 7;
   const isSaturday = dowIndex === 5;
   const isSunday = dowIndex === 6;
+
+  if (isMobile) {
+    return (
+      <div
+        className={cn(
+          'min-h-[60px] border border-border p-1 flex flex-col items-center gap-0.5 cursor-pointer transition-colors',
+          !isCurrentMonth && 'bg-muted/30',
+          isToday && 'ring-2 ring-blue-400 ring-inset',
+          isSelected && 'bg-accent',
+        )}
+        onClick={onDayClick}
+      >
+        {/* 日付番号 */}
+        <div
+          className={cn(
+            'text-sm font-semibold leading-none w-7 h-7 flex items-center justify-center rounded-full',
+            !isCurrentMonth && 'text-muted-foreground',
+            isCurrentMonth && isSaturday && 'text-blue-500',
+            isCurrentMonth && isSunday && 'text-red-500',
+            isCurrentMonth && !isSaturday && !isSunday && 'text-foreground',
+            isToday && 'bg-blue-500 text-white',
+          )}
+        >
+          {dayNum}
+        </div>
+
+        {/* タスク数ドット */}
+        {tasksForDay.length > 0 && (
+          <div className="flex items-center gap-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+            {tasksForDay.length > 1 && (
+              <span className="text-[10px] text-muted-foreground">{tasksForDay.length}</span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -205,12 +264,74 @@ function DayCell({ date, isCurrentMonth, isToday, tasksForDay, onTaskClick }: Da
 }
 
 // ============================================
+// モバイル用 選択日のタスク一覧
+// ============================================
+
+function MobileDayTaskList({
+  date,
+  tasks,
+  onTaskClick,
+}: {
+  date: Date;
+  tasks: TaskListItem[];
+  onTaskClick: (id: number) => void;
+}) {
+  const dayLabel = `${date.getMonth() + 1}月${date.getDate()}日`;
+
+  return (
+    <div className="border rounded-lg bg-background p-3 space-y-2">
+      <p className="text-sm font-semibold">{dayLabel} のタスク</p>
+      {tasks.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">タスクなし</p>
+      ) : (
+        <div className="space-y-1.5">
+          {tasks.map((task) => {
+            const priorityDef = TASK_PRIORITY_OPTIONS.find((p) => p.value === task.priority);
+            const color = priorityDef?.color ?? '#94a3b8';
+            return (
+              <button
+                key={task.id}
+                type="button"
+                className="w-full text-left rounded-lg px-3 py-2.5 text-sm flex items-center gap-2 hover:opacity-80 transition-opacity min-h-[44px] border"
+                style={{ borderLeftWidth: '4px', borderLeftColor: color }}
+                onClick={() => onTaskClick(task.id)}
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="flex-1 truncate font-medium">{task.title}</span>
+                {priorityDef && (
+                  <span
+                    className="text-[11px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+                    style={{ backgroundColor: `${color}20`, color }}
+                  >
+                    {priorityDef.label}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // メインコンポーネント
 // ============================================
 
 export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) {
   const todayStr = toLocalDateStr(new Date());
   const [currentYearMonth, setCurrentYearMonth] = useState(getCurrentMonth);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+
+  // 月変更時に選択日をクリア
+  useEffect(() => {
+    setSelectedDay(null);
+  }, [currentYearMonth]);
 
   // 表示月ラベル（例: 2025年3月）
   const [y, m] = currentYearMonth.split('-').map(Number);
@@ -235,6 +356,13 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
 
   const isCurrentMonthNow = currentYearMonth === getCurrentMonth();
 
+  // 選択日のタスク一覧（モバイル用）
+  const selectedDayTasks = selectedDay ? (tasksByDate.get(selectedDay) ?? []) : [];
+  const selectedDayDate = selectedDay ? (() => {
+    const [sy, sm, sd] = selectedDay.split('-').map(Number);
+    return new Date(sy, sm - 1, sd);
+  })() : null;
+
   return (
     <div className="flex flex-col gap-3">
       {/* ナビゲーションバー */}
@@ -242,10 +370,10 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
         <button
           type="button"
           aria-label="前月"
-          className="p-1.5 rounded hover:bg-accent transition-colors"
+          className="p-2 sm:p-1.5 rounded hover:bg-accent transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
           onClick={() => setCurrentYearMonth((ym) => shiftMonth(ym, -1))}
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="w-5 h-5 sm:w-4 sm:h-4" />
         </button>
 
         <span className="text-sm font-semibold min-w-[90px] text-center">{monthLabel}</span>
@@ -253,16 +381,16 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
         <button
           type="button"
           aria-label="翌月"
-          className="p-1.5 rounded hover:bg-accent transition-colors"
+          className="p-2 sm:p-1.5 rounded hover:bg-accent transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
           onClick={() => setCurrentYearMonth((ym) => shiftMonth(ym, 1))}
         >
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4" />
         </button>
 
         {!isCurrentMonthNow && (
           <button
             type="button"
-            className="ml-2 text-xs px-2 py-1 rounded border hover:bg-accent transition-colors"
+            className="ml-2 text-xs px-3 py-2 sm:px-2 sm:py-1 rounded border hover:bg-accent transition-colors min-h-[44px] sm:min-h-0"
             onClick={() => setCurrentYearMonth(getCurrentMonth())}
           >
             今月
@@ -297,11 +425,23 @@ export function TaskCalendarView({ tasks, onTaskClick }: TaskCalendarViewProps) 
                 isToday={dateStr === todayStr}
                 tasksForDay={tasksForDay}
                 onTaskClick={onTaskClick}
+                isMobile={isMobile}
+                isSelected={isMobile && selectedDay === dateStr}
+                onDayClick={isMobile ? () => setSelectedDay(selectedDay === dateStr ? null : dateStr) : undefined}
               />
             </div>
           );
         })}
       </div>
+
+      {/* モバイル: 選択日のタスク一覧 */}
+      {isMobile && selectedDay && selectedDayDate && (
+        <MobileDayTaskList
+          date={selectedDayDate}
+          tasks={selectedDayTasks}
+          onTaskClick={onTaskClick}
+        />
+      )}
     </div>
   );
 }

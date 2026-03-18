@@ -112,7 +112,7 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
                       <button
                         key={c}
                         onClick={() => setEditingTag({ ...editingTag, color: c })}
-                        className={`h-3.5 w-3.5 rounded-full border ${editingTag.color === c ? 'border-foreground' : 'border-transparent'}`}
+                        className={`h-6 w-6 sm:h-3.5 sm:w-3.5 rounded-full border ${editingTag.color === c ? 'border-foreground' : 'border-transparent'}`}
                         style={{ backgroundColor: c }}
                       />
                     ))}
@@ -139,18 +139,18 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
                 </button>
                 {/* 編集・削除ボタン（ホバー表示） */}
                 {editable && (
-                  <div className="ml-0.5 hidden items-center gap-0.5 group-hover:flex">
+                  <div className="ml-0.5 flex sm:hidden items-center gap-0.5 sm:group-hover:flex">
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditingTag({ id: tag.id, name: tag.name, color: tag.color }); }}
-                      className="rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+                      className="rounded p-1.5 sm:p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted"
                     >
-                      <Pencil className="h-2.5 w-2.5" />
+                      <Pencil className="h-3.5 w-3.5 sm:h-2.5 sm:w-2.5" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.id); }}
-                      className="rounded p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      className="rounded p-1.5 sm:p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                     >
-                      <Trash2 className="h-2.5 w-2.5" />
+                      <Trash2 className="h-3.5 w-3.5 sm:h-2.5 sm:w-2.5" />
                     </button>
                   </div>
                 )}
@@ -186,7 +186,7 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
         {isOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-            <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[200px] max-h-[240px] overflow-y-auto rounded-md border bg-popover shadow-md">
+            <div className="absolute left-0 top-full z-50 mt-1 w-full min-w-[200px] max-h-[200px] overflow-y-auto rounded-md border bg-popover shadow-md">
               {availableTags.length > 0 ? (
                 <div className="p-1">
                   {availableTags.map((tag) => (
@@ -232,7 +232,7 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
                             <button
                               key={c}
                               onClick={() => setNewTagColor(c)}
-                              className={`h-5 w-5 rounded-full border-2 ${newTagColor === c ? 'border-foreground' : 'border-transparent'}`}
+                              className={`h-7 w-7 sm:h-5 sm:w-5 rounded-full border-2 ${newTagColor === c ? 'border-foreground' : 'border-transparent'}`}
                               style={{ backgroundColor: c }}
                             />
                           ))}

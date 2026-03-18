@@ -144,7 +144,7 @@ export function TasksClient() {
       <PageHeader
         title="タスク管理"
         actions={
-          <Button onClick={() => setShowCreateModal({ open: true })} size="sm">
+          <Button onClick={() => setShowCreateModal({ open: true })} size="sm" className="w-full sm:w-auto">
             <Plus className="mr-1 h-4 w-4" />
             新規タスク
           </Button>
@@ -152,9 +152,9 @@ export function TasksClient() {
       />
 
       {/* スコープ切替 + ビューモード切替 */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-2">
         {/* スコープ + ボードタブ */}
-        <div className="flex items-center gap-2 overflow-x-auto">
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
           {/* 標準スコープ */}
           <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
             {[
@@ -165,7 +165,7 @@ export function TasksClient() {
               <button
                 key={s.value}
                 onClick={() => handleScopeChange(s.value)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
                   scope === s.value && !selectedBoardId
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -218,24 +218,24 @@ export function TasksClient() {
         </div>
 
         {/* ビューモード */}
-        <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+        <div className="flex items-center gap-1 rounded-lg bg-muted p-1 self-end sm:self-auto">
           <button
             onClick={() => handleViewModeChange('list')}
-            className={`rounded-md p-1.5 transition-colors ${viewMode === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`rounded-md p-2.5 sm:p-1.5 transition-colors ${viewMode === 'list' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             title="リスト"
           >
             <List className="h-4 w-4" />
           </button>
           <button
             onClick={() => handleViewModeChange('kanban')}
-            className={`rounded-md p-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`rounded-md p-2.5 sm:p-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             title="カンバン"
           >
             <LayoutGrid className="h-4 w-4" />
           </button>
           <button
             onClick={() => handleViewModeChange('calendar')}
-            className={`rounded-md p-1.5 transition-colors ${viewMode === 'calendar' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`rounded-md p-2.5 sm:p-1.5 transition-colors ${viewMode === 'calendar' ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
             title="カレンダー"
           >
             <Calendar className="h-4 w-4" />
@@ -244,9 +244,9 @@ export function TasksClient() {
       </div>
 
       {/* フィルターバー */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
         {/* 検索 */}
-        <div className="relative w-64">
+        <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
@@ -733,9 +733,9 @@ function TaskListView({
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="rounded-lg border">
+        <div className="rounded-lg border overflow-x-auto">
           {/* ヘッダー（スクロール外に固定） */}
-          <div className={`grid ${GRID_COLS} border-b bg-muted text-xs font-medium text-muted-foreground`}>
+          <div className={`grid ${GRID_COLS} border-b bg-muted text-[10px] sm:text-xs font-medium text-muted-foreground min-w-[900px]`}>
             <div
               className={`px-1 py-2 cursor-pointer hover:text-foreground ${sortField === 'sortOrder' ? 'text-foreground' : ''}`}
               onClick={() => { if (sortField !== 'sortOrder') onSort('sortOrder'); }}
@@ -788,7 +788,7 @@ function TaskListView({
 
       {/* ページネーション */}
       {totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+        <div className="mt-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
           <span>{total}件中 {(page - 1) * 25 + 1}-{Math.min(page * 25, total)}件</span>
           <div className="flex items-center gap-1">
             <button
@@ -902,7 +902,7 @@ function ParentTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-muted/50 cursor-pointer text-sm ${isDragging ? 'bg-muted shadow-md' : ''}`}
+      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-muted/50 cursor-pointer text-sm min-w-[900px] ${isDragging ? 'bg-muted shadow-md' : ''}`}
       onClick={onClick}
     >
       <div className="px-1 py-2 cursor-grab" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
@@ -998,7 +998,7 @@ function ChildTaskRow({
 
   return (
     <div
-      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-primary/[0.03] cursor-pointer text-sm`}
+      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-primary/[0.03] cursor-pointer text-sm min-w-[900px]`}
       style={{ backgroundColor: 'rgba(59,130,246,0.04)' }}
       onClick={onClick}
     >
@@ -1144,7 +1144,7 @@ function AssigneeFilter({
           onChange={(e) => { handleSearch(e.target.value); setIsOpen(true); }}
           onFocus={() => searchText.length >= 1 && setIsOpen(true)}
           placeholder="担当者"
-          className={`w-28 rounded-md border px-2 py-1.5 text-sm ${value ? 'border-primary bg-primary/5 text-primary' : 'border-input bg-background'}`}
+          className={`w-full sm:w-28 rounded-md border px-2 py-1.5 text-sm ${value ? 'border-primary bg-primary/5 text-primary' : 'border-input bg-background'}`}
         />
         {value && (
           <button onClick={() => { onChange(null); onSearchChange(''); }} className="text-muted-foreground hover:text-foreground">

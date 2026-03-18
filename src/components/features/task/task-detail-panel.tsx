@@ -118,7 +118,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
 
   if (isLoading || !task) {
     return (
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg border-l bg-background shadow-xl">
+      <div className="fixed inset-y-0 right-0 z-50 w-full md:max-w-lg border-l bg-background shadow-xl">
         <div className="flex h-full items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
@@ -136,12 +136,12 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
 
       {/* パネル */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg overflow-y-auto border-l bg-background shadow-xl">
+      <div className="fixed inset-y-0 right-0 z-50 w-full md:max-w-lg overflow-y-auto border-l bg-background shadow-xl">
         {/* ヘッダー + パンくず */}
         <div className="sticky top-0 z-10 border-b bg-background">
           {/* パンくずナビゲーション（サブタスク表示時） */}
           {isSubtaskView && (
-            <div className="flex items-center gap-1.5 border-b px-4 py-2 text-xs bg-muted/30">
+            <div className="flex flex-wrap items-center gap-1.5 border-b px-3 sm:px-4 py-2 text-xs bg-muted/30">
               {/* 親タスクリンク */}
               <button
                 onClick={() => {
@@ -180,13 +180,13 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
                 </span>
               )}
             </div>
-            <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
-              <X className="h-4 w-4" />
+            <button onClick={onClose} className="rounded-md p-2 sm:p-1 hover:bg-muted min-h-[44px] min-w-[44px] flex items-center justify-center">
+              <X className="h-5 w-5 sm:h-4 sm:w-4" />
             </button>
           </div>
         </div>
 
-        <div className="space-y-5 p-4">
+        <div className="space-y-5 p-3 sm:p-4">
           {/* タイトル（編集可） */}
           <input
             type="text"
@@ -199,7 +199,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
           />
 
           {/* 基本フィールド */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">ステータス</label>
               <select
@@ -224,7 +224,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
                 ))}
               </select>
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <label className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Users className="h-3 w-3" />
                 担当者
@@ -255,7 +255,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
                 <button
                   type="button"
                   onClick={() => handleFieldUpdate('dueDate', null)}
-                  className="rounded border border-input px-1.5 py-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                  className="rounded border border-input px-2 py-1.5 text-xs sm:text-[10px] text-muted-foreground hover:text-foreground min-h-[44px] sm:min-h-0"
                 >
                   なし
                 </button>
@@ -424,7 +424,7 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
           </div>
 
           {/* 削除ボタン */}
-          <div className="border-t pt-3">
+          <div className="border-t pt-3 pb-6 sm:pb-0">
             <Button
               variant="destructive"
               size="sm"

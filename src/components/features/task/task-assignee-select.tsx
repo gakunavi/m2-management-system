@@ -146,7 +146,7 @@ export function TaskAssigneeSelect({
                 e.stopPropagation();
                 handleRemove(id);
               }}
-              className="rounded-full p-0.5 hover:bg-primary/20"
+              className="rounded-full p-1 sm:p-0.5 hover:bg-primary/20 min-h-[28px] min-w-[28px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             >
               <X className="h-3 w-3" />
             </button>
@@ -186,7 +186,7 @@ export function TaskAssigneeSelect({
                 key={u.id}
                 type="button"
                 onClick={() => handleSelect(u.id)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent transition-colors"
+                className="flex w-full items-center gap-2 px-3 py-2.5 sm:py-2 text-sm hover:bg-accent transition-colors min-h-[44px] sm:min-h-0"
               >
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary flex-shrink-0">
                   {u.userName.charAt(0)}

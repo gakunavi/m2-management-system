@@ -7,6 +7,7 @@ import {
   closestCorners,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragStartEvent,
@@ -61,6 +62,24 @@ function isColumnId(id: string): boolean { return id.startsWith(COLUMN_PREFIX); 
 function isTaskId(id: string): boolean { return id.startsWith(TASK_PREFIX); }
 function parseColumnId(id: string): number { return parseInt(id.replace(COLUMN_PREFIX, ''), 10); }
 function parseTaskId(id: string): number { return parseInt(id.replace(TASK_PREFIX, ''), 10); }
+
+// ============================================
+// useMediaQuery フック
+// ============================================
+
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  return isMobile;
+}
 
 // ============================================
 // 表示ヘルパー
@@ -199,7 +218,7 @@ function ChecklistItems({
             type="checkbox"
             checked={item.checked}
             onChange={() => onToggle?.(taskId, index, !item.checked)}
-            className="h-3 w-3 rounded border-muted-foreground/40 flex-shrink-0"
+            className="h-3 w-3 rounded border-muted-foreground/40 flex-shrink-0 sm:h-3 sm:w-3"
           />
           <span className={cn('truncate', item.checked && 'line-through text-muted-foreground/60')}>
             {item.text}
@@ -245,7 +264,7 @@ function TaskCardContent({
             value={task.status}
             onChange={(e) => { e.stopPropagation(); onStatusChange(task.id, e.target.value); }}
             onClick={(e) => e.stopPropagation()}
-            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white border-0 cursor-pointer appearance-none"
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white border-0 cursor-pointer appearance-none min-h-[44px] sm:min-h-0 sm:py-0.5"
             style={{ backgroundColor: statusDef?.color ?? '#94a3b8' }}
           >
             {TASK_STATUS_OPTIONS.map((o) => (
@@ -278,7 +297,7 @@ function TaskCardContent({
             value={task.priority}
             onChange={(e) => { e.stopPropagation(); onPriorityChange(task.id, e.target.value); }}
             onClick={(e) => e.stopPropagation()}
-            className="rounded-full px-1.5 py-0.5 text-[11px] font-medium border-0 cursor-pointer appearance-none"
+            className="rounded-full px-1.5 py-0.5 text-[11px] font-medium border-0 cursor-pointer appearance-none min-h-[44px] sm:min-h-0 sm:py-0.5"
             style={{ backgroundColor: `${priorityDef?.color ?? '#94a3b8'}20`, color: priorityDef?.color ?? '#94a3b8' }}
           >
             {TASK_PRIORITY_OPTIONS.map((o) => (
@@ -300,7 +319,7 @@ function TaskCardContent({
       {task.checklistTotal > 0 && (
         <div className="border-t pt-1 mt-1">
           <button
-            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full text-left"
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full text-left min-h-[44px] sm:min-h-0"
             onClick={(e) => { e.stopPropagation(); setChecklistOpen(!checklistOpen); }}
           >
             {checklistOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -318,7 +337,7 @@ function TaskCardContent({
       {task.childrenCount > 0 && (
         <div className={cn(task.checklistTotal === 0 && 'border-t pt-1 mt-1')}>
           <button
-            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full text-left"
+            className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground w-full text-left min-h-[44px] sm:min-h-0"
             onClick={(e) => { e.stopPropagation(); setSubtasksOpen(!subtasksOpen); }}
           >
             {subtasksOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -416,7 +435,7 @@ function ColumnMenu({
     <div className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-        className="rounded p-1 hover:bg-black/10 transition-colors"
+        className="rounded p-1 hover:bg-black/10 transition-colors min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -426,14 +445,14 @@ function ColumnMenu({
           <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-popover shadow-md">
             <button
               onClick={() => { setIsOpen(false); onEdit(columnId); }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent min-h-[44px]"
             >
               <Pencil className="h-3.5 w-3.5" />
               列名を編集
             </button>
             <button
               onClick={() => { setIsOpen(false); onDelete(columnId); }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-accent"
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-accent min-h-[44px]"
             >
               <Trash2 className="h-3.5 w-3.5" />
               列を削除
@@ -549,9 +568,92 @@ function SortableColumn({
         )}
         <button
           onClick={(e) => { e.stopPropagation(); onAddTask(); }}
-          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-muted-foreground/30 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors"
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-muted-foreground/30 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px] sm:min-h-0"
         >
           <Plus className="h-3 w-3" />
+          タスクを追加
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// モバイル用カラムコンテンツ（D&Dなし、フルワイド）
+// ============================================
+
+function MobileColumnContent({
+  column,
+  items,
+  onTaskClick,
+  onChecklistToggle,
+  onStatusChange,
+  onPriorityChange,
+  onAddTask,
+  onEditColumn,
+  onDeleteColumn,
+}: {
+  column: TaskColumn;
+  items: ColumnItem[];
+  onTaskClick: (id: number) => void;
+  onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onStatusChange?: (taskId: number, status: string) => void;
+  onPriorityChange?: (taskId: number, priority: string) => void;
+  onAddTask: () => void;
+  onEditColumn: (id: number) => void;
+  onDeleteColumn: (id: number) => void;
+}) {
+  const color = column.color ?? '#6b7280';
+
+  return (
+    <div className="flex flex-col">
+      {/* カラムヘッダー */}
+      <div
+        className="flex items-center gap-1 px-2 py-2 rounded-t-lg border-t border-x font-semibold text-sm"
+        style={{ borderTopColor: color, backgroundColor: `${color}10` }}
+      >
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
+        <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <span className="flex-1 truncate" style={{ color }}>{column.name}</span>
+        <span
+          className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
+          style={{ backgroundColor: color }}
+        >
+          {items.length}
+        </span>
+        <ColumnMenu columnId={column.id} onEdit={onEditColumn} onDelete={onDeleteColumn} />
+      </div>
+
+      {/* カード一覧 */}
+      <div className="flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 bg-muted/20">
+        <DndContext
+          sensors={useSensors(
+            useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+            useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+          )}
+        >
+          <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            {items.map((item) => (
+              <SortableTaskCard
+                key={item.id}
+                item={item}
+                columnId={column.id}
+                onTaskClick={onTaskClick}
+                onChecklistToggle={onChecklistToggle}
+                onStatusChange={onStatusChange}
+                onPriorityChange={onPriorityChange}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+        {items.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-4">タスクなし</p>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddTask(); }}
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-muted-foreground/30 py-3 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px]"
+        >
+          <Plus className="h-4 w-4" />
           タスクを追加
         </button>
       </div>
@@ -580,6 +682,8 @@ export function TaskKanbanView({
   onReorderColumns,
 }: TaskKanbanViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [mobileColumnIdx, setMobileColumnIdx] = useState(0);
+  const isMobile = useIsMobile();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -624,6 +728,13 @@ export function TaskKanbanView({
       setColumnItems(rebuilt);
     }
   }, [tasks, columns]);
+
+  // mobileColumnIdx が列数を超えないようにクランプ
+  useEffect(() => {
+    if (mobileColumnIdx >= localColumns.length && localColumns.length > 0) {
+      setMobileColumnIdx(localColumns.length - 1);
+    }
+  }, [localColumns.length, mobileColumnIdx]);
 
   // 最新のcolumnItemsをrefで保持（コールバック内でstale closureを防ぐ）
   const columnItemsRef = useRef(columnItems);
@@ -743,6 +854,75 @@ export function TaskKanbanView({
     setColumnItems(buildColumnItems(tasks, sorted));
   }, [columns, tasks]);
 
+  // モバイル用の現在列
+  const mobileColumn = localColumns[mobileColumnIdx];
+  const mobileItems = mobileColumn ? (columnItems[mobileColumn.id] ?? []) : [];
+
+  // ======== モバイルレイアウト ========
+  if (isMobile) {
+    return (
+      <div className="flex flex-col gap-3">
+        {/* 列タブ */}
+        <div className="flex overflow-x-auto gap-1.5 pb-1 -mx-1 px-1">
+          {localColumns.map((col, i) => {
+            const colColor = col.color ?? '#6b7280';
+            const colItems = columnItems[col.id] ?? [];
+            const isActive = i === mobileColumnIdx;
+            return (
+              <button
+                key={col.id}
+                onClick={() => setMobileColumnIdx(i)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-2 rounded-full text-sm whitespace-nowrap transition-colors min-h-[44px] flex-shrink-0',
+                  isActive
+                    ? 'text-white font-semibold shadow-sm'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                )}
+                style={isActive ? { backgroundColor: colColor } : undefined}
+              >
+                {!isActive && (
+                  <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: colColor }} />
+                )}
+                <span>{col.name}</span>
+                <span className={cn(
+                  'text-xs font-bold px-1.5 py-0.5 rounded-full',
+                  isActive ? 'bg-white/25' : 'bg-background',
+                )}>
+                  {colItems.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 選択中のカラムコンテンツ */}
+        {mobileColumn && (
+          <MobileColumnContent
+            column={mobileColumn}
+            items={mobileItems}
+            onTaskClick={onTaskClick}
+            onChecklistToggle={onChecklistToggle}
+            onStatusChange={onStatusChange}
+            onPriorityChange={onPriorityChange}
+            onAddTask={() => onAddTaskToColumn(mobileColumn.id)}
+            onEditColumn={onEditColumn}
+            onDeleteColumn={onDeleteColumn}
+          />
+        )}
+
+        {/* 列追加ボタン */}
+        <button
+          onClick={onAddColumn}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-4 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px]"
+        >
+          <Plus className="h-4 w-4" />
+          列を追加
+        </button>
+      </div>
+    );
+  }
+
+  // ======== デスクトップレイアウト ========
   return (
     <DndContext
       sensors={sensors}

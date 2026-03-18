@@ -196,7 +196,7 @@ export function TaskAttachments({
         <div className="border-t border-muted px-3 pb-3 pt-2 space-y-2">
           {/* Attachment grid */}
           {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
               {attachments.map((att) => (
                 <div
                   key={att.id}
@@ -207,7 +207,7 @@ export function TaskAttachments({
                     <button
                       type="button"
                       onClick={() => setPreviewAttachment(att)}
-                      className="block h-16 w-16 rounded border border-muted overflow-hidden bg-muted hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="block h-12 w-12 sm:h-16 sm:w-16 rounded border border-muted overflow-hidden bg-muted hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary"
                       title={att.fileName}
                       aria-label={`プレビュー: ${att.fileName}`}
                     >
@@ -222,7 +222,7 @@ export function TaskAttachments({
                     <button
                       type="button"
                       onClick={() => handleDownload(att)}
-                      className="flex h-16 w-28 flex-col items-center justify-center gap-1 rounded border border-muted bg-muted/50 px-1 hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="flex h-12 w-full sm:h-16 sm:w-28 flex-col items-center justify-center gap-1 rounded border border-muted bg-muted/50 px-1 hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
                       title={`ダウンロード: ${att.fileName}`}
                     >
                       <FileIcon mimeType={att.mimeType} className="h-6 w-6" />
@@ -244,7 +244,7 @@ export function TaskAttachments({
                           onDelete(att.id);
                         }
                       }}
-                      className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
+                      className="absolute -right-1.5 -top-1.5 flex sm:hidden h-5 w-5 sm:h-4 sm:w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground sm:group-hover:flex"
                       aria-label={`削除: ${att.fileName}`}
                     >
                       <X className="h-2.5 w-2.5" />

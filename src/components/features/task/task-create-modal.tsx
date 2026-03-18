@@ -95,8 +95,8 @@ export function TaskCreateModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-lg rounded-lg bg-background shadow-xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
+      <div className="w-full sm:max-w-lg rounded-t-lg sm:rounded-lg bg-background shadow-xl max-h-[100dvh] sm:max-h-[90vh] overflow-y-auto mx-0 sm:mx-4">
         {/* ヘッダー */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-lg font-semibold">
@@ -108,7 +108,7 @@ export function TaskCreateModal({
         </div>
 
         {/* フォーム */}
-        <div className="space-y-4 p-4">
+        <div className="space-y-4 p-3 sm:p-4">
           {error && (
             <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -129,7 +129,7 @@ export function TaskCreateModal({
           </div>
 
           {/* 2. ステータス + 優先度 */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium">ステータス</label>
               <select
@@ -253,11 +253,11 @@ export function TaskCreateModal({
         </div>
 
         {/* フッター */}
-        <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
-          <Button variant="outline" onClick={onClose} size="sm">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t px-3 sm:px-4 py-3 pb-6 sm:pb-3">
+          <Button variant="outline" onClick={onClose} size="sm" className="w-full sm:w-auto">
             キャンセル
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting} size="sm">
+          <Button onClick={handleSubmit} disabled={isSubmitting} size="sm" className="w-full sm:w-auto">
             {isSubmitting ? '作成中...' : '作成'}
           </Button>
         </div>
