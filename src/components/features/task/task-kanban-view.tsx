@@ -73,16 +73,35 @@ function isOverdue(dueDate: string | null): boolean {
   return d < today;
 }
 
-function columnDndId(columnId: number): string {
-  return `column-${columnId}`;
+// 列の並び替え用（useSortable）
+function columnSortId(columnId: number): string {
+  return `col-sort-${columnId}`;
 }
 
-function isColumnDndId(id: string): boolean {
-  return id.startsWith('column-');
+function isColumnSortId(id: string): boolean {
+  return id.startsWith('col-sort-');
 }
 
-function dndIdToColumnId(id: string): number {
-  return parseInt(id.replace('column-', ''), 10);
+function sortIdToColumnId(id: string): number {
+  return parseInt(id.replace('col-sort-', ''), 10);
+}
+
+// カードのドロップ先用（useDroppable）
+function columnDropId(columnId: number): string {
+  return `col-drop-${columnId}`;
+}
+
+function isColumnDropId(id: string): boolean {
+  return id.startsWith('col-drop-');
+}
+
+function dropIdToColumnId(id: string): number {
+  return parseInt(id.replace('col-drop-', ''), 10);
+}
+
+// いずれかの列関連IDか
+function isAnyColumnId(id: string): boolean {
+  return isColumnSortId(id) || isColumnDropId(id);
 }
 
 function itemIdToTaskId(itemId: string): number {
@@ -412,7 +431,8 @@ function KanbanColumn({
   onEditColumn,
   onDeleteColumn,
 }: KanbanColumnProps) {
-  const dndId = columnDndId(column.id);
+  const sortId = columnSortId(column.id);
+  const dropId = columnDropId(column.id);
   const {
     attributes: colAttributes,
     listeners: colListeners,
@@ -420,8 +440,8 @@ function KanbanColumn({
     transform: colTransform,
     transition: colTransition,
     isDragging: isColDragging,
-  } = useSortable({ id: dndId });
-  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: dndId });
+  } = useSortable({ id: sortId });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: dropId });
   const color = column.color ?? '#6b7280';
 
   const colStyle = {
@@ -542,11 +562,11 @@ export function TaskKanbanView({
     setColumnItems(buildColumnItems(tasks, sorted));
   }
 
-  const activeTask = activeId && !isColumnDndId(activeId) ? findTaskById(columnItems, activeId) : null;
-  const activeColumn = activeId && isColumnDndId(activeId) ? localColumns.find(c => columnDndId(c.id) === activeId) : null;
+  const activeTask = activeId && !isAnyColumnId(activeId) ? findTaskById(columnItems, activeId) : null;
+  const activeColumn = activeId && isColumnSortId(activeId) ? localColumns.find(c => columnSortId(c.id) === activeId) : null;
 
-  // 列のDnD ID一覧
-  const columnDndIds = localColumns.map(c => columnDndId(c.id));
+  // 列の並び替え用ID一覧
+  const columnSortIds = localColumns.map(c => columnSortId(c.id));
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
@@ -559,22 +579,22 @@ export function TaskKanbanView({
     const activeItemId = active.id as string;
 
     // 列のドラッグ中はカード移動ロジックをスキップ
-    if (isColumnDndId(activeItemId)) return;
+    if (isColumnSortId(activeItemId)) return;
     const overId = over.id as string;
 
     // ドラッグ元カラムを特定
     const sourceColId = findColumnIdForItem(columnItems, activeItemId);
     if (sourceColId === undefined) return;
 
-    // オーバー先: カラムDnD IDか、別カラムのアイテムIDか判定
-    const targetColId = isColumnDndId(overId)
-      ? dndIdToColumnId(overId)
+    // オーバー先: カラムドロップIDか、別カラムのアイテムIDか判定
+    const targetColId = isColumnDropId(overId)
+      ? dropIdToColumnId(overId)
       : findColumnIdForItem(columnItems, overId);
 
     if (targetColId === undefined) return;
 
     // 同一カラム内の並び替え（リアルタイムフィードバック）
-    if (sourceColId === targetColId && !isColumnDndId(overId)) {
+    if (sourceColId === targetColId && !isColumnDropId(overId)) {
       setColumnItems((prev) => {
         const items = [...(prev[sourceColId] ?? [])];
         const oldIndex = items.findIndex((i) => i.id === activeItemId);
@@ -597,7 +617,7 @@ export function TaskKanbanView({
 
       const [moved] = sourceItems.splice(sourceIndex, 1);
 
-      if (!isColumnDndId(overId)) {
+      if (!isColumnDropId(overId)) {
         const overIndex = targetItems.findIndex((i) => i.id === overId);
         if (overIndex !== -1) {
           targetItems.splice(overIndex, 0, moved);
@@ -626,9 +646,9 @@ export function TaskKanbanView({
     const overId = over.id as string;
 
     // 列のドラッグ完了
-    if (isColumnDndId(activeItemId) && isColumnDndId(overId)) {
-      const oldIndex = localColumns.findIndex(c => columnDndId(c.id) === activeItemId);
-      const newIndex = localColumns.findIndex(c => columnDndId(c.id) === overId);
+    if (isColumnSortId(activeItemId) && isColumnSortId(overId)) {
+      const oldIndex = localColumns.findIndex(c => columnSortId(c.id) === activeItemId);
+      const newIndex = localColumns.findIndex(c => columnSortId(c.id) === overId);
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
         const reordered = arrayMove(localColumns, oldIndex, newIndex);
         // ローカルstateを即時更新（APIレスポンス前に次のドラッグに対応）
@@ -642,8 +662,8 @@ export function TaskKanbanView({
     const currentColId = findColumnIdForItem(columnItems, activeItemId);
     if (currentColId === undefined) return;
 
-    const targetColId = isColumnDndId(overId)
-      ? dndIdToColumnId(overId)
+    const targetColId = isColumnDropId(overId)
+      ? dropIdToColumnId(overId)
       : findColumnIdForItem(columnItems, overId);
 
     if (targetColId === undefined) return;
@@ -678,7 +698,7 @@ export function TaskKanbanView({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
-        <SortableContext items={columnDndIds} strategy={horizontalListSortingStrategy}>
+        <SortableContext items={columnSortIds} strategy={horizontalListSortingStrategy}>
           {localColumns.map((col) => (
             <KanbanColumn
               key={col.id}
