@@ -5,7 +5,7 @@ import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X,
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useBusiness } from '@/hooks/use-business';
-import { useTaskList, useTaskTags, useTaskDetail, useTaskBoards, useTaskBoardMutations } from '@/hooks/use-tasks';
+import { useTaskList, useTaskTags, useTaskDetail, useTaskBoards, useTaskBoardMutations, useTaskMutations } from '@/hooks/use-tasks';
 import { useDebounce } from '@/hooks/use-debounce';
 import { TaskDetailPanel } from '@/components/features/task/task-detail-panel';
 import { TaskCreateModal } from '@/components/features/task/task-create-modal';
@@ -427,7 +427,12 @@ function TaskListView({
   totalPages,
   onPageChange,
 }: TaskListViewProps) {
+  const { updateTask } = useTaskMutations();
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+
+  const handleArchiveToggle = useCallback((taskId: number, isArchived: boolean) => {
+    updateTask.mutate({ id: taskId, isArchived, version: 1 }); // version is checked server-side
+  }, [updateTask]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedTasks((prev) => {
@@ -484,6 +489,7 @@ function TaskListView({
               <SortHeader field="assigneeId" label="担当者" />
               <SortHeader field="dueDate" label="期限" />
               <th className="sticky top-0 z-20 bg-muted/80 px-3 py-2 text-left text-xs font-medium text-muted-foreground">タグ</th>
+              <th className="sticky top-0 z-20 bg-muted/80 px-2 py-2 text-center text-xs font-medium text-muted-foreground w-20">アーカイブ</th>
               <SortHeader field="updatedAt" label="更新日" />
             </tr>
           </thead>
@@ -495,6 +501,7 @@ function TaskListView({
                 isExpanded={expandedTasks.has(task.id)}
                 onToggleExpand={() => toggleExpand(task.id)}
                 onTaskClick={onTaskClick}
+                onArchiveToggle={handleArchiveToggle}
               />
             ))}
           </tbody>
@@ -537,11 +544,13 @@ function TaskRowWithChildren({
   isExpanded,
   onToggleExpand,
   onTaskClick,
+  onArchiveToggle,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onTaskClick: (id: number) => void;
+  onArchiveToggle: (id: number, isArchived: boolean) => void;
 }) {
   // 展開時に親タスクの詳細（子タスク含む）を取得
   const { data: detail } = useTaskDetail(isExpanded ? task.id : null);
@@ -555,6 +564,7 @@ function TaskRowWithChildren({
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
         onClick={() => onTaskClick(task.id)}
+        onArchiveToggle={onArchiveToggle}
       />
 
       {/* 子タスク行（展開時） */}
@@ -564,6 +574,7 @@ function TaskRowWithChildren({
           task={child}
           isLast={index === children.length - 1}
           onClick={() => onTaskClick(child.id)}
+          onArchiveToggle={onArchiveToggle}
         />
       ))}
     </>
@@ -575,11 +586,13 @@ function ParentTaskRow({
   isExpanded,
   onToggleExpand,
   onClick,
+  onArchiveToggle,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onClick: () => void;
+  onArchiveToggle: (id: number, isArchived: boolean) => void;
 }) {
   const hasChildren = task.childrenCount > 0;
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
@@ -634,6 +647,16 @@ function ParentTaskRow({
           ))}
         </div>
       </td>
+      <td className="px-2 py-2 text-center">
+        <input
+          type="checkbox"
+          checked={task.isArchived}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onArchiveToggle(task.id, e.target.checked)}
+          className="accent-primary cursor-pointer"
+          title={task.isArchived ? 'アーカイブ解除' : 'アーカイブ'}
+        />
+      </td>
       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</td>
     </tr>
   );
@@ -643,10 +666,12 @@ function ChildTaskRow({
   task,
   isLast,
   onClick,
+  onArchiveToggle,
 }: {
   task: TaskListItem;
   isLast: boolean;
   onClick: () => void;
+  onArchiveToggle: (id: number, isArchived: boolean) => void;
 }) {
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
   const statusOpt = TASK_STATUS_OPTIONS.find((o) => o.value === task.status);
@@ -682,6 +707,16 @@ function ChildTaskRow({
       <td className="px-3 py-1.5 text-sm">{task.assigneeName ?? '-'}</td>
       <td className={`px-3 py-1.5 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</td>
       <td className="px-3 py-1.5" />
+      <td className="px-2 py-1.5 text-center">
+        <input
+          type="checkbox"
+          checked={task.isArchived}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onArchiveToggle(task.id, e.target.checked)}
+          className="accent-primary cursor-pointer"
+          title={task.isArchived ? 'アーカイブ解除' : 'アーカイブ'}
+        />
+      </td>
       <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</td>
     </tr>
   );
