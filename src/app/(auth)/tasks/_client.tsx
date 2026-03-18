@@ -5,10 +5,9 @@ import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X,
 import {
   DndContext, DragOverlay, closestCenter,
   PointerSensor, useSensor, useSensors,
-  type DragEndEvent,
+  type DragStartEvent, type DragEndEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useBusiness } from '@/hooks/use-business';
@@ -62,7 +61,7 @@ export function TasksClient() {
   // ページネーション & ソート
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [sort, setSort] = useState('dueDate:asc');
+  const [sort, setSort] = useState('sortOrder:asc');
 
   // 詳細パネル & 作成モーダル
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -455,6 +454,15 @@ function TaskListView({
     updateTask.mutate({ id: taskId, isArchived, version: 1 });
   }, [updateTask]);
 
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(Number(event.active.id));
+    setExpandedTasks(new Set());
+  }, []);
+
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null);
+  }, []);
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
@@ -490,7 +498,11 @@ function TaskListView({
       sortOrder: i,
     }));
     reorderTasks.mutate(items);
-  }, [tasks, reorderTasks]);
+    // 並び替え後はsortOrderソートに切替（他のソートだと順番が保持されない）
+    if (sort !== 'sortOrder:asc') {
+      onSort('sortOrder');
+    }
+  }, [tasks, reorderTasks, sort, onSort]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedTasks((prev) => {
@@ -504,10 +516,9 @@ function TaskListView({
   const taskIds = useMemo(() => tasks.map((t) => t.id), [tasks]);
   const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
   const [sortField, sortDir] = sort.split(':');
-
-  const SortHeader = ({ field, label, width }: { field: string; label: string; width?: string }) => (
-    <th
-      className={`sticky top-0 z-20 cursor-pointer bg-muted/80 px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground ${width ? `w-[${width}]` : ''}`}
+  const SortHeader = ({ field, label }: { field: string; label: string }) => (
+    <div
+      className="cursor-pointer px-3 py-2 hover:text-foreground"
       onClick={() => onSort(field)}
     >
       <span className="flex items-center gap-1">
@@ -516,7 +527,7 @@ function TaskListView({
           <span className="text-foreground">{sortDir === 'asc' ? '↑' : '↓'}</span>
         )}
       </span>
-    </th>
+    </div>
   );
 
   if (isLoading) {
@@ -535,49 +546,52 @@ function TaskListView({
     );
   }
 
+  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(180px,1fr)_76px_64px_72px_92px_minmax(80px,160px)_64px_84px]';
+
   return (
     <div>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragStart={(e) => setActiveId(Number(e.active.id))}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        <div className="overflow-auto rounded-lg border" style={{ maxHeight: 'calc(100vh - 340px)' }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="sticky top-0 z-20 w-8 bg-muted/80 px-1 py-2" />
-                <th className="sticky top-0 z-20 w-8 bg-muted/80 px-2 py-2" />
-                <SortHeader field="taskNo" label="No." />
-                <SortHeader field="title" label="タスク名" />
-                <SortHeader field="status" label="ステータス" />
-                <SortHeader field="priority" label="優先度" />
-                <SortHeader field="assigneeId" label="担当者" />
-                <SortHeader field="dueDate" label="期限" />
-                <th className="sticky top-0 z-20 bg-muted/80 px-3 py-2 text-left text-xs font-medium text-muted-foreground">タグ</th>
-                <th className="sticky top-0 z-20 bg-muted/80 px-2 py-2 text-center text-xs font-medium text-muted-foreground w-20">アーカイブ</th>
-                <SortHeader field="updatedAt" label="更新日" />
-              </tr>
-            </thead>
+        <div className="rounded-lg border">
+          {/* ヘッダー（スクロール外に固定） */}
+          <div className={`grid ${GRID_COLS} border-b bg-muted text-xs font-medium text-muted-foreground`}>
+            <div className="px-1 py-2" />
+            <div className="px-2 py-2" />
+            <SortHeader field="taskNo" label="No." />
+            <SortHeader field="title" label="タスク名" />
+            <SortHeader field="status" label="ステータス" />
+            <SortHeader field="priority" label="優先度" />
+            <SortHeader field="assigneeId" label="担当者" />
+            <SortHeader field="dueDate" label="期限" />
+            <div className="px-3 py-2">タグ</div>
+            <div className="px-2 py-2 text-center">アーカイブ</div>
+            <SortHeader field="updatedAt" label="更新日" />
+          </div>
+          {/* スクロール可能なボディ（ヘッダーとは分離） */}
+          <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
             <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-              <tbody>
+              <div>
                 {tasks.map((task) => (
                   <TaskRowWithChildren
                     key={task.id}
                     task={task}
-                    isExpanded={expandedTasks.has(task.id)}
+                    isExpanded={!activeId && expandedTasks.has(task.id)}
                     onToggleExpand={() => toggleExpand(task.id)}
                     onTaskClick={onTaskClick}
                     onArchiveToggle={handleArchiveToggle}
+                    gridCols={GRID_COLS}
                   />
-            ))}
-              </tbody>
+                ))}
+              </div>
             </SortableContext>
-          </table>
+          </div>
         </div>
 
-        {/* ドラッグ中のオーバーレイ */}
         <DragOverlay>
           {activeTask && (
             <div className="rounded-md border bg-background px-3 py-2 shadow-lg text-sm opacity-90">
@@ -625,29 +639,28 @@ function TaskRowWithChildren({
   onToggleExpand,
   onTaskClick,
   onArchiveToggle,
+  gridCols,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onTaskClick: (id: number) => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
+  gridCols: string;
 }) {
-  // 展開時に親タスクの詳細（子タスク含む）を取得
   const { data: detail } = useTaskDetail(isExpanded ? task.id : null);
   const children = detail?.children ?? [];
 
   return (
     <>
-      {/* 親タスク行 */}
       <ParentTaskRow
         task={task}
         isExpanded={isExpanded}
         onToggleExpand={onToggleExpand}
         onClick={() => onTaskClick(task.id)}
         onArchiveToggle={onArchiveToggle}
+        gridCols={gridCols}
       />
-
-      {/* 子タスク行（展開時） */}
       {isExpanded && children.map((child, index) => (
         <ChildTaskRow
           key={child.id}
@@ -655,6 +668,7 @@ function TaskRowWithChildren({
           isLast={index === children.length - 1}
           onClick={() => onTaskClick(child.id)}
           onArchiveToggle={onArchiveToggle}
+          gridCols={gridCols}
         />
       ))}
     </>
@@ -667,18 +681,22 @@ function ParentTaskRow({
   onToggleExpand,
   onClick,
   onArchiveToggle,
+  gridCols,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onClick: () => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
+  gridCols: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
     transition,
     opacity: isDragging ? 0.4 : 1,
+    position: 'relative' as const,
+    zIndex: isDragging ? 50 : undefined,
   };
 
   const hasChildren = task.childrenCount > 0;
@@ -687,17 +705,16 @@ function ParentTaskRow({
   const priorityOpt = TASK_PRIORITY_OPTIONS.find((o) => o.value === task.priority);
 
   return (
-    <tr
+    <div
       ref={setNodeRef}
       style={style}
-      className="border-b transition-colors hover:bg-muted/50 cursor-pointer"
+      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-muted/50 cursor-pointer text-sm ${isDragging ? 'bg-muted shadow-md' : ''}`}
       onClick={onClick}
     >
-      {/* ドラッグハンドル */}
-      <td className="px-1 py-2 cursor-grab" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
+      <div className="px-1 py-2 cursor-grab" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-muted-foreground" />
-      </td>
-      <td className="px-2 py-2">
+      </div>
+      <div className="px-2 py-2">
         {hasChildren ? (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
@@ -708,39 +725,39 @@ function ParentTaskRow({
         ) : (
           <span className="inline-block w-4" />
         )}
-      </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.taskNo}</td>
-      <td className="px-3 py-2">
+      </div>
+      <div className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.taskNo}</div>
+      <div className="px-3 py-2 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium">{task.title}</span>
+          <span className="font-medium truncate">{task.title}</span>
           {hasChildren && (
-            <span className="text-xs text-muted-foreground">({task.childrenDoneCount}/{task.childrenCount})</span>
+            <span className="text-xs text-muted-foreground shrink-0">({task.childrenDoneCount}/{task.childrenCount})</span>
           )}
           {task.checklistTotal > 0 && (
-            <span className="text-xs text-muted-foreground">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
+            <span className="text-xs text-muted-foreground shrink-0">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
           )}
         </div>
-      </td>
-      <td className="px-3 py-2">
+      </div>
+      <div className="px-3 py-2">
         <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
           {statusOpt?.label ?? task.status}
         </span>
-      </td>
-      <td className="px-3 py-2">
+      </div>
+      <div className="px-3 py-2">
         <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: priorityOpt?.color ?? '#94a3b8' }}>
           {priorityOpt?.label ?? task.priority}
         </span>
-      </td>
-      <td className="px-3 py-2 text-sm">{task.assigneeName ?? '-'}</td>
-      <td className={`px-3 py-2 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</td>
-      <td className="px-3 py-2">
+      </div>
+      <div className="px-3 py-2 truncate">{task.assigneeName ?? '-'}</div>
+      <div className={`px-3 py-2 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
+      <div className="px-3 py-2">
         <div className="flex flex-wrap gap-1">
           {task.tags.map((tag) => (
             <span key={tag.id} className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium text-white" style={{ backgroundColor: tag.color }}>{tag.name}</span>
           ))}
         </div>
-      </td>
-      <td className="px-2 py-2 text-center">
+      </div>
+      <div className="px-2 py-2 text-center">
         <input
           type="checkbox"
           checked={task.isArchived}
@@ -749,9 +766,9 @@ function ParentTaskRow({
           className="accent-primary cursor-pointer"
           title={task.isArchived ? 'アーカイブ解除' : 'アーカイブ'}
         />
-      </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</td>
-    </tr>
+      </div>
+      <div className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</div>
+    </div>
   );
 }
 
@@ -760,47 +777,48 @@ function ChildTaskRow({
   isLast,
   onClick,
   onArchiveToggle,
+  gridCols,
 }: {
   task: TaskListItem;
   isLast: boolean;
   onClick: () => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
+  gridCols: string;
 }) {
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
   const statusOpt = TASK_STATUS_OPTIONS.find((o) => o.value === task.status);
 
   return (
-    <tr
-      className="border-b transition-colors hover:bg-primary/[0.03] cursor-pointer"
-      style={{ backgroundColor: 'var(--child-task-bg, rgba(59,130,246,0.04))' }}
+    <div
+      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-primary/[0.03] cursor-pointer text-sm`}
+      style={{ backgroundColor: 'rgba(59,130,246,0.04)' }}
       onClick={onClick}
     >
-      {/* ツリー記号（大きめインデント） */}
-      <td className="py-1.5" style={{ paddingLeft: '24px' }}>
+      {/* ツリー記号 */}
+      <div className="py-1.5 pl-6">
         <span className="text-blue-400/70 font-mono text-sm">{isLast ? '└' : '├'}</span>
-      </td>
-      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap" style={{ paddingLeft: '8px' }}>
-        {task.taskNo}
-      </td>
-      <td className="px-3 py-1.5">
-        <div className="flex items-center gap-2" style={{ paddingLeft: '20px' }}>
+      </div>
+      <div className="py-1.5" />
+      <div className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{task.taskNo}</div>
+      <div className="px-3 py-1.5 min-w-0">
+        <div className="flex items-center gap-2 pl-5">
           <div className="w-0.5 self-stretch bg-blue-400/30 rounded-full mr-1" style={{ minHeight: '16px' }} />
-          <span className="text-sm">{task.title}</span>
+          <span className="truncate">{task.title}</span>
           {task.checklistTotal > 0 && (
-            <span className="text-xs text-muted-foreground">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
+            <span className="text-xs text-muted-foreground shrink-0">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
           )}
         </div>
-      </td>
-      <td className="px-3 py-1.5">
+      </div>
+      <div className="px-3 py-1.5">
         <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: statusOpt?.color ?? '#94a3b8' }}>
           {statusOpt?.label ?? task.status}
         </span>
-      </td>
-      <td className="px-3 py-1.5 text-xs text-muted-foreground">—</td>
-      <td className="px-3 py-1.5 text-sm">{task.assigneeName ?? '-'}</td>
-      <td className={`px-3 py-1.5 text-sm whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</td>
-      <td className="px-3 py-1.5" />
-      <td className="px-2 py-1.5 text-center">
+      </div>
+      <div className="px-3 py-1.5 text-xs text-muted-foreground">—</div>
+      <div className="px-3 py-1.5 truncate">{task.assigneeName ?? '-'}</div>
+      <div className={`px-3 py-1.5 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
+      <div className="px-3 py-1.5" />
+      <div className="px-2 py-1.5 text-center">
         <input
           type="checkbox"
           checked={task.isArchived}
@@ -809,9 +827,9 @@ function ChildTaskRow({
           className="accent-primary cursor-pointer"
           title={task.isArchived ? 'アーカイブ解除' : 'アーカイブ'}
         />
-      </td>
-      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</td>
-    </tr>
+      </div>
+      <div className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{task.updatedAt.split('T')[0]}</div>
+    </div>
   );
 }
 
