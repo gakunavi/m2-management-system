@@ -5,12 +5,14 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -104,8 +106,8 @@ function buildColumnItems(
   }
   for (const colId of Object.keys(result)) {
     result[Number(colId)].sort((a, b) => {
-      const aOrder = (a.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
-      const bOrder = (b.task as TaskListItem & { sortOrder?: number }).sortOrder ?? 0;
+      const aOrder = a.task.sortOrder ?? 0;
+      const bOrder = b.task.sortOrder ?? 0;
       return aOrder !== bOrder ? aOrder - bOrder : new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime();
     });
   }
@@ -514,6 +516,22 @@ export function TaskKanbanView({
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
+  // カスタム衝突検知: 列ドラッグ中は列のみ検出、カードドラッグ中は全て検出
+  const customCollisionDetection: CollisionDetection = useCallback((args) => {
+    const draggingId = args.active.id as string;
+
+    if (isColumnId(draggingId)) {
+      // 列ドラッグ中: 列コンテナのみを対象にclosestCenterで検出
+      const columnContainers = args.droppableContainers.filter(
+        (container) => isColumnId(container.id as string),
+      );
+      return closestCenter({ ...args, droppableContainers: columnContainers });
+    }
+
+    // カードドラッグ中: 全て対象にclosestCornersで検出
+    return closestCorners(args);
+  }, []);
+
   // ローカル列順序（D&D即時反映用）
   const [localColumns, setLocalColumns] = useState<TaskColumn[]>(() =>
     [...columns].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -706,7 +724,7 @@ export function TaskKanbanView({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={customCollisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

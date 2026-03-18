@@ -55,6 +55,7 @@ export interface TaskListItem {
   childrenDoneCount: number;
   checklistTotal: number;
   checklistDoneCount: number;
+  sortOrder: number;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -65,7 +66,6 @@ export interface TaskDetail extends TaskListItem {
   description: string | null;
   memo: string | null;
   checklist: ChecklistItem[];
-  sortOrder: number;
   version: number;
   children: TaskListItem[];
   notifyTargets: TaskNotifyTargetItem[];
