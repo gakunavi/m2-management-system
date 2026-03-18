@@ -39,6 +39,7 @@ interface TaskKanbanViewProps {
   onReorder: (items: { id: number; columnId: number; sortOrder: number }[]) => void;
   onTaskClick: (taskId: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onAddTaskToColumn: (columnId: number) => void;
   onAddColumn: () => void;
   onEditColumn: (columnId: number) => void;
   onDeleteColumn: (columnId: number) => void;
@@ -404,6 +405,7 @@ function SortableColumn({
   items,
   onTaskClick,
   onChecklistToggle,
+  onAddTask,
   onEditColumn,
   onDeleteColumn,
 }: {
@@ -411,6 +413,7 @@ function SortableColumn({
   items: ColumnItem[];
   onTaskClick: (id: number) => void;
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
+  onAddTask: () => void;
   onEditColumn: (id: number) => void;
   onDeleteColumn: (id: number) => void;
 }) {
@@ -489,6 +492,13 @@ function SortableColumn({
         {items.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-4">タスクなし</p>
         )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddTask(); }}
+          className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-muted-foreground/30 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors"
+        >
+          <Plus className="h-3 w-3" />
+          タスクを追加
+        </button>
       </div>
     </div>
   );
@@ -505,6 +515,7 @@ export function TaskKanbanView({
   onReorder,
   onTaskClick,
   onChecklistToggle,
+  onAddTaskToColumn,
   onAddColumn,
   onEditColumn,
   onDeleteColumn,
@@ -692,6 +703,7 @@ export function TaskKanbanView({
               items={columnItems[col.id] ?? []}
               onTaskClick={onTaskClick}
               onChecklistToggle={onChecklistToggle}
+              onAddTask={() => onAddTaskToColumn(col.id)}
               onEditColumn={onEditColumn}
               onDeleteColumn={onDeleteColumn}
             />

@@ -17,6 +17,7 @@ interface TaskCreateModalProps {
   defaultScope?: TaskScope;
   defaultBusinessId?: number;
   defaultBoardId?: number;
+  defaultColumnId?: number;
   parentTaskId?: number;
   relatedEntityType?: string;
   relatedEntityId?: number;
@@ -28,6 +29,7 @@ export function TaskCreateModal({
   defaultScope = 'company',
   defaultBusinessId,
   defaultBoardId,
+  defaultColumnId,
   parentTaskId,
   relatedEntityType: defaultRelatedType,
   relatedEntityId: defaultRelatedId,
@@ -73,6 +75,7 @@ export function TaskCreateModal({
         scope,
         businessId: scope === 'business' ? businessId : null,
         boardId: scope === 'board' ? defaultBoardId : null,
+        columnId: defaultColumnId ?? null,
         parentTaskId: parentTaskId ?? null,
         relatedEntityType: relatedEntityType || null,
         relatedEntityId: relatedEntityId ?? null,

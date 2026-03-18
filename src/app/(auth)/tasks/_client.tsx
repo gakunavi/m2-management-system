@@ -86,7 +86,7 @@ export function TasksClient() {
 
   // 詳細パネル & 作成モーダル
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState<{ open: boolean; columnId?: number }>({ open: false });
 
   // タスク一覧取得
   const listParams = useMemo(() => ({
@@ -137,7 +137,7 @@ export function TasksClient() {
       <PageHeader
         title="タスク管理"
         actions={
-          <Button onClick={() => setShowCreateModal(true)} size="sm">
+          <Button onClick={() => setShowCreateModal({ open: true })} size="sm">
             <Plus className="mr-1 h-4 w-4" />
             新規タスク
           </Button>
@@ -337,9 +337,8 @@ export function TasksClient() {
             tasks={tasks}
             columns={columns}
             onTaskClick={setSelectedTaskId}
-            onColumnChange={() => {
-              // columnId変更はonReorderのペイロードに含まれるため不要
-            }}
+            onColumnChange={() => {}}
+            onAddTaskToColumn={(columnId) => setShowCreateModal({ open: true, columnId })}
             onReorder={(items) => {
               const taskMap = new Map(tasks.map((t) => [t.id, t]));
               reorderTasks.mutate(
@@ -398,14 +397,15 @@ export function TasksClient() {
       )}
 
       {/* 作成モーダル */}
-      {showCreateModal && (
+      {showCreateModal.open && (
         <TaskCreateModal
           defaultScope={scope}
           defaultBusinessId={scope === 'business' ? currentBusiness?.id : undefined}
           defaultBoardId={scope === 'board' ? selectedBoardId ?? undefined : undefined}
-          onClose={() => setShowCreateModal(false)}
+          defaultColumnId={showCreateModal.columnId}
+          onClose={() => setShowCreateModal({ open: false })}
           onCreated={(task) => {
-            setShowCreateModal(false);
+            setShowCreateModal({ open: false });
             setSelectedTaskId(task.id);
           }}
         />
