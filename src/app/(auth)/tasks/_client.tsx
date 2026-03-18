@@ -341,7 +341,6 @@ export function TasksClient() {
               // columnId変更はonReorderのペイロードに含まれるため不要
             }}
             onReorder={(items) => {
-              // reorder API は status 必須なので、各タスクの現在の status を引き継ぐ
               const taskMap = new Map(tasks.map((t) => [t.id, t]));
               reorderTasks.mutate(
                 items.map((it) => ({

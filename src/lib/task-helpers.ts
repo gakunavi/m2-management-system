@@ -137,6 +137,7 @@ export function formatTaskListItem(task: any) {
     businessName: task.business?.businessName ?? null,
     columnId: task.columnId ?? null,
     columnName: task.column?.name ?? null,
+    sortOrder: task.sortOrder ?? 0,
     parentTaskId: task.parentTaskId,
     relatedEntityType: task.relatedEntityType,
     relatedEntityId: task.relatedEntityId,
