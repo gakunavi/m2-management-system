@@ -167,7 +167,6 @@ export function formatTaskDetail(task: any) {
     description: task.description,
     memo: task.memo ?? null,
     checklist: Array.isArray(task.checklist) ? task.checklist : [],
-    sortOrder: task.sortOrder,
     version: task.version,
     children: (task.children ?? []).map(formatTaskListItem),
     notifyTargets: (task.notifyTargets ?? []).map((nt: { userId: number; user: { userName: string } }) => ({

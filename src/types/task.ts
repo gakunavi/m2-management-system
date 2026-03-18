@@ -47,6 +47,7 @@ export interface TaskListItem {
   relatedEntityType: string | null;
   relatedEntityId: number | null;
   columnId: number | null;
+  columnName: string | null;
   notifyLevel: TaskNotifyLevel;
   taskUrl: string | null;
   isArchived: boolean;
