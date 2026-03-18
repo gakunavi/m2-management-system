@@ -275,12 +275,11 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
             />
           </div>
 
-          {/* 手順チェック ☑ */}
+          {/* チェックリスト */}
           <div className="rounded-lg border border-muted p-3">
             <div className="mb-2 flex items-center gap-1.5">
               <CheckSquare className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-medium">手順チェック</span>
-              <span className="text-xs text-muted-foreground">— 作業手順のメモ</span>
+              <span className="text-sm font-medium">チェックリスト</span>
             </div>
             <TaskChecklist
               items={task.checklist}
@@ -288,14 +287,14 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
             />
           </div>
 
-          {/* 子タスク 📋（親タスクの場合のみ表示） */}
+          {/* サブタスク（親タスクの場合のみ表示） */}
           {!task.parentTaskId && (
             <div className="rounded-lg border border-muted p-3">
               <div className="mb-2 flex items-center gap-1.5">
                 <ListTodo className="h-4 w-4 text-blue-500" />
-                <span className="text-sm font-medium">子タスク</span>
+                <span className="text-sm font-medium">サブタスク</span>
                 <span className="text-xs text-muted-foreground">
-                  — 担当者・期限付きの作業単位 ({task.childrenDoneCount}/{task.childrenCount})
+                  ({task.childrenDoneCount}/{task.childrenCount})
                 </span>
               </div>
               <TaskSubtasks
