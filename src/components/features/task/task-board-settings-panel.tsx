@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { X, UserPlus, Trash2, LogOut, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
@@ -17,7 +18,6 @@ export function TaskBoardSettingsPanel({ boardId, onClose, onDeleted }: TaskBoar
   const { data: board, isLoading } = useTaskBoardDetail(boardId);
   const { updateBoard, deleteBoard, addMember, removeMember } = useTaskBoardMutations();
 
-  const [newMemberSearch, setNewMemberSearch] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
 
@@ -134,37 +134,14 @@ export function TaskBoardSettingsPanel({ boardId, onClose, onDeleted }: TaskBoar
             </div>
           </div>
 
-          {/* メンバー招待 */}
-          <div>
-            <label className="mb-1 block text-sm font-medium">メンバーを招待</label>
-            <p className="mb-2 text-xs text-muted-foreground">ユーザーIDを入力して招待できます</p>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={newMemberSearch}
-                onChange={(e) => setNewMemberSearch(e.target.value)}
-                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                placeholder="ユーザーID"
-              />
-              <Button
-                size="sm"
-                onClick={async () => {
-                  const userId = parseInt(newMemberSearch, 10);
-                  if (isNaN(userId)) return;
-                  try {
-                    await addMember.mutateAsync({ boardId, userId });
-                    setNewMemberSearch('');
-                  } catch {
-                    // エラーはmutationが処理
-                  }
-                }}
-                disabled={!newMemberSearch}
-              >
-                <UserPlus className="mr-1 h-3.5 w-3.5" />
-                招待
-              </Button>
-            </div>
-          </div>
+          {/* メンバー招待（ユーザー名検索） */}
+          <UserSearchInvite
+            boardId={boardId}
+            existingMemberIds={board.members.map((m) => m.userId)}
+            onInvite={async (userId) => {
+              await addMember.mutateAsync({ boardId, userId });
+            }}
+          />
 
           {/* ボード削除 */}
           {canManage && (
@@ -178,4 +155,110 @@ export function TaskBoardSettingsPanel({ boardId, onClose, onDeleted }: TaskBoar
       </div>
     </div>
   );
+}
+
+// ============================================
+// ユーザー名検索による招待コンポーネント
+// ============================================
+
+function UserSearchInvite({
+  existingMemberIds,
+  onInvite,
+}: {
+  boardId: number;
+  existingMemberIds: number[];
+  onInvite: (userId: number) => Promise<void>;
+}) {
+  const [search, setSearch] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const { data: users } = useUserSearch(search);
+
+  // 既存メンバーを除外
+  const filteredUsers = (users ?? []).filter((u) => !existingMemberIds.includes(u.id));
+
+  const handleInvite = async (userId: number) => {
+    setIsInviting(true);
+    try {
+      await onInvite(userId);
+      setSearch('');
+      setIsOpen(false);
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">メンバーを招待</label>
+      <div className="relative">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <UserPlus className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setIsOpen(true); }}
+              onFocus={() => search.length >= 1 && setIsOpen(true)}
+              className="w-full rounded-md border border-input bg-background py-1.5 pl-8 pr-3 text-sm"
+              placeholder="ユーザー名で検索..."
+              disabled={isInviting}
+            />
+          </div>
+        </div>
+
+        {/* 検索結果ドロップダウン */}
+        {isOpen && search.length >= 1 && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <div className="absolute left-0 top-full z-50 mt-1 w-full max-h-[200px] overflow-y-auto rounded-md border bg-popover shadow-md">
+              {filteredUsers.length > 0 ? (
+                <div className="p-1">
+                  {filteredUsers.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => handleInvite(u.id)}
+                      disabled={isInviting}
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+                    >
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                        {u.userName.charAt(0)}
+                      </div>
+                      <div className="text-left">
+                        <div className="font-medium">{u.userName}</div>
+                        <div className="text-xs text-muted-foreground">{u.userEmail}</div>
+                      </div>
+                      <span className="ml-auto text-xs text-muted-foreground">{u.userRole}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 text-center text-sm text-muted-foreground">
+                  該当するユーザーが見つかりません
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ユーザー検索フック
+function useUserSearch(query: string) {
+  return useQuery<{ id: number; userName: string; userEmail: string; userRole: string }[]>({
+    queryKey: ['users-search', query],
+    queryFn: async () => {
+      const res = await fetch(`/api/v1/users?search=${encodeURIComponent(query)}&pageSize=10`);
+      const json = await res.json();
+      return (json.data ?? []).map((u: { id: number; userName: string; userEmail: string; userRole: string }) => ({
+        id: u.id,
+        userName: u.userName,
+        userEmail: u.userEmail,
+        userRole: u.userRole,
+      }));
+    },
+    enabled: query.length >= 1,
+  });
 }

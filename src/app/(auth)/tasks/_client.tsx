@@ -627,19 +627,20 @@ function ChildTaskRow({
 
   return (
     <tr
-      className="border-b transition-colors hover:bg-muted/30 cursor-pointer bg-muted/10"
+      className="border-b transition-colors hover:bg-primary/[0.03] cursor-pointer"
+      style={{ backgroundColor: 'var(--child-task-bg, rgba(59,130,246,0.04))' }}
       onClick={onClick}
     >
-      {/* ツリー記号 */}
-      <td className="px-2 py-1.5">
-        <span className="inline-block w-4" />
+      {/* ツリー記号（大きめインデント） */}
+      <td className="py-1.5" style={{ paddingLeft: '24px' }}>
+        <span className="text-blue-400/70 font-mono text-sm">{isLast ? '└' : '├'}</span>
       </td>
-      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
-        <span className="mr-1 text-muted-foreground/60 font-mono">{isLast ? '┗' : '┣'}</span>
+      <td className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap" style={{ paddingLeft: '8px' }}>
         {task.taskNo}
       </td>
       <td className="px-3 py-1.5">
-        <div className="flex items-center gap-2 pl-2 border-l-2 border-muted-foreground/20">
+        <div className="flex items-center gap-2" style={{ paddingLeft: '20px' }}>
+          <div className="w-0.5 self-stretch bg-blue-400/30 rounded-full mr-1" style={{ minHeight: '16px' }} />
           <span className="text-sm">{task.title}</span>
           {task.checklistTotal > 0 && (
             <span className="text-xs text-muted-foreground">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
