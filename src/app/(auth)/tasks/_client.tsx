@@ -206,7 +206,7 @@ export function TasksClient() {
             className="flex items-center gap-1 rounded-md border border-dashed border-muted-foreground/30 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 whitespace-nowrap"
           >
             <Plus className="h-3 w-3" />
-            ボード
+            グループボード
           </button>
         </div>
 
@@ -705,7 +705,7 @@ function TaskListView({
     );
   }
 
-  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(180px,1fr)_76px_64px_72px_92px_minmax(80px,160px)_64px_84px]';
+  const GRID_COLS = 'grid-cols-[28px_28px_84px_minmax(180px,1fr)_96px_64px_72px_92px_minmax(80px,160px)_64px_84px]';
 
   return (
     <div>
