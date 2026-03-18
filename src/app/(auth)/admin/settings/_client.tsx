@@ -86,12 +86,12 @@ export function SystemSettingsClient() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
+    <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6 px-3 py-4 sm:p-6">
       <div className="flex items-center gap-3">
-        <Settings className="h-6 w-6" />
+        <Settings className="h-5 w-5 sm:h-6 sm:w-6 shrink-0" />
         <div>
-          <h1 className="text-xl font-semibold">システム設定</h1>
-          <p className="text-sm text-muted-foreground">AIアシスタントの接続設定を管理します</p>
+          <h1 className="text-lg sm:text-xl font-semibold">システム設定</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">AIアシスタントの接続設定を管理します</p>
         </div>
       </div>
 
@@ -158,18 +158,18 @@ export function SystemSettingsClient() {
           </div>
 
           {/* コスト目安 */}
-          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
             <p className="font-medium text-foreground">コスト目安（GPT-4o-mini）</p>
-            <p>1回あたり: 約$0.0006（約0.1円）/ 月100回利用: 約$0.06</p>
-            <p className="mt-1 font-medium text-foreground">コスト目安（GPT-4o）</p>
-            <p>1回あたり: 約$0.012（約1.8円）/ 月100回利用: 約$1.20</p>
+            <p>1回: 約$0.0006（約0.1円）<span className="hidden sm:inline">/ </span><br className="sm:hidden" />月100回: 約$0.06</p>
+            <p className="font-medium text-foreground">コスト目安（GPT-4o）</p>
+            <p>1回: 約$0.012（約1.8円）<span className="hidden sm:inline">/ </span><br className="sm:hidden" />月100回: 約$1.20</p>
           </div>
         </CardContent>
       </Card>
 
       {/* 保存ボタン */}
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!isDirty || updateMutation.isPending}>
+        <Button onClick={handleSave} disabled={!isDirty || updateMutation.isPending} className="w-full sm:w-auto">
           {updateMutation.isPending ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (

@@ -86,7 +86,7 @@ export function ConversationList({
                     e.stopPropagation();
                     onDelete(conv.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-all"
+                  className="shrink-0 p-1.5 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 active:opacity-100 [@media(hover:none)]:opacity-60 hover:bg-destructive/10 hover:text-destructive transition-all"
                   aria-label="削除"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

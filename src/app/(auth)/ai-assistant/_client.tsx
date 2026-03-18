@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Loader2, Settings, AlertCircle, Building2 } from 'lucide-react';
+import { Bot, Loader2, Settings, AlertCircle, Building2, MessageSquare, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ChatMessage } from '@/components/features/ai/chat-message';
 import { ChatInput } from '@/components/features/ai/chat-input';
@@ -24,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
 interface AiStatus {
   configured: boolean;
@@ -34,6 +36,7 @@ export function AiAssistantClient() {
   const { toast } = useToast();
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [pendingMessages, setPendingMessages] = useState<ChatMessageItem[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   // ストリーミング中のアシスタント応答
   const [streamingContent, setStreamingContent] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -151,10 +154,16 @@ export function AiAssistantClient() {
     [activeConversationId, aiBusinessId, sendMessage, toast],
   );
 
+  const handleSelectConversation = useCallback((id: number) => {
+    setActiveConversationId(id);
+    setDrawerOpen(false);
+  }, []);
+
   const handleNewConversation = useCallback(() => {
     setActiveConversationId(null);
     setPendingMessages([]);
     setStreamingContent('');
+    setDrawerOpen(false);
   }, []);
 
   const handleDeleteConversation = useCallback(
@@ -175,7 +184,7 @@ export function AiAssistantClient() {
   // ローディング中
   if (statusLoading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-120px)]">
+      <div className="flex items-center justify-center h-[calc(100dvh-80px)] sm:h-[calc(100dvh-120px)]">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -184,7 +193,7 @@ export function AiAssistantClient() {
   // AI未設定時の表示
   if (!isConfigured) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-120px)]">
+      <div className="flex items-center justify-center h-[calc(100dvh-80px)] sm:h-[calc(100dvh-120px)]">
         <div className="text-center max-w-md space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
             <AlertCircle className="h-8 w-8 text-muted-foreground" />
@@ -212,8 +221,30 @@ export function AiAssistantClient() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-120px)] gap-0 rounded-lg border bg-card shadow-sm overflow-hidden">
-      {/* 左: 会話一覧 */}
+    <div className="flex h-[calc(100dvh-80px)] sm:h-[calc(100dvh-120px)] gap-0 rounded-lg border bg-card shadow-sm overflow-hidden">
+      {/* モバイル: 会話一覧ドロワー */}
+      <DialogPrimitive.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 md:hidden" />
+          <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 w-72 border-r bg-background shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left duration-200 md:hidden">
+            <DialogPrimitive.Title className="sr-only">会話一覧</DialogPrimitive.Title>
+            <DialogPrimitive.Close className="absolute right-3 top-3 rounded-sm p-1 opacity-70 hover:opacity-100">
+              <X className="h-4 w-4" />
+              <span className="sr-only">閉じる</span>
+            </DialogPrimitive.Close>
+            <ConversationList
+              conversations={conversations ?? []}
+              activeId={activeConversationId}
+              onSelect={handleSelectConversation}
+              onNew={handleNewConversation}
+              onDelete={handleDeleteConversation}
+              isLoading={convLoading}
+            />
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+
+      {/* デスクトップ: 会話一覧サイドバー */}
       <div className="w-72 shrink-0 border-r bg-muted/30 hidden md:block">
         <ConversationList
           conversations={conversations ?? []}
@@ -228,18 +259,27 @@ export function AiAssistantClient() {
       {/* 右: チャットエリア */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* ヘッダー */}
-        <div className="flex items-center gap-2 border-b px-4 py-3">
-          <Bot className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold text-sm">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-b px-3 sm:px-4 py-2.5 sm:py-3">
+          {/* モバイル: 会話一覧ボタン */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 md:hidden"
+            onClick={() => setDrawerOpen(true)}
+          >
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+          <Bot className="h-5 w-5 text-primary hidden sm:block shrink-0" />
+          <h2 className="font-semibold text-[13px] sm:text-sm truncate min-w-0 flex-1">
             {conversationDetail?.title ?? 'AIアシスタント'}
           </h2>
-          <div className="ml-auto flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <Building2 className="h-4 w-4 text-muted-foreground hidden sm:block" />
             <Select
               value={aiBusinessValue === '__init__' ? 'all' : aiBusinessValue}
               onValueChange={setAiBusinessValue}
             >
-              <SelectTrigger className="h-8 w-[180px] text-xs">
+              <SelectTrigger className="h-8 w-[100px] sm:w-[180px] text-xs">
                 <SelectValue placeholder="事業を選択" />
               </SelectTrigger>
               <SelectContent>
@@ -258,17 +298,15 @@ export function AiAssistantClient() {
         </div>
 
         {/* メッセージエリア */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
           {allMessages.length === 0 && !streamingContent ? (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <Bot className="h-12 w-12 mb-4 opacity-30" />
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground px-4">
+              <Bot className="h-10 w-10 sm:h-12 sm:w-12 mb-3 sm:mb-4 opacity-30" />
               <p className="text-sm font-medium mb-1">AIアシスタント</p>
               <p className="text-xs text-center max-w-sm">
                 営業データに関する質問ができます。
-                <br />
-                例: 「今月の受注見込みは何件？」「一番売ってる代理店は？」
               </p>
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md">
+              <div className="mt-4 sm:mt-6 grid grid-cols-2 gap-1.5 sm:gap-2 w-full max-w-md">
                 {[
                   '今月のKPIサマリーを教えて',
                   '代理店ランキングを表にして',
@@ -279,7 +317,7 @@ export function AiAssistantClient() {
                     key={suggestion}
                     onClick={() => handleSend(suggestion)}
                     disabled={chatLoading}
-                    className="rounded-lg border px-3 py-2 text-xs text-left hover:bg-muted transition-colors disabled:opacity-50"
+                    className="rounded-lg border px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs text-left hover:bg-muted active:bg-muted transition-colors disabled:opacity-50"
                   >
                     {suggestion}
                   </button>
@@ -341,9 +379,9 @@ export function AiAssistantClient() {
         </div>
 
         {/* 入力エリア */}
-        <div className="border-t p-4">
+        <div className="border-t p-3 sm:p-4">
           <ChatInput onSend={handleSend} isLoading={chatLoading} />
-          <p className="mt-1.5 text-[11px] text-muted-foreground text-center">
+          <p className="mt-1 sm:mt-1.5 text-[10px] sm:text-[11px] text-muted-foreground text-center">
             AIの回答は参考情報です。重要な判断の際は実データを確認してください。
           </p>
         </div>

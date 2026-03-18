@@ -6,8 +6,8 @@ export const metadata = {
 
 export default function AiAssistantPage() {
   return (
-    <div className="space-y-4">
-      <div>
+    <div className="space-y-2 sm:space-y-4">
+      <div className="hidden sm:block">
         <h1 className="text-2xl font-bold tracking-tight">AIアシスタント</h1>
         <p className="text-sm text-muted-foreground">
           営業データに関する質問をAIがお答えします
