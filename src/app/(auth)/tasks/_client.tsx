@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X, Users, Settings } from 'lucide-react';
+import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X, Users, Settings, GripVertical } from 'lucide-react';
+import {
+  DndContext, DragOverlay, closestCenter,
+  PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useBusiness } from '@/hooks/use-business';
@@ -427,12 +434,54 @@ function TaskListView({
   totalPages,
   onPageChange,
 }: TaskListViewProps) {
-  const { updateTask } = useTaskMutations();
+  const { updateTask, reorderTasks } = useTaskMutations();
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+  const [activeId, setActiveId] = useState<number | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
 
   const handleArchiveToggle = useCallback((taskId: number, isArchived: boolean) => {
-    updateTask.mutate({ id: taskId, isArchived, version: 1 }); // version is checked server-side
+    updateTask.mutate({ id: taskId, isArchived, version: 1 });
   }, [updateTask]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+
+    const draggedId = Number(active.id);
+    const overId = Number(over.id);
+    const draggedTask = tasks.find((t) => t.id === draggedId);
+    const overTask = tasks.find((t) => t.id === overId);
+
+    if (!draggedTask || !overTask) return;
+
+    // サブタスク化: タスクを親タスク（子を持つ or 自身が親でない）の上にドロップ
+    // 条件: ドラッグ元が子タスクを持たない + ドロップ先が親タスク（parentTaskId=null）
+    // → parentTaskIdを設定
+    if (!draggedTask.parentTaskId && draggedTask.childrenCount === 0 && !overTask.parentTaskId && overTask.id !== draggedTask.id) {
+      // overTaskの上にドラッグした = overTaskのサブタスクにする意図の可能性
+      // ただし単純な並び替えと区別が難しいので、並び替えのみ実装
+    }
+
+    // 並び替え: sortOrderを更新
+    const oldIndex = tasks.findIndex((t) => t.id === draggedId);
+    const newIndex = tasks.findIndex((t) => t.id === overId);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = [...tasks];
+    const [moved] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, moved);
+
+    const items = reordered.map((t, i) => ({
+      id: t.id,
+      status: t.status,
+      sortOrder: i,
+    }));
+    reorderTasks.mutate(items);
+  }, [tasks, reorderTasks]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedTasks((prev) => {
@@ -443,6 +492,8 @@ function TaskListView({
     });
   }, []);
 
+  const taskIds = useMemo(() => tasks.map((t) => t.id), [tasks]);
+  const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
   const [sortField, sortDir] = sort.split(':');
 
   const SortHeader = ({ field, label, width }: { field: string; label: string; width?: string }) => (
@@ -477,36 +528,56 @@ function TaskListView({
 
   return (
     <div>
-      <div className="overflow-auto rounded-lg border" style={{ maxHeight: 'calc(100vh - 340px)' }}>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="sticky top-0 z-20 w-8 bg-muted/80 px-2 py-2" />
-              <SortHeader field="taskNo" label="No." />
-              <SortHeader field="title" label="タスク名" />
-              <SortHeader field="status" label="ステータス" />
-              <SortHeader field="priority" label="優先度" />
-              <SortHeader field="assigneeId" label="担当者" />
-              <SortHeader field="dueDate" label="期限" />
-              <th className="sticky top-0 z-20 bg-muted/80 px-3 py-2 text-left text-xs font-medium text-muted-foreground">タグ</th>
-              <th className="sticky top-0 z-20 bg-muted/80 px-2 py-2 text-center text-xs font-medium text-muted-foreground w-20">アーカイブ</th>
-              <SortHeader field="updatedAt" label="更新日" />
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((task) => (
-              <TaskRowWithChildren
-                key={task.id}
-                task={task}
-                isExpanded={expandedTasks.has(task.id)}
-                onToggleExpand={() => toggleExpand(task.id)}
-                onTaskClick={onTaskClick}
-                onArchiveToggle={handleArchiveToggle}
-              />
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={(e) => setActiveId(Number(e.active.id))}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="overflow-auto rounded-lg border" style={{ maxHeight: 'calc(100vh - 340px)' }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="sticky top-0 z-20 w-8 bg-muted/80 px-1 py-2" />
+                <th className="sticky top-0 z-20 w-8 bg-muted/80 px-2 py-2" />
+                <SortHeader field="taskNo" label="No." />
+                <SortHeader field="title" label="タスク名" />
+                <SortHeader field="status" label="ステータス" />
+                <SortHeader field="priority" label="優先度" />
+                <SortHeader field="assigneeId" label="担当者" />
+                <SortHeader field="dueDate" label="期限" />
+                <th className="sticky top-0 z-20 bg-muted/80 px-3 py-2 text-left text-xs font-medium text-muted-foreground">タグ</th>
+                <th className="sticky top-0 z-20 bg-muted/80 px-2 py-2 text-center text-xs font-medium text-muted-foreground w-20">アーカイブ</th>
+                <SortHeader field="updatedAt" label="更新日" />
+              </tr>
+            </thead>
+            <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+              <tbody>
+                {tasks.map((task) => (
+                  <TaskRowWithChildren
+                    key={task.id}
+                    task={task}
+                    isExpanded={expandedTasks.has(task.id)}
+                    onToggleExpand={() => toggleExpand(task.id)}
+                    onTaskClick={onTaskClick}
+                    onArchiveToggle={handleArchiveToggle}
+                  />
             ))}
-          </tbody>
-        </table>
-      </div>
+              </tbody>
+            </SortableContext>
+          </table>
+        </div>
+
+        {/* ドラッグ中のオーバーレイ */}
+        <DragOverlay>
+          {activeTask && (
+            <div className="rounded-md border bg-background px-3 py-2 shadow-lg text-sm opacity-90">
+              <span className="font-medium">{activeTask.title}</span>
+              <span className="ml-2 text-xs text-muted-foreground">{activeTask.taskNo}</span>
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       {/* ページネーション */}
       {totalPages > 1 && (
@@ -594,6 +665,13 @@ function ParentTaskRow({
   onClick: () => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
   const hasChildren = task.childrenCount > 0;
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
   const statusOpt = TASK_STATUS_OPTIONS.find((o) => o.value === task.status);
@@ -601,9 +679,15 @@ function ParentTaskRow({
 
   return (
     <tr
+      ref={setNodeRef}
+      style={style}
       className="border-b transition-colors hover:bg-muted/50 cursor-pointer"
       onClick={onClick}
     >
+      {/* ドラッグハンドル */}
+      <td className="px-1 py-2 cursor-grab" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40 hover:text-muted-foreground" />
+      </td>
       <td className="px-2 py-2">
         {hasChildren ? (
           <button
