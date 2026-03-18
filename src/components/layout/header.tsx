@@ -98,7 +98,9 @@ export function Header() {
         {/* 通知系 */}
         <ReminderBell />
         <NotificationPopover />
-        <FontSizeSelector />
+        <div className="hidden lg:block">
+          <FontSizeSelector />
+        </div>
 
         {/* ユーザーメニュー */}
         <div ref={menuRef} className="relative">
@@ -128,6 +130,12 @@ export function Header() {
               <div className="px-3 py-2.5 border-b">
                 <p className="text-sm font-medium truncate">{user?.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+              </div>
+
+              {/* フォントサイズ（モバイルのみ） */}
+              <div className="lg:hidden px-3 py-2 border-b">
+                <p className="text-xs text-muted-foreground mb-1.5">文字サイズ</p>
+                <FontSizeSelector />
               </div>
 
               {/* メニュー項目 */}
