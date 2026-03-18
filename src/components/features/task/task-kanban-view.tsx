@@ -16,11 +16,12 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
   useSortable,
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, MoreHorizontal, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical } from 'lucide-react';
 import { TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem, TaskColumn } from '@/types/task';
 import { useTaskDetail } from '@/hooks/use-tasks';
@@ -338,18 +339,10 @@ function ColumnMenu({
   columnId,
   onEdit,
   onDelete,
-  onMoveLeft,
-  onMoveRight,
-  isFirst,
-  isLast,
 }: {
   columnId: number;
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
-  onMoveLeft: () => void;
-  onMoveRight: () => void;
-  isFirst: boolean;
-  isLast: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -368,25 +361,7 @@ function ColumnMenu({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-md border bg-popover shadow-md">
-            {!isFirst && (
-              <button
-                onClick={() => { setIsOpen(false); onMoveLeft(); }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-                左に移動
-              </button>
-            )}
-            {!isLast && (
-              <button
-                onClick={() => { setIsOpen(false); onMoveRight(); }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-                右に移動
-              </button>
-            )}
+          <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-md border bg-popover shadow-md">
             <button
               onClick={() => {
                 setIsOpen(false);
@@ -426,10 +401,6 @@ interface KanbanColumnProps {
   activeId: string | null;
   onEditColumn: (id: number) => void;
   onDeleteColumn: (id: number) => void;
-  onMoveLeft: () => void;
-  onMoveRight: () => void;
-  isFirst: boolean;
-  isLast: boolean;
 }
 
 function KanbanColumn({
@@ -440,22 +411,44 @@ function KanbanColumn({
   activeId,
   onEditColumn,
   onDeleteColumn,
-  onMoveLeft,
-  onMoveRight,
-  isFirst,
-  isLast,
 }: KanbanColumnProps) {
   const dndId = columnDndId(column.id);
-  const { setNodeRef, isOver } = useDroppable({ id: dndId });
+  const {
+    attributes: colAttributes,
+    listeners: colListeners,
+    setNodeRef: setColNodeRef,
+    transform: colTransform,
+    transition: colTransition,
+    isDragging: isColDragging,
+  } = useSortable({ id: dndId });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: dndId });
   const color = column.color ?? '#6b7280';
 
+  const colStyle = {
+    transform: CSS.Transform.toString(colTransform),
+    transition: colTransition,
+    opacity: isColDragging ? 0.4 : 1,
+  };
+
   return (
-    <div className="flex flex-col min-w-[260px] max-w-[300px] flex-1">
+    <div
+      ref={setColNodeRef}
+      style={colStyle}
+      className="flex flex-col min-w-[260px] max-w-[300px] flex-1"
+    >
       {/* カラムヘッダー */}
       <div
-        className="flex items-center gap-2 px-3 py-2 rounded-t-lg border-t border-x font-semibold text-sm"
+        className="flex items-center gap-1 px-2 py-2 rounded-t-lg border-t border-x font-semibold text-sm"
         style={{ borderTopColor: color, backgroundColor: `${color}10` }}
       >
+        {/* 列ドラッグハンドル */}
+        <div
+          className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-black/10"
+          {...colAttributes}
+          {...colListeners}
+        >
+          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" />
+        </div>
         <span
           className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
           style={{ backgroundColor: color }}
@@ -473,16 +466,12 @@ function KanbanColumn({
           columnId={column.id}
           onEdit={onEditColumn}
           onDelete={onDeleteColumn}
-          onMoveLeft={onMoveLeft}
-          onMoveRight={onMoveRight}
-          isFirst={isFirst}
-          isLast={isLast}
         />
       </div>
 
       {/* カード一覧 */}
       <div
-        ref={setNodeRef}
+        ref={setDropRef}
         className={cn(
           'flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 overflow-y-auto min-h-[120px] transition-colors',
           isOver ? 'bg-accent/60' : 'bg-muted/20',
@@ -549,7 +538,11 @@ export function TaskKanbanView({
     setColumnItems(buildColumnItems(tasks, sortedColumns));
   }
 
-  const activeTask = activeId ? findTaskById(columnItems, activeId) : null;
+  const activeTask = activeId && !isColumnDndId(activeId) ? findTaskById(columnItems, activeId) : null;
+  const activeColumn = activeId && isColumnDndId(activeId) ? sortedColumns.find(c => columnDndId(c.id) === activeId) : null;
+
+  // 列のDnD ID一覧
+  const columnDndIds = sortedColumns.map(c => columnDndId(c.id));
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
@@ -560,6 +553,9 @@ export function TaskKanbanView({
     if (!over) return;
 
     const activeItemId = active.id as string;
+
+    // 列のドラッグ中はカード移動ロジックをスキップ
+    if (isColumnDndId(activeItemId)) return;
     const overId = over.id as string;
 
     // ドラッグ元カラムを特定
@@ -625,6 +621,18 @@ export function TaskKanbanView({
     const activeItemId = active.id as string;
     const overId = over.id as string;
 
+    // 列のドラッグ完了
+    if (isColumnDndId(activeItemId) && isColumnDndId(overId)) {
+      const oldIndex = sortedColumns.findIndex(c => columnDndId(c.id) === activeItemId);
+      const newIndex = sortedColumns.findIndex(c => columnDndId(c.id) === overId);
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        const reordered = arrayMove(sortedColumns, oldIndex, newIndex);
+        onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
+      }
+      return;
+    }
+
+    // タスクカードのドラッグ完了
     const currentColId = findColumnIdForItem(columnItems, activeItemId);
     if (currentColId === undefined) return;
 
@@ -635,11 +643,9 @@ export function TaskKanbanView({
     if (targetColId === undefined) return;
 
     if (currentColId !== targetColId) {
-      // カラム間移動
       const allReorderItems = buildReorderPayload(columnItems);
       onReorder(allReorderItems);
     } else {
-      // 同一カラム内の並び替え
       const items = columnItems[currentColId] ?? [];
       const oldIndex = items.findIndex((i) => i.id === activeItemId);
       const newIndex = items.findIndex((i) => i.id === overId);
@@ -651,7 +657,6 @@ export function TaskKanbanView({
         const allReorderItems = buildReorderPayload(updated);
         onReorder(allReorderItems);
       } else {
-        // 同一位置にドロップ or 移動なし — それでもカラム間移動の結果を保存
         const allReorderItems = buildReorderPayload(columnItems);
         onReorder(allReorderItems);
       }
@@ -667,32 +672,20 @@ export function TaskKanbanView({
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
-        {sortedColumns.map((col, idx) => (
-          <KanbanColumn
-            key={col.id}
-            column={col}
-            items={columnItems[col.id] ?? []}
-            onTaskClick={onTaskClick}
-            onChecklistToggle={onChecklistToggle}
-            activeId={activeId}
-            onEditColumn={onEditColumn}
-            onDeleteColumn={onDeleteColumn}
-            isFirst={idx === 0}
-            isLast={idx === sortedColumns.length - 1}
-            onMoveLeft={() => {
-              if (idx === 0) return;
-              const reordered = [...sortedColumns];
-              [reordered[idx - 1], reordered[idx]] = [reordered[idx], reordered[idx - 1]];
-              onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
-            }}
-            onMoveRight={() => {
-              if (idx === sortedColumns.length - 1) return;
-              const reordered = [...sortedColumns];
-              [reordered[idx], reordered[idx + 1]] = [reordered[idx + 1], reordered[idx]];
-              onReorderColumns(reordered.map((c, i) => ({ id: c.id, sortOrder: i })));
-            }}
-          />
-        ))}
+        <SortableContext items={columnDndIds} strategy={horizontalListSortingStrategy}>
+          {sortedColumns.map((col) => (
+            <KanbanColumn
+              key={col.id}
+              column={col}
+              items={columnItems[col.id] ?? []}
+              onTaskClick={onTaskClick}
+              onChecklistToggle={onChecklistToggle}
+              activeId={activeId}
+              onEditColumn={onEditColumn}
+              onDeleteColumn={onDeleteColumn}
+            />
+          ))}
+        </SortableContext>
 
         {/* 列追加ボタン */}
         <div className="min-w-[260px] max-w-[300px] flex-1">
@@ -710,6 +703,17 @@ export function TaskKanbanView({
         {activeTask && (
           <div className="rounded-lg border bg-background shadow-xl p-3 w-[260px] rotate-1 opacity-95">
             <TaskCardContent task={activeTask} />
+          </div>
+        )}
+        {activeColumn && (
+          <div
+            className="rounded-lg border shadow-xl w-[260px] rotate-1 opacity-90"
+            style={{ backgroundColor: `${activeColumn.color ?? '#6b7280'}10`, borderColor: activeColumn.color ?? '#6b7280' }}
+          >
+            <div className="flex items-center gap-2 px-3 py-2 font-semibold text-sm" style={{ color: activeColumn.color ?? '#6b7280' }}>
+              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: activeColumn.color ?? '#6b7280' }} />
+              {activeColumn.name}
+            </div>
           </div>
         )}
       </DragOverlay>
