@@ -15,6 +15,7 @@ export const taskKeys = {
   list: (params: TaskListParams) => [...taskKeys.lists(), params] as const,
   details: () => [...taskKeys.all, 'detail'] as const,
   detail: (id: number) => [...taskKeys.details(), id] as const,
+  dashboard: () => [...taskKeys.all, 'dashboard'] as const,
   tags: () => ['task-tags'] as const,
   tagSuggest: (q: string) => ['task-tags', 'suggest', q] as const,
 };
@@ -75,6 +76,31 @@ export function useTaskList(params: TaskListParams) {
       // apiClient.getList は { data, meta } を返す
       const result = await apiClient.getList<TaskListItem>(endpoint);
       return result;
+    },
+  });
+}
+
+// ============================================
+// タスクダッシュボード
+// ============================================
+
+export interface TaskDashboardData {
+  summary: {
+    todo: number;
+    inProgress: number;
+    overdue: number;
+    total: number;
+  };
+  upcoming: TaskListItem[];
+  overdue: TaskListItem[];
+}
+
+export function useTaskDashboard() {
+  return useQuery<TaskDashboardData>({
+    queryKey: taskKeys.dashboard(),
+    queryFn: async () => {
+      const res = await apiClient.get<TaskDashboardData>('/tasks/dashboard');
+      return res;
     },
   });
 }

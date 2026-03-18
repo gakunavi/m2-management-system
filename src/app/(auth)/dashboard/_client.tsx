@@ -32,6 +32,7 @@ import { ActivityFeed } from '@/components/features/dashboard/activity-feed';
 import { KpiTabSelector } from '@/components/features/dashboard/kpi-tab-selector';
 import { BusinessDocumentSection } from '@/components/features/dashboard/business-document-section';
 import { AnnouncementBanner } from '@/components/features/announcement/announcement-banner';
+import { TaskDashboardWidget } from '@/components/features/dashboard/task-dashboard-widget';
 import type {
   DashboardSummary,
   RevenueTrendResponse,
@@ -116,6 +117,8 @@ function CompanyDashboard() {
       </div>
 
       <PipelineChart data={pipeline} isLoading={pipelineLoading} />
+
+      <TaskDashboardWidget />
     </div>
   );
 }
@@ -235,6 +238,8 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
       </div>
 
       <ActivityFeed data={activity} isLoading={activityLoading} />
+
+      <TaskDashboardWidget />
 
       {/* 資料共有（支払明細書は代理店マスタから管理） */}
       <BusinessDocumentSection
