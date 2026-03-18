@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
-import { partnerNavItems } from '@/config/navigation';
+import { partnerNavItems, partnerNavSections } from '@/config/navigation';
 
 export default function SharedLayout({ children }: { children: React.ReactNode }) {
   const { isPartner } = useAuth();
@@ -11,6 +11,7 @@ export default function SharedLayout({ children }: { children: React.ReactNode }
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
+        navSections={isPartner ? partnerNavSections : undefined}
         navItems={isPartner ? partnerNavItems : undefined}
         showBusinessSwitcher={true}
         title={isPartner ? '代理店ポータル' : undefined}

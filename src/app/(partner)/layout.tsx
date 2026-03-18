@@ -2,7 +2,7 @@
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
-import { partnerNavItems } from '@/config/navigation';
+import { partnerNavItems, partnerNavSections } from '@/config/navigation';
 
 export default function PartnerLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,6 +11,7 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
         メインコンテンツへスキップ
       </a>
       <Sidebar
+        navSections={partnerNavSections}
         navItems={partnerNavItems}
         showBusinessSwitcher={true}
         title="代理店ポータル"
