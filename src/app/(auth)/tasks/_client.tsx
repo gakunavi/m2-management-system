@@ -82,7 +82,7 @@ export function TasksClient() {
     assigneeId: assigneeFilter ?? undefined,
     showArchived: showArchived ? 'true' : undefined,
     tagIds: tagFilter.length > 0 ? tagFilter.join(',') : undefined,
-    parentOnly: viewMode !== 'list' ? true : undefined,
+    parentOnly: true,
   }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, assigneeFilter, tagFilter, viewMode, showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: taskData, isLoading } = useTaskList(listParams);
