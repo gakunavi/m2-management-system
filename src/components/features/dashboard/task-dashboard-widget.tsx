@@ -67,23 +67,16 @@ function DashboardSection({
   section,
   highlight,
   iconColor,
-  defaultOpen = false,
 }: {
   icon: React.ReactNode;
   label: string;
   section: TaskDashboardSection;
   highlight?: 'overdue' | 'upcoming';
   iconColor?: string;
-  defaultOpen?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
   return (
     <div className="border rounded-lg overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 w-full px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
-      >
+      <div className="flex items-center gap-2 px-3 py-2.5">
         <span className={iconColor}>{icon}</span>
         <span className="text-sm font-medium flex-1">{label}</span>
         <span className={cn(
@@ -93,30 +86,27 @@ function DashboardSection({
         )}>
           {section.count}
         </span>
-        <span className="text-muted-foreground text-xs">{isOpen ? '▼' : '▶'}</span>
-      </button>
+      </div>
 
-      {isOpen && (
-        <div className="border-t">
-          {section.items.length > 0 ? (
-            <div className="divide-y divide-border/50">
-              {section.items.map((task) => (
-                <TaskRow key={task.id} task={task} highlight={highlight} />
-              ))}
-              {section.count > section.items.length && (
-                <Link
-                  href="/tasks"
-                  className="block px-3 py-2 text-xs text-center text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  他 {section.count - section.items.length} 件を表示 →
-                </Link>
-              )}
-            </div>
-          ) : (
-            <p className="px-3 py-4 text-sm text-muted-foreground text-center">対象のマイタスクはありません</p>
-          )}
-        </div>
-      )}
+      <div className="border-t">
+        {section.items.length > 0 ? (
+          <div className="divide-y divide-border/50">
+            {section.items.map((task) => (
+              <TaskRow key={task.id} task={task} highlight={highlight} />
+            ))}
+            {section.count > section.items.length && (
+              <Link
+                href="/tasks"
+                className="block px-3 py-2 text-xs text-center text-muted-foreground hover:text-foreground transition-colors"
+              >
+                他 {section.count - section.items.length} 件を表示 →
+              </Link>
+            )}
+          </div>
+        ) : (
+          <p className="px-3 py-3 text-sm text-muted-foreground text-center">対象のタスクはありません</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -181,7 +171,6 @@ export const TaskDashboardWidget = memo(function TaskDashboardWidget() {
           section={data.upcoming}
           highlight="upcoming"
           iconColor="text-orange-500"
-          defaultOpen={data.upcoming.count > 0}
         />
         <DashboardSection
           icon={<AlertTriangle className="h-4 w-4" />}
@@ -189,7 +178,6 @@ export const TaskDashboardWidget = memo(function TaskDashboardWidget() {
           section={data.overdue}
           highlight="overdue"
           iconColor="text-red-500"
-          defaultOpen={data.overdue.count > 0}
         />
         <DashboardSection
           icon={<Calendar className="h-4 w-4" />}
