@@ -98,20 +98,18 @@ interface SessionUser {
 /**
  * ユーザーのロールとIDに基づいてタスクの可視範囲のwhere句を構築する
  * - admin: 全タスクが見える
- * - staff: company スコープ + 自分が関わる business スコープ + 自分の personal
+ * - staff: マイタスク(boardId=null, 自分作成) + メンバーのボード
  */
 export function buildTaskVisibilityWhere(user: SessionUser) {
   if (user.role === 'admin') {
     return {}; // admin は全て見える
   }
 
+  // スコープ廃止後: マイタスク(boardId=null, 自分作成) or ボードメンバー のタスクのみ
   return {
     OR: [
-      { scope: 'company' },
-      { scope: 'business' }, // 事業スコープは businessId フィルターで追加制限可能
-      { scope: 'personal', createdById: user.id },
-      { scope: 'board', board: { members: { some: { userId: user.id } } } }, // ボードメンバーのみ
-      { assignees: { some: { userId: user.id } } }, // アサインされたタスクは常に見える
+      { boardId: null, createdById: user.id }, // マイタスク
+      { board: { members: { some: { userId: user.id } } } }, // メンバーのボード
     ],
   };
 }

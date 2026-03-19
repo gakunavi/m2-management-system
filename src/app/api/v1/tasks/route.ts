@@ -68,8 +68,30 @@ export async function GET(request: NextRequest) {
     // スコープ可視範囲
     const visibilityWhere = buildTaskVisibilityWhere(user);
 
+    // フィルター条件を構築（visibilityWhereはANDで結合して検索ORと競合しない）
+    const filters: Prisma.TaskWhereInput[] = [];
+
+    // 可視範囲（AND条件として追加）
+    if (visibilityWhere.OR) {
+      filters.push(visibilityWhere);
+    }
+
+    // マイタスク or ボード指定
+    if (searchParams.get('myTasks') === 'true') {
+      filters.push({ boardId: null, createdById: user.id });
+    } else if (searchParams.get('boardId')) {
+      filters.push({ boardId: parseInt(searchParams.get('boardId')!, 10) });
+    }
+
+    // 「自分のタスクを表示」フィルター
+    if (searchParams.get('onlyMine') === 'true') {
+      filters.push({ assignees: { some: { userId: user.id } } });
+    } else if (assigneeIdParam) {
+      filters.push({ assignees: { some: { userId: parseInt(assigneeIdParam, 10) } } });
+    }
+
     const where: Prisma.TaskWhereInput = {
-      ...visibilityWhere,
+      AND: filters.length > 0 ? filters : undefined,
       ...(search
         ? {
             OR: [
@@ -80,15 +102,8 @@ export async function GET(request: NextRequest) {
         : {}),
       ...(whereIn(searchParams, 'status') ?? {}),
       ...(whereIn(searchParams, 'priority') ?? {}),
-      ...(whereIn(searchParams, 'scope') ?? {}),
       ...(whereDateRange(searchParams, 'dueDate') ?? {}),
-      ...(businessIdParam ? { businessId: parseInt(businessIdParam, 10) } : {}),
-      ...(searchParams.get('boardId') ? { boardId: parseInt(searchParams.get('boardId')!, 10) } : {}),
-      ...(searchParams.get('myTasks') === 'true' ? { boardId: null, createdById: user.id } : {}),
       ...(searchParams.get('showArchived') !== 'true' ? { isArchived: false } : {}),
-      ...(searchParams.get('onlyMine') === 'true'
-        ? { assignees: { some: { userId: user.id } } }
-        : assigneeIdParam ? { assignees: { some: { userId: parseInt(assigneeIdParam, 10) } } } : {}),
       ...(relatedEntityType ? { relatedEntityType } : {}),
       ...(relatedEntityIdParam ? { relatedEntityId: parseInt(relatedEntityIdParam, 10) } : {}),
       ...(parentOnly ? { parentTaskId: null } : {}),
