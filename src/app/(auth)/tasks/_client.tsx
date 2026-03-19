@@ -5,7 +5,7 @@ import { Plus, List, LayoutGrid, Calendar, Search, ChevronDown, ChevronRight, X,
 import {
   DndContext, DragOverlay, closestCenter,
   PointerSensor, useSensor, useSensors,
-  type DragStartEvent, type DragEndEvent,
+  type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -24,6 +24,7 @@ import {
   TASK_PRIORITY_OPTIONS,
 } from '@/types/task';
 import type { TaskListItem } from '@/types/task';
+import { useSubtaskDrop } from '@/hooks/use-subtask-drop';
 
 type ViewMode = 'list' | 'kanban' | 'calendar';
 
@@ -613,6 +614,7 @@ function TaskListView({
   const { updateTask, reorderTasks } = useTaskMutations();
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
   const [activeId, setActiveId] = useState<number | null>(null);
+  const subtaskDrop = useSubtaskDrop();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -634,33 +636,56 @@ function TaskListView({
   }, [updateTask, tasks]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(Number(event.active.id));
+    const id = Number(event.active.id);
+    setActiveId(id);
     setExpandedTasks(new Set());
-  }, []);
+    const task = tasks.find(t => t.id === id);
+    if (task) subtaskDrop.onDragStart(task.id);
+  }, [tasks, subtaskDrop]);
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);
-  }, []);
+    subtaskDrop.reset();
+  }, [subtaskDrop]);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      subtaskDrop.onHoverTask(null, null, null);
+      return;
+    }
+    const draggingTask = tasks.find(t => t.id === Number(active.id));
+    const overTask = tasks.find(t => t.id === Number(over.id));
+    if (draggingTask && overTask) {
+      subtaskDrop.onHoverTask(overTask.id, draggingTask, overTask);
+    }
+  }, [tasks, subtaskDrop]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
+
+    // サブタスク化モード: 1.5秒ホバー後にドロップ → サブタスク化
+    if (subtaskDrop.state.isSubtaskMode && subtaskDrop.state.targetTaskId) {
+      const draggedId = Number(active.id);
+      const targetId = subtaskDrop.state.targetTaskId;
+      const draggedTask = tasks.find(t => t.id === draggedId);
+      if (draggedTask) {
+        updateTask.mutate({
+          id: draggedId,
+          parentTaskId: targetId,
+          version: draggedTask.version,
+        });
+      }
+      subtaskDrop.reset();
+      return;
+    }
+    subtaskDrop.reset();
+
     if (!over || active.id === over.id) return;
 
     const draggedId = Number(active.id);
     const overId = Number(over.id);
-    const draggedTask = tasks.find((t) => t.id === draggedId);
-    const overTask = tasks.find((t) => t.id === overId);
-
-    if (!draggedTask || !overTask) return;
-
-    // サブタスク化: タスクを親タスク（子を持つ or 自身が親でない）の上にドロップ
-    // 条件: ドラッグ元が子タスクを持たない + ドロップ先が親タスク（parentTaskId=null）
-    // → parentTaskIdを設定
-    if (!draggedTask.parentTaskId && draggedTask.childrenCount === 0 && !overTask.parentTaskId && overTask.id !== draggedTask.id) {
-      // overTaskの上にドラッグした = overTaskのサブタスクにする意図の可能性
-      // ただし単純な並び替えと区別が難しいので、並び替えのみ実装
-    }
 
     // 並び替え: sortOrderを更新
     const oldIndex = tasks.findIndex((t) => t.id === draggedId);
@@ -681,7 +706,7 @@ function TaskListView({
     if (sort !== 'sortOrder:asc') {
       onSort('sortOrder');
     }
-  }, [tasks, reorderTasks, sort, onSort]);
+  }, [tasks, reorderTasks, sort, onSort, subtaskDrop, updateTask]);
 
   const toggleExpand = useCallback((id: number) => {
     setExpandedTasks((prev) => {
@@ -749,6 +774,7 @@ function TaskListView({
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
@@ -788,6 +814,7 @@ function TaskListView({
                     onStatusChange={handleStatusChange}
                     onPriorityChange={handlePriorityChange}
                     gridCols={GRID_COLS}
+                    isSubtaskTarget={subtaskDrop.state.isSubtaskMode && subtaskDrop.state.targetTaskId === task.id}
                   />
                 ))}
               </div>
@@ -845,6 +872,7 @@ function TaskRowWithChildren({
   onStatusChange,
   onPriorityChange,
   gridCols,
+  isSubtaskTarget,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
@@ -854,6 +882,7 @@ function TaskRowWithChildren({
   onStatusChange: (id: number, status: string) => void;
   onPriorityChange: (id: number, priority: string) => void;
   gridCols: string;
+  isSubtaskTarget: boolean;
 }) {
   const { data: detail } = useTaskDetail(isExpanded ? task.id : null);
   const children = detail?.children ?? [];
@@ -869,6 +898,7 @@ function TaskRowWithChildren({
         onStatusChange={onStatusChange}
         onPriorityChange={onPriorityChange}
         gridCols={gridCols}
+        isSubtaskTarget={isSubtaskTarget}
       />
       {isExpanded && children.map((child, index) => (
         <ChildTaskRow
@@ -893,6 +923,7 @@ function ParentTaskRow({
   onStatusChange,
   onPriorityChange,
   gridCols,
+  isSubtaskTarget,
 }: {
   task: TaskListItem;
   isExpanded: boolean;
@@ -902,6 +933,7 @@ function ParentTaskRow({
   onStatusChange: (id: number, status: string) => void;
   onPriorityChange: (id: number, priority: string) => void;
   gridCols: string;
+  isSubtaskTarget: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style: React.CSSProperties = {
@@ -921,7 +953,7 @@ function ParentTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-muted/50 cursor-pointer text-sm min-w-[900px] ${isDragging ? 'bg-muted shadow-md' : ''}`}
+      className={`grid ${gridCols} items-center border-b transition-colors hover:bg-muted/50 cursor-pointer text-sm min-w-[900px] ${isDragging ? 'bg-muted shadow-md' : ''} ${isSubtaskTarget ? 'ring-2 ring-blue-400 bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
       onClick={onClick}
     >
       <div className="px-1 py-2 cursor-grab" {...attributes} {...listeners} onClick={(e) => e.stopPropagation()}>
@@ -948,6 +980,9 @@ function ParentTaskRow({
           )}
           {task.checklistTotal > 0 && (
             <span className="text-xs text-muted-foreground shrink-0">☑{task.checklistDoneCount}/{task.checklistTotal}</span>
+          )}
+          {isSubtaskTarget && (
+            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0 animate-pulse">サブタスクとして追加</span>
           )}
         </div>
       </div>

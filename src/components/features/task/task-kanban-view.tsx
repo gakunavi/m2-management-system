@@ -26,6 +26,7 @@ import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, ChevronRight, Chevr
 import { TASK_STATUS_OPTIONS, TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem, TaskColumn } from '@/types/task';
 import { useTaskDetail } from '@/hooks/use-tasks';
+import { useSubtaskDrop } from '@/hooks/use-subtask-drop';
 import { cn } from '@/lib/utils';
 
 // ============================================
@@ -46,6 +47,8 @@ interface TaskKanbanViewProps {
   onEditColumn: (columnId: number) => void;
   onDeleteColumn: (columnId: number) => void;
   onReorderColumns: (items: { id: number; sortOrder: number }[]) => void;
+  onMakeSubtask?: (taskId: number, parentTaskId: number, version: number) => void;
+  onDetachSubtask?: (taskId: number, version: number) => void;
 }
 
 // ============================================
@@ -361,6 +364,7 @@ function SortableTaskCard({
   onChecklistToggle,
   onStatusChange,
   onPriorityChange,
+  isSubtaskTarget,
 }: {
   item: ColumnItem;
   columnId: number;
@@ -368,6 +372,7 @@ function SortableTaskCard({
   onChecklistToggle?: (taskId: number, checklistIndex: number, checked: boolean) => void;
   onStatusChange?: (taskId: number, status: string) => void;
   onPriorityChange?: (taskId: number, priority: string) => void;
+  isSubtaskTarget?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -389,9 +394,13 @@ function SortableTaskCard({
       className={cn(
         'rounded-lg border bg-background shadow-sm p-3 cursor-grab active:cursor-grabbing select-none',
         isDragging && 'opacity-40',
+        isSubtaskTarget && 'ring-2 ring-blue-400 bg-blue-50/80',
       )}
       onClick={() => onTaskClick(item.task.id)}
     >
+      {isSubtaskTarget && (
+        <div className="text-xs text-blue-600 font-medium mb-1">📎 サブタスクとして追加</div>
+      )}
       <TaskCardContent task={item.task} onTaskClick={onTaskClick} onChecklistToggle={onChecklistToggle} onStatusChange={onStatusChange} onPriorityChange={onPriorityChange} />
     </div>
   );
@@ -459,6 +468,7 @@ function SortableColumn({
   onAddTask,
   onEditColumn,
   onDeleteColumn,
+  subtaskTargetTaskId,
 }: {
   column: TaskColumn;
   items: ColumnItem[];
@@ -469,6 +479,7 @@ function SortableColumn({
   onAddTask: () => void;
   onEditColumn: (id: number) => void;
   onDeleteColumn: (id: number) => void;
+  subtaskTargetTaskId?: number | null;
 }) {
   const dndId = columnDndId(column.id);
   const color = column.color ?? '#6b7280';
@@ -541,6 +552,7 @@ function SortableColumn({
               onChecklistToggle={onChecklistToggle}
               onStatusChange={onStatusChange}
               onPriorityChange={onPriorityChange}
+              isSubtaskTarget={subtaskTargetTaskId != null && subtaskTargetTaskId === item.task.id}
             />
           ))}
         </SortableContext>
@@ -578,8 +590,12 @@ export function TaskKanbanView({
   onEditColumn,
   onDeleteColumn,
   onReorderColumns,
+  onMakeSubtask,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onDetachSubtask,
 }: TaskKanbanViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const subtaskDrop = useSubtaskDrop();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -643,14 +659,33 @@ export function TaskKanbanView({
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
-  }, []);
+    const itemId = event.active.id as string;
+    if (isTaskId(itemId)) {
+      const taskId = parseTaskId(itemId);
+      subtaskDrop.onDragStart(taskId);
+    }
+  }, [subtaskDrop]);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
-    if (!over) return;
+    if (!over) {
+      subtaskDrop.onHoverTask(null, null, null);
+      return;
+    }
 
     const activeItemId = active.id as string;
     const overItemId = over.id as string;
+
+    // サブタスク化ホバー追跡
+    if (isTaskId(activeItemId) && isTaskId(overItemId)) {
+      const currentItemsForHover = columnItemsRef.current;
+      const draggingTask = findTaskInItems(currentItemsForHover, activeItemId);
+      const overTask = findTaskInItems(currentItemsForHover, overItemId);
+      const overTaskId = parseTaskId(overItemId);
+      subtaskDrop.onHoverTask(overTaskId, draggingTask, overTask);
+    } else {
+      subtaskDrop.onHoverTask(null, null, null);
+    }
 
     if (isColumnId(activeItemId)) return;
     if (!isTaskId(activeItemId)) return;
@@ -703,15 +738,31 @@ export function TaskKanbanView({
 
       return { ...prev, [sourceColId]: sourceItems, [targetColId!]: targetItems };
     });
-  }, []);
+  }, [subtaskDrop]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
-    if (!over) return;
+    if (!over) {
+      subtaskDrop.reset();
+      return;
+    }
 
     const activeItemId = active.id as string;
     const overItemId = over.id as string;
+
+    // サブタスク化モード処理
+    if (isTaskId(activeItemId) && subtaskDrop.state.isSubtaskMode && subtaskDrop.state.targetTaskId) {
+      const draggedTaskId = parseTaskId(activeItemId);
+      const targetTaskId = subtaskDrop.state.targetTaskId;
+      const draggingTask = findTaskInItems(columnItemsRef.current, activeItemId);
+      if (draggingTask && onMakeSubtask) {
+        onMakeSubtask(draggedTaskId, targetTaskId, draggingTask.version);
+      }
+      subtaskDrop.reset();
+      return;
+    }
+    subtaskDrop.reset();
 
     // 列の並び替え完了
     if (isColumnId(activeItemId) && isColumnId(overItemId)) {
@@ -733,15 +784,16 @@ export function TaskKanbanView({
     if (isTaskId(activeItemId)) {
       onReorder(buildReorderPayload(columnItemsRef.current));
     }
-  }, [onReorderColumns, onReorder]);
+  }, [onReorderColumns, onReorder, subtaskDrop, onMakeSubtask]);
 
   const handleDragCancel = useCallback(() => {
+    subtaskDrop.reset();
     setActiveId(null);
     // ドラッグキャンセル時にpropsから再構築
     const sorted = [...columns].sort((a, b) => a.sortOrder - b.sortOrder);
     setLocalColumns(sorted);
     setColumnItems(buildColumnItems(tasks, sorted));
-  }, [columns, tasks]);
+  }, [columns, tasks, subtaskDrop]);
 
   // ======== 単一レイアウト（scroll-snap でモバイル横スワイプ対応） ========
   return (
@@ -770,6 +822,7 @@ export function TaskKanbanView({
               onAddTask={() => onAddTaskToColumn(col.id)}
               onEditColumn={onEditColumn}
               onDeleteColumn={onDeleteColumn}
+              subtaskTargetTaskId={subtaskDrop.state.isSubtaskMode ? subtaskDrop.state.targetTaskId : null}
             />
           ))}
         </SortableContext>
