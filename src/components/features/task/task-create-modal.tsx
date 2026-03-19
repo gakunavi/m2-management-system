@@ -68,7 +68,7 @@ export function TaskCreateModal({
         dueDate: dueDate || null,
         taskUrl: taskUrl.trim() || null,
         assigneeUserIds,
-        scope: defaultBoardId ? 'board' : 'company',
+        scope: defaultBoardId ? 'board' : 'company', // deprecated but kept for DB compat
         boardId: defaultBoardId ?? null,
         columnId: defaultColumnId ?? null,
         parentTaskId: parentTaskId ?? null,

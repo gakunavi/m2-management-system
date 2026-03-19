@@ -310,16 +310,15 @@ export interface TaskColumnItem extends TaskColumn {
 
 export const columnKeys = {
   all: ['task-columns'] as const,
-  list: (scope: string, businessId?: number, boardId?: number) =>
-    [...columnKeys.all, scope, businessId, boardId] as const,
+  list: (boardId?: number) =>
+    [...columnKeys.all, boardId ?? 'my'] as const,
 };
 
-export function useTaskColumns(scope: string, businessId?: number, boardId?: number) {
+export function useTaskColumns(boardId?: number) {
   return useQuery<TaskColumnItem[]>({
-    queryKey: columnKeys.list(scope, businessId, boardId),
+    queryKey: columnKeys.list(boardId),
     queryFn: async () => {
-      const params = new URLSearchParams({ scope });
-      if (businessId) params.set('businessId', String(businessId));
+      const params = new URLSearchParams();
       if (boardId) params.set('boardId', String(boardId));
       const res = await fetch(`/api/v1/task-columns?${params}`);
       if (!res.ok) throw new Error('Failed to fetch columns');
@@ -329,7 +328,7 @@ export function useTaskColumns(scope: string, businessId?: number, boardId?: num
   });
 }
 
-export function useTaskColumnMutations(scope: string, businessId?: number, boardId?: number) {
+export function useTaskColumnMutations(boardId?: number) {
   const queryClient = useQueryClient();
 
   const invalidateColumns = () => {
@@ -349,8 +348,6 @@ export function useTaskColumnMutations(scope: string, businessId?: number, board
     mutationFn: (data: { name: string; color?: string | null }) =>
       apiClient.create<TaskColumnItem>('/task-columns', {
         ...data,
-        scope,
-        businessId: businessId ?? null,
         boardId: boardId ?? null,
       }),
     onSuccess: invalidateColumns,

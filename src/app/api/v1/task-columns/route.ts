@@ -18,8 +18,7 @@ const createColumnSchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/, '正しいカラーコードを入力してください')
     .optional()
     .nullable(),
-  scope: z.enum(['company', 'business', 'personal', 'board']),
-  businessId: z.number().int().positive().optional().nullable(),
+  scope: z.enum(['company', 'business', 'personal', 'board']).optional(), // deprecated, kept for backwards compat
   boardId: z.number().int().positive().optional().nullable(),
 });
 
@@ -36,7 +35,7 @@ const DEFAULT_COLUMNS = [
 
 // ============================================
 // GET /api/v1/task-columns
-// スコープに応じたカラム一覧取得
+// boardId ベースでカラム一覧取得
 // ============================================
 
 export async function GET(request: NextRequest) {
@@ -50,22 +49,12 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = request.nextUrl;
-    const scope = searchParams.get('scope') ?? 'company';
-    const businessIdParam = searchParams.get('businessId');
     const boardIdParam = searchParams.get('boardId');
 
-    // スコープ別のwhere条件を構築
-    const where: Record<string, unknown> = { scope };
-
-    if (scope === 'business') {
-      if (!businessIdParam) throw ApiError.badRequest('事業IDが必要です');
-      where.businessId = parseInt(businessIdParam, 10);
-    } else if (scope === 'personal') {
-      where.createdById = user.id;
-    } else if (scope === 'board') {
-      if (!boardIdParam) throw ApiError.badRequest('ボードIDが必要です');
-      where.boardId = parseInt(boardIdParam, 10);
-    }
+    // boardId があればボード列、なければマイタスク列（自分作成 + boardId=null）
+    const where: Record<string, unknown> = boardIdParam
+      ? { boardId: parseInt(boardIdParam, 10) }
+      : { boardId: null, createdById: user.id };
 
     let columns = await prisma.taskColumn.findMany({
       where,
@@ -77,16 +66,12 @@ export async function GET(request: NextRequest) {
 
     // カラムが0件の場合、デフォルト列を自動作成
     if (columns.length === 0) {
+      const scopeValue = boardIdParam ? 'board' : 'company';
       await prisma.taskColumn.createMany({
         data: DEFAULT_COLUMNS.map((col) => ({
           ...col,
-          scope,
-          businessId: scope === 'business' && businessIdParam
-            ? parseInt(businessIdParam, 10)
-            : null,
-          boardId: scope === 'board' && boardIdParam
-            ? parseInt(boardIdParam, 10)
-            : null,
+          scope: scopeValue,
+          boardId: boardIdParam ? parseInt(boardIdParam, 10) : null,
           createdById: user.id,
         })),
       });
@@ -137,24 +122,15 @@ export async function POST(request: NextRequest) {
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const body = await request.json();
-    const { name, color, scope, businessId, boardId } = createColumnSchema.parse(body);
+    const { name, color, boardId } = createColumnSchema.parse(body);
 
-    // scope が 'business' の場合は businessId が必須
-    if (scope === 'business' && !businessId) {
-      throw ApiError.badRequest('事業スコープの場合は事業IDが必要です');
-    }
-    if (scope === 'board' && !boardId) {
-      throw ApiError.badRequest('ボードスコープの場合はボードIDが必要です');
-    }
+    // 同コンテキスト内の最大sortOrderを取得
+    const aggregateWhere: Record<string, unknown> = boardId
+      ? { boardId }
+      : { boardId: null, createdById: user.id };
 
-    // 同スコープ内の最大sortOrderを取得
     const maxSortOrder = await prisma.taskColumn.aggregate({
-      where: {
-        scope,
-        ...(scope === 'business' && businessId ? { businessId } : {}),
-        ...(scope === 'personal' ? { createdById: user.id } : {}),
-        ...(scope === 'board' && boardId ? { boardId } : {}),
-      },
+      where: aggregateWhere,
       _max: { sortOrder: true },
     });
 
@@ -165,8 +141,7 @@ export async function POST(request: NextRequest) {
         name,
         color: color ?? null,
         sortOrder: nextSortOrder,
-        scope,
-        businessId: businessId ?? null,
+        scope: boardId ? 'board' : 'company',
         boardId: boardId ?? null,
         createdById: user.id,
       },

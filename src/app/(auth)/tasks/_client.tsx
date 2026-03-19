@@ -92,21 +92,12 @@ export function TasksClient() {
   const { createBoard, reorderTabs } = useTaskBoardMutations();
   const sortedBoards = boards ?? [];
 
-  // カンバン用スコープ・パラメータ導出
-  const columnScope = activeTab === 'my' ? 'company' : 'board';
+  // カンバン用ボードID導出
   const columnBoardId = typeof activeTab === 'number' ? activeTab : undefined;
 
   // カラム（カンバン用）
-  const { data: columnsData } = useTaskColumns(
-    columnScope,
-    undefined,
-    columnBoardId,
-  );
-  const { createColumn, updateColumn, deleteColumn, reorderColumns } = useTaskColumnMutations(
-    columnScope,
-    undefined,
-    columnBoardId,
-  );
+  const { data: columnsData } = useTaskColumns(columnBoardId);
+  const { createColumn, updateColumn, deleteColumn, reorderColumns } = useTaskColumnMutations(columnBoardId);
   const columns = columnsData ?? [];
 
   // カラム編集モーダル
@@ -768,7 +759,7 @@ function TaskListView({
             <SortHeader field="title" label="タスク名" />
             <SortHeader field="status" label="ステータス" />
             <SortHeader field="priority" label="優先度" />
-            <SortHeader field="assigneeId" label="担当者" />
+            <div className="px-3 py-2 text-xs font-medium text-muted-foreground">担当者</div>
             <SortHeader field="dueDate" label="期限" />
             <div className="px-3 py-2 whitespace-nowrap">タグ</div>
             <div className="px-2 py-2 text-center whitespace-nowrap">アーカイブ</div>

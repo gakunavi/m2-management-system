@@ -191,7 +191,7 @@ export async function DELETE(
     await prisma.$transaction(async (tx) => {
       await tx.task.updateMany({
         where: { boardId },
-        data: { boardId: null, scope: 'company' },
+        data: { boardId: null },
       });
       await tx.taskBoard.delete({ where: { id: boardId } });
     });
