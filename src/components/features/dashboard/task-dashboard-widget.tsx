@@ -173,15 +173,8 @@ export const TaskDashboardWidget = memo(function TaskDashboardWidget() {
         </div>
       </div>
 
-      {/* 4セクション */}
+      {/* 3セクション */}
       <div className="space-y-2">
-        <DashboardSection
-          icon={<ListTodo className="h-4 w-4" />}
-          label="マイタスク"
-          section={data.myTasks}
-          iconColor="text-blue-500"
-          defaultOpen
-        />
         <DashboardSection
           icon={<Clock className="h-4 w-4" />}
           label="期限間近マイタスク"
