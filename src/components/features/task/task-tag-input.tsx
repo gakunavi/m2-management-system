@@ -142,13 +142,13 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
                   <div className="ml-0.5 flex sm:hidden items-center gap-0.5 sm:group-hover:flex">
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditingTag({ id: tag.id, name: tag.name, color: tag.color }); }}
-                      className="rounded p-1.5 sm:p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+                      className="rounded p-1.5 sm:p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted min-h-[44px] sm:min-h-0"
                     >
                       <Pencil className="h-3.5 w-3.5 sm:h-2.5 sm:w-2.5" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.id); }}
-                      className="rounded p-1.5 sm:p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      className="rounded p-1.5 sm:p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 min-h-[44px] sm:min-h-0"
                     >
                       <Trash2 className="h-3.5 w-3.5 sm:h-2.5 sm:w-2.5" />
                     </button>
@@ -251,7 +251,7 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
                       </div>
                       <button
                         onClick={handleCreateTag}
-                        className="w-full rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                        className="w-full rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 min-h-[44px] sm:min-h-0"
                       >
                         作成
                       </button>

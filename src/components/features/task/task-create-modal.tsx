@@ -94,7 +94,7 @@ export function TaskCreateModal({
           <h2 className="text-lg font-semibold">
             {parentTaskId ? 'サブタスクを作成' : '新規タスク'}
           </h2>
-          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
+          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted min-h-[44px] min-w-[44px] flex items-center justify-center">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -171,7 +171,7 @@ export function TaskCreateModal({
                 <button
                   type="button"
                   onClick={() => setDueDate('')}
-                  className="rounded-md border border-input px-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+                  className="rounded-md border border-input px-2 py-2 text-xs text-muted-foreground hover:text-foreground min-h-[44px] sm:min-h-0"
                 >
                   なし
                 </button>

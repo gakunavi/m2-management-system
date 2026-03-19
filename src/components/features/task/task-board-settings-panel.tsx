@@ -60,7 +60,7 @@ export function TaskBoardSettingsPanel({ boardId, onClose, onDeleted }: TaskBoar
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-lg bg-background shadow-xl max-h-[80vh] overflow-y-auto">
+      <div className="w-full max-w-md rounded-lg bg-background shadow-xl max-h-[80vh] pb-[env(safe-area-inset-bottom)] overflow-y-auto">
         {/* ヘッダー */}
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-base font-semibold">ボード設定</h2>

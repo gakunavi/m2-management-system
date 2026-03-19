@@ -146,7 +146,7 @@ export function TaskAssigneeSelect({
                 e.stopPropagation();
                 handleRemove(id);
               }}
-              className="rounded-full p-1 sm:p-0.5 hover:bg-primary/20 min-h-[28px] min-w-[28px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
+              className="rounded-full p-1 sm:p-0.5 hover:bg-primary/20 min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center justify-center"
             >
               <X className="h-3 w-3" />
             </button>

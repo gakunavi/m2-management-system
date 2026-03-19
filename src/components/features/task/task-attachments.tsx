@@ -222,7 +222,7 @@ export function TaskAttachments({
                     <button
                       type="button"
                       onClick={() => handleDownload(att)}
-                      className="flex h-12 w-full sm:h-16 sm:w-28 flex-col items-center justify-center gap-1 rounded border border-muted bg-muted/50 px-1 hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="flex h-14 w-full sm:h-16 sm:w-28 flex-col items-center justify-center gap-1 rounded border border-muted bg-muted/50 px-1 hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
                       title={`ダウンロード: ${att.fileName}`}
                     >
                       <FileIcon mimeType={att.mimeType} className="h-6 w-6" />
@@ -244,7 +244,7 @@ export function TaskAttachments({
                           onDelete(att.id);
                         }
                       }}
-                      className="absolute -right-1.5 -top-1.5 flex sm:hidden h-5 w-5 sm:h-4 sm:w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground sm:group-hover:flex"
+                      className="absolute -right-1.5 -top-1.5 flex sm:hidden h-7 w-7 sm:h-5 sm:w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground sm:group-hover:flex"
                       aria-label={`削除: ${att.fileName}`}
                     >
                       <X className="h-2.5 w-2.5" />
