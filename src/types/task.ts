@@ -103,6 +103,7 @@ export const TASK_PRIORITY_OPTIONS: { value: TaskPriority; label: string; color:
   { value: 'low', label: '低', color: '#94a3b8' },
 ];
 
+/** @deprecated スコープ廃止済み。マイタスク+グループボード構成に移行。DB後方互換性のために残存。 */
 export const TASK_SCOPE_OPTIONS: { value: TaskScope; label: string }[] = [
   { value: 'company', label: '全社' },
   { value: 'business', label: '事業別' },

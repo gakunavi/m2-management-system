@@ -29,7 +29,7 @@ import { useSubtaskDrop } from '@/hooks/use-subtask-drop';
 type ViewMode = 'list' | 'kanban' | 'calendar';
 
 /** Format multiple assignees for compact display: first name + "+N" */
-function formatAssignees(assignees?: { id: number; userName: string }[]): string {
+function formatAssignees(assignees?: TaskListItem['assignees']): string {
   if (!assignees || assignees.length === 0) return '-';
   if (assignees.length === 1) return assignees[0].userName;
   return `${assignees[0].userName} +${assignees.length - 1}`;
@@ -1019,7 +1019,7 @@ function ParentTaskRow({
           ))}
         </select>
       </div>
-      <div className="px-3 py-2 truncate whitespace-nowrap">{formatAssignees((task as unknown as { assignees?: { id: number; userName: string }[] }).assignees)}</div>
+      <div className="px-3 py-2 truncate whitespace-nowrap">{formatAssignees(task.assignees)}</div>
       <div className={`px-3 py-2 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
       <div className="px-3 py-2">
         <div className="flex flex-wrap gap-1">
@@ -1096,7 +1096,7 @@ function ChildTaskRow({
         </span>
       </div>
       <div className="px-3 py-1.5 whitespace-nowrap text-xs text-muted-foreground">—</div>
-      <div className="px-3 py-1.5 truncate whitespace-nowrap">{formatAssignees((task as unknown as { assignees?: { id: number; userName: string }[] }).assignees)}</div>
+      <div className="px-3 py-1.5 truncate whitespace-nowrap">{formatAssignees(task.assignees)}</div>
       <div className={`px-3 py-1.5 whitespace-nowrap ${isOverdue ? 'text-red-600 font-medium' : ''}`}>{task.dueDate ?? '-'}</div>
       <div className="px-3 py-1.5" />
       <div className="px-2 py-1.5 text-center">

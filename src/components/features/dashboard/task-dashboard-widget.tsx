@@ -21,7 +21,7 @@ function formatDate(dateStr: string | null): string {
 
 function TaskRow({ task, highlight }: { task: TaskListItem; highlight?: 'overdue' | 'upcoming' }) {
   const priorityDef = TASK_PRIORITY_OPTIONS.find((p) => p.value === task.priority);
-  const assignees = (task as unknown as { assignees?: { id: number; userName: string }[] }).assignees ?? [];
+  const assignees = task.assignees ?? [];
   const assigneeLabel = assignees.length === 0 ? '' : assignees.length === 1 ? assignees[0].userName : `${assignees[0].userName} +${assignees.length - 1}`;
 
   return (

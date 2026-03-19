@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
 import { logger } from '@/lib/logger';
 
+export const dynamic = 'force-dynamic';
+
 // ============================================
 // POST /api/v1/cron/reminders
 // 当日期限のリマインダーに対してメール送信

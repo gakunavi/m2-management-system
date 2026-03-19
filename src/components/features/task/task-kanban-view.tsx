@@ -261,7 +261,7 @@ function TaskCardContent({
           </span>
         )}
         {(() => {
-          const assignees = (task as unknown as { assignees?: { id: number; userName: string }[] }).assignees;
+          const assignees = task.assignees;
           if (!assignees || assignees.length === 0) return null;
           const label = assignees.length === 1
             ? assignees[0].userName

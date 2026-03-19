@@ -19,7 +19,7 @@ interface SendEmailParams {
  */
 export async function sendEmail(params: SendEmailParams): Promise<void> {
   if (!resend) {
-    console.log('[Email] Skipped (no API key):', params.subject, '→', params.to);
+    logger.info(`[Email] Skipped (no API key): ${params.subject} → ${params.to}`);
     return;
   }
 
