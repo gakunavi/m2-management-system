@@ -36,8 +36,10 @@ export function TaskAssigneeSelect({
     return map;
   });
 
-  // existingAssignees変更時にマップ更新
+  // existingAssignees変更時にマップ更新（IDリストで比較して無限ループ防止）
+  const existingIds = existingAssignees.map(a => a.id).join(',');
   useEffect(() => {
+    if (existingAssignees.length === 0) return;
     setUserMap((prev) => {
       const next = new Map(prev);
       for (const a of existingAssignees) {
@@ -45,7 +47,8 @@ export function TaskAssigneeSelect({
       }
       return next;
     });
-  }, [existingAssignees]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingIds]);
 
   const searchUsers = useCallback(async (q: string) => {
     if (q.length < 1) {
