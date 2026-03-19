@@ -424,9 +424,8 @@ export function TasksClient() {
           defaultBoardId={typeof activeTab === 'number' ? activeTab : undefined}
           defaultColumnId={showCreateModal.columnId}
           onClose={() => setShowCreateModal({ open: false })}
-          onCreated={(task) => {
+          onCreated={() => {
             setShowCreateModal({ open: false });
-            setSelectedTaskId(task.id);
           }}
         />
       )}
