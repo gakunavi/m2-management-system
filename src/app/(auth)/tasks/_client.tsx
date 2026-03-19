@@ -358,8 +358,14 @@ export function TasksClient() {
                   }
                 });
             }}
-            onStatusChange={(taskId, status) => updateTask.mutate({ id: taskId, status, version: 1 })}
-            onPriorityChange={(taskId, priority) => updateTask.mutate({ id: taskId, priority, version: 1 })}
+            onStatusChange={(taskId, status) => {
+              const t = tasks.find(x => x.id === taskId);
+              updateTask.mutate({ id: taskId, status, version: t?.version ?? 1 });
+            }}
+            onPriorityChange={(taskId, priority) => {
+              const t = tasks.find(x => x.id === taskId);
+              updateTask.mutate({ id: taskId, priority, version: t?.version ?? 1 });
+            }}
             onAddTaskToColumn={(columnId) => setShowCreateModal({ open: true, columnId })}
             onReorder={(items) => {
               const taskMap = new Map(tasks.map((t) => [t.id, t]));
@@ -613,16 +619,19 @@ function TaskListView({
   );
 
   const handleArchiveToggle = useCallback((taskId: number, isArchived: boolean) => {
-    updateTask.mutate({ id: taskId, isArchived, version: 1 });
-  }, [updateTask]);
+    const t = tasks.find(x => x.id === taskId);
+    updateTask.mutate({ id: taskId, isArchived, version: t?.version ?? 1 });
+  }, [updateTask, tasks]);
 
   const handleStatusChange = useCallback((taskId: number, status: string) => {
-    updateTask.mutate({ id: taskId, status, version: 1 });
-  }, [updateTask]);
+    const t = tasks.find(x => x.id === taskId);
+    updateTask.mutate({ id: taskId, status, version: t?.version ?? 1 });
+  }, [updateTask, tasks]);
 
   const handlePriorityChange = useCallback((taskId: number, priority: string) => {
-    updateTask.mutate({ id: taskId, priority, version: 1 });
-  }, [updateTask]);
+    const t = tasks.find(x => x.id === taskId);
+    updateTask.mutate({ id: taskId, priority, version: t?.version ?? 1 });
+  }, [updateTask, tasks]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(Number(event.active.id));

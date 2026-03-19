@@ -56,6 +56,7 @@ export interface TaskListItem {
   checklistTotal: number;
   checklistDoneCount: number;
   sortOrder: number;
+  version: number;
   completedAt: string | null;
   attachmentCount: number;
   createdAt: string;
