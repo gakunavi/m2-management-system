@@ -94,6 +94,7 @@ export interface TaskDashboardSection {
 }
 
 export interface TaskDashboardData {
+  summary: { todo: number; inProgress: number };
   myTasks: TaskDashboardSection;
   upcoming: TaskDashboardSection;
   overdue: TaskDashboardSection;

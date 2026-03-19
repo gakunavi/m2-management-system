@@ -88,16 +88,19 @@ export async function GET() {
     ]);
 
     // カウントも並列取得
-    const [myTasksCount, upcomingCount, overdueCount, withDueDateCount] = await Promise.all([
+    const [myTasksCount, upcomingCount, overdueCount, withDueDateCount, todoCount, inProgressCount] = await Promise.all([
       prisma.task.count({ where: baseWhere }),
       prisma.task.count({ where: { ...baseWhere, dueDate: { gte: todayStart, lte: threeDaysLater } } }),
       prisma.task.count({ where: { ...baseWhere, dueDate: { lt: todayStart } } }),
       prisma.task.count({ where: { ...baseWhere, dueDate: { not: null } } }),
+      prisma.task.count({ where: { ...baseWhere, status: 'todo' } }),
+      prisma.task.count({ where: { ...baseWhere, status: 'in_progress' } }),
     ]);
 
     return NextResponse.json({
       success: true,
       data: {
+        summary: { todo: todoCount, inProgress: inProgressCount },
         myTasks: { count: myTasksCount, items: myTasks.map(formatTaskListItem) },
         upcoming: { count: upcomingCount, items: upcomingTasks.map(formatTaskListItem) },
         overdue: { count: overdueCount, items: overdueTasks.map(formatTaskListItem) },
