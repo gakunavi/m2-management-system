@@ -84,8 +84,11 @@ export async function GET(request: NextRequest) {
       ...(whereDateRange(searchParams, 'dueDate') ?? {}),
       ...(businessIdParam ? { businessId: parseInt(businessIdParam, 10) } : {}),
       ...(searchParams.get('boardId') ? { boardId: parseInt(searchParams.get('boardId')!, 10) } : {}),
+      ...(searchParams.get('myTasks') === 'true' ? { boardId: null, createdById: user.id } : {}),
       ...(searchParams.get('showArchived') !== 'true' ? { isArchived: false } : {}),
-      ...(assigneeIdParam ? { assignees: { some: { userId: parseInt(assigneeIdParam, 10) } } } : {}),
+      ...(searchParams.get('onlyMine') === 'true'
+        ? { assignees: { some: { userId: user.id } } }
+        : assigneeIdParam ? { assignees: { some: { userId: parseInt(assigneeIdParam, 10) } } } : {}),
       ...(relatedEntityType ? { relatedEntityType } : {}),
       ...(relatedEntityIdParam ? { relatedEntityId: parseInt(relatedEntityIdParam, 10) } : {}),
       ...(parentOnly ? { parentTaskId: null } : {}),

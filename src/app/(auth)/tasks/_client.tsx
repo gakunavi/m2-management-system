@@ -119,6 +119,7 @@ export function TasksClient() {
   const [assigneeSearchText, setAssigneeSearchText] = useState('');
   const [tagFilter, setTagFilter] = useState<number[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false);
 
   // ページネーション & ソート
   const [page, setPage] = useState(1);
@@ -135,14 +136,16 @@ export function TasksClient() {
     pageSize,
     search: debouncedSearch || undefined,
     sort,
-    assigneeId: activeTab === 'my' ? (user?.id ?? assigneeFilter ?? undefined) : (assigneeFilter ?? undefined),
+    myTasks: activeTab === 'my' ? 'true' : undefined,
     boardId: typeof activeTab === 'number' ? activeTab : undefined,
+    onlyMine: activeTab !== 'my' && onlyMine ? 'true' : undefined,
+    assigneeId: assigneeFilter ?? undefined,
     status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
     priority: priorityFilter.length > 0 ? priorityFilter.join(',') : undefined,
     showArchived: showArchived ? 'true' : undefined,
     tagIds: tagFilter.length > 0 ? tagFilter.join(',') : undefined,
     parentOnly: true,
-  }), [page, pageSize, debouncedSearch, sort, activeTab, user?.id, assigneeFilter, statusFilter, priorityFilter, tagFilter, viewMode, showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [page, pageSize, debouncedSearch, sort, activeTab, onlyMine, assigneeFilter, statusFilter, priorityFilter, tagFilter, viewMode, showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: taskData, isLoading } = useTaskList(listParams);
   const { data: tags } = useTaskTags();
@@ -300,6 +303,19 @@ export function TasksClient() {
           onSearchChange={setAssigneeSearchText}
           onChange={(id) => { setAssigneeFilter(id); setPage(1); }}
         />
+
+        {/* 自分のタスクのみ（ボードタブ時のみ表示） */}
+        {activeTab !== 'my' && (
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={onlyMine}
+              onChange={(e) => { setOnlyMine(e.target.checked); setPage(1); }}
+              className="accent-primary"
+            />
+            自分のタスクを表示
+          </label>
+        )}
 
         {/* アーカイブ表示トグル */}
         <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
