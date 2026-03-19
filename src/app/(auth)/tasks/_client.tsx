@@ -356,6 +356,17 @@ export function TasksClient() {
             columns={columns}
             onTaskClick={setSelectedTaskId}
             onColumnChange={() => {}}
+            onChecklistToggle={(taskId, checklistIndex, checked) => {
+              fetch(`/api/v1/tasks/${taskId}`)
+                .then((res) => res.json())
+                .then((res) => {
+                  const checklist = [...(res.data?.checklist ?? [])];
+                  if (checklist[checklistIndex]) {
+                    checklist[checklistIndex] = { ...checklist[checklistIndex], checked };
+                    updateTask.mutate({ id: taskId, checklist, version: res.data?.version ?? 1 });
+                  }
+                });
+            }}
             onStatusChange={(taskId, status) => updateTask.mutate({ id: taskId, status, version: 1 })}
             onPriorityChange={(taskId, priority) => updateTask.mutate({ id: taskId, priority, version: 1 })}
             onAddTaskToColumn={(columnId) => setShowCreateModal({ open: true, columnId })}
