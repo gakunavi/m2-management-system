@@ -53,7 +53,6 @@ export async function GET(request: NextRequest) {
     const sortItems = parseSortParams(searchParams, 'createdAt', 'desc');
 
     // 個別フィルターパラメータ
-    const businessIdParam = searchParams.get('businessId');
     const assigneeIdParam = searchParams.get('assigneeId');
     const relatedEntityType = searchParams.get('relatedEntityType');
     const relatedEntityIdParam = searchParams.get('relatedEntityId');
@@ -169,11 +168,6 @@ export async function POST(request: NextRequest) {
       notifyLevel,
       ...rest
     } = data;
-
-    // scope が 'business' の場合は businessId が必須
-    if (scope === 'business' && !businessId) {
-      throw ApiError.badRequest('事業スコープの場合は事業IDが必要です');
-    }
 
     // 親タスク存在確認 + 2階層制限（親タスクが子タスクでないこと）
     if (parentTaskId) {
