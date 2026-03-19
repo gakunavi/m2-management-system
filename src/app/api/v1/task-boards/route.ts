@@ -82,19 +82,27 @@ export async function GET(_request: NextRequest) {
     const user = session.user as { id: number; role: string };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
+    // ユーザーのメンバーシップ（tabOrder付き）を取得してボードをソート
+    const memberships = await prisma.taskBoardMember.findMany({
+      where: { userId: user.id },
+      select: { boardId: true, tabOrder: true },
+      orderBy: { tabOrder: 'asc' },
+    });
+
     const boards = await prisma.taskBoard.findMany({
       where: {
-        members: {
-          some: { userId: user.id },
-        },
+        id: { in: memberships.map((m) => m.boardId) },
       },
       include: boardListInclude,
-      orderBy: { createdAt: 'desc' },
     });
+
+    // tabOrder順にソート
+    const orderMap = new Map(memberships.map((m) => [m.boardId, m.tabOrder]));
+    const sortedBoards = [...boards].sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
 
     return NextResponse.json({
       success: true,
-      data: boards.map(formatBoard),
+      data: sortedBoards.map((b) => ({ ...formatBoard(b), tabOrder: orderMap.get(b.id) ?? 0 })),
     });
   } catch (error) {
     return handleApiError(error);

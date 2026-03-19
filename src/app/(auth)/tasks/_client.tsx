@@ -7,7 +7,8 @@ import {
   PointerSensor, useSensor, useSensors,
   type DragStartEvent, type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
@@ -39,7 +40,7 @@ export function TasksClient() {
 
   // ビューモード（ボードごとに保存）
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [clientReady, setClientReady] = useState(false);
+  const [, setClientReady] = useState(false);
 
   // タブ: 'my' = マイタスク, number = boardId
   const [activeTab, setActiveTab] = useState<'my' | number>('my');
@@ -86,9 +87,10 @@ export function TasksClient() {
   const [showBoardSettings, setShowBoardSettings] = useState<number | null>(null);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
 
-  // ボード
+  // ボード（APIがtabOrder順で返す）
   const { data: boards } = useTaskBoards();
-  const { createBoard } = useTaskBoardMutations();
+  const { createBoard, reorderTabs } = useTaskBoardMutations();
+  const sortedBoards = boards ?? [];
 
   // カンバン用スコープ・パラメータ導出
   const columnScope = activeTab === 'my' ? 'company' : 'board';
@@ -192,33 +194,16 @@ export function TasksClient() {
           </button>
 
           {/* 区切り */}
-          {(boards ?? []).length > 0 && <span className="text-muted-foreground/40">|</span>}
+          {sortedBoards.length > 0 && <span className="text-muted-foreground/40">|</span>}
 
-          {/* ボードタブ */}
-          {(boards ?? []).map((board) => (
-            <div key={board.id} className="flex items-center gap-0.5">
-              <button
-                onClick={() => handleTabChange(board.id)}
-                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                  activeTab === board.id
-                    ? 'bg-primary/10 text-primary border border-primary/30'
-                    : 'text-muted-foreground hover:text-foreground border border-transparent'
-                }`}
-              >
-                <Users className="h-3.5 w-3.5" />
-                {board.name}
-              </button>
-              {activeTab === board.id && (
-                <button
-                  onClick={() => setShowBoardSettings(board.id)}
-                  className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
-                  title="ボード設定"
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
+          {/* ボードタブ（D&Dで並び替え可能） */}
+          <BoardTabsDnd
+            boards={sortedBoards}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            onSettingsClick={(id) => setShowBoardSettings(id)}
+            onReorder={(orderedIds) => reorderTabs.mutate(orderedIds)}
+          />
 
           {/* ボード作成ボタン */}
           <button
@@ -1199,6 +1184,102 @@ function AssigneeFilter({
             ))}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// ボードタブD&D並び替え
+// ============================================
+
+interface BoardTabsDndProps {
+  boards: Array<{ id: number; name: string }>;
+  activeTab: 'my' | number;
+  onTabChange: (tab: 'my' | number) => void;
+  onSettingsClick: (boardId: number) => void;
+  onReorder: (orderedIds: number[]) => void;
+}
+
+function BoardTabsDnd({ boards, activeTab, onTabChange, onSettingsClick, onReorder }: BoardTabsDndProps) {
+  const tabSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const boardIds = boards.map((b) => `board-tab-${b.id}`);
+
+  const handleTabDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = boardIds.indexOf(active.id as string);
+    const newIndex = boardIds.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(boards, oldIndex, newIndex);
+    onReorder(reordered.map((b) => b.id));
+  }, [boards, boardIds, onReorder]);
+
+  return (
+    <DndContext sensors={tabSensors} collisionDetection={closestCenter} onDragEnd={handleTabDragEnd}>
+      <SortableContext items={boardIds} strategy={horizontalListSortingStrategy}>
+        {boards.map((board) => (
+          <SortableBoardTab
+            key={board.id}
+            board={board}
+            isActive={activeTab === board.id}
+            onClick={() => onTabChange(board.id)}
+            onSettingsClick={() => onSettingsClick(board.id)}
+          />
+        ))}
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableBoardTab({
+  board,
+  isActive,
+  onClick,
+  onSettingsClick,
+}: {
+  board: { id: number; name: string };
+  isActive: boolean;
+  onClick: () => void;
+  onSettingsClick: () => void;
+}) {
+  const dndId = `board-tab-${board.id}`;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: dndId });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-0.5">
+      <button
+        {...attributes}
+        {...listeners}
+        onClick={onClick}
+        className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 cursor-grab active:cursor-grabbing ${
+          isActive
+            ? 'bg-primary/10 text-primary border border-primary/30'
+            : 'text-muted-foreground hover:text-foreground border border-transparent'
+        }`}
+      >
+        <Users className="h-3.5 w-3.5" />
+        {board.name}
+      </button>
+      {isActive && (
+        <button
+          onClick={onSettingsClick}
+          className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
+          title="ボード設定"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
       )}
     </div>
   );

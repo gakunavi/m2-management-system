@@ -1011,6 +1011,7 @@ model TaskBoardMember {
   boardId  Int      @map("board_id")
   userId   Int      @map("user_id")
   role     String   @default("member") @map("role") @db.VarChar(20)
+  tabOrder Int      @default(0) @map("tab_order")
   joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
 
   board TaskBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)

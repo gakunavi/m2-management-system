@@ -285,7 +285,13 @@ export function useTaskBoardMutations() {
     onSuccess: invalidateBoards,
   });
 
-  return { createBoard, updateBoard, deleteBoard, addMember, removeMember };
+  const reorderTabs = useMutation({
+    mutationFn: (orderedBoardIds: number[]) =>
+      apiClient.patch<void>('/task-boards/reorder-tabs', { orderedBoardIds }),
+    onSuccess: invalidateBoards,
+  });
+
+  return { createBoard, updateBoard, deleteBoard, addMember, removeMember, reorderTabs };
 }
 
 // ============================================

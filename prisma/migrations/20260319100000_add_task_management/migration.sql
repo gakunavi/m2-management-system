@@ -116,6 +116,7 @@ CREATE TABLE "task_board_members" (
     "board_id" INTEGER NOT NULL,
     "user_id" INTEGER NOT NULL,
     "role" VARCHAR(20) NOT NULL DEFAULT 'member',
+    "tab_order" INTEGER NOT NULL DEFAULT 0,
     "joined_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "task_board_members_pkey" PRIMARY KEY ("board_id","user_id")
