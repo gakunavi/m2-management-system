@@ -10,13 +10,10 @@ import { TaskAssigneeSelect } from './task-assignee-select';
 import {
   TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
-  TASK_SCOPE_OPTIONS,
 } from '@/types/task';
-import type { TaskScope, TaskDetail } from '@/types/task';
+import type { TaskDetail } from '@/types/task';
 
 interface TaskCreateModalProps {
-  defaultScope?: TaskScope;
-  defaultBusinessId?: number;
   defaultBoardId?: number;
   defaultColumnId?: number;
   parentTaskId?: number;
@@ -27,8 +24,6 @@ interface TaskCreateModalProps {
 }
 
 export function TaskCreateModal({
-  defaultScope = 'company',
-  defaultBusinessId,
   defaultBoardId,
   defaultColumnId,
   parentTaskId,
@@ -47,8 +42,6 @@ export function TaskCreateModal({
   const [dueDate, setDueDate] = useState('');
   const [taskUrl, setTaskUrl] = useState('');
   const [assigneeUserIds, setAssigneeUserIds] = useState<number[]>([]);
-  const [scope, setScope] = useState<TaskScope>(defaultScope);
-  const [businessId] = useState<number | undefined>(defaultBusinessId);
   const [relatedEntityType] = useState(defaultRelatedType ?? '');
   const [relatedEntityId] = useState<number | undefined>(defaultRelatedId);
   const [notifyLevel, setNotifyLevel] = useState<string>('in_app');
@@ -75,9 +68,8 @@ export function TaskCreateModal({
         dueDate: dueDate || null,
         taskUrl: taskUrl.trim() || null,
         assigneeUserIds,
-        scope,
-        businessId: scope === 'business' ? businessId : null,
-        boardId: scope === 'board' ? defaultBoardId : null,
+        scope: defaultBoardId ? 'board' : 'company',
+        boardId: defaultBoardId ?? null,
         columnId: defaultColumnId ?? null,
         parentTaskId: parentTaskId ?? null,
         relatedEntityType: relatedEntityType || null,
@@ -199,23 +191,7 @@ export function TaskCreateModal({
             />
           </div>
 
-          {/* 6. スコープ */}
-          {!parentTaskId && (
-            <div>
-              <label className="mb-1 block text-sm font-medium">スコープ</label>
-              <select
-                value={scope}
-                onChange={(e) => setScope(e.target.value as TaskScope)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                {TASK_SCOPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* 7. タグ */}
+          {/* 6. タグ */}
           <div>
             <label className="mb-1 block text-sm font-medium">タグ</label>
             <TaskTagInput selectedTagIds={tagIds} onChange={setTagIds} />

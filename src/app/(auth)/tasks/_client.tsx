@@ -10,7 +10,7 @@ import {
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
-import { useBusiness } from '@/hooks/use-business';
+import { useAuth } from '@/hooks/use-auth';
 import { useTaskList, useTaskTags, useTaskDetail, useTaskBoards, useTaskBoardMutations, useTaskMutations, useTaskColumns, useTaskColumnMutations } from '@/hooks/use-tasks';
 import { useDebounce } from '@/hooks/use-debounce';
 import { TaskDetailPanel } from '@/components/features/task/task-detail-panel';
@@ -22,7 +22,7 @@ import {
   TASK_STATUS_OPTIONS,
   TASK_PRIORITY_OPTIONS,
 } from '@/types/task';
-import type { TaskListItem, TaskScope } from '@/types/task';
+import type { TaskListItem } from '@/types/task';
 
 type ViewMode = 'list' | 'kanban' | 'calendar';
 
@@ -34,7 +34,7 @@ function formatAssignees(assignees?: { id: number; userName: string }[]): string
 }
 
 export function TasksClient() {
-  const { currentBusiness } = useBusiness();
+  const { user } = useAuth();
   const { updateTask, reorderTasks } = useTaskMutations();
 
   // ビューモード
@@ -50,9 +50,8 @@ export function TasksClient() {
     setViewModeLoaded(true);
   }, []);
 
-  // スコープ
-  const [scope, setScope] = useState<TaskScope>('company');
-  const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
+  // タブ: 'my' = マイタスク, number = boardId
+  const [activeTab, setActiveTab] = useState<'my' | number>('my');
   const [showBoardSettings, setShowBoardSettings] = useState<number | null>(null);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
 
@@ -60,16 +59,20 @@ export function TasksClient() {
   const { data: boards } = useTaskBoards();
   const { createBoard } = useTaskBoardMutations();
 
+  // カンバン用スコープ・パラメータ導出
+  const columnScope = activeTab === 'my' ? 'company' : 'board';
+  const columnBoardId = typeof activeTab === 'number' ? activeTab : undefined;
+
   // カラム（カンバン用）
   const { data: columnsData } = useTaskColumns(
-    scope,
-    scope === 'business' ? currentBusiness?.id : undefined,
-    scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
+    columnScope,
+    undefined,
+    columnBoardId,
   );
   const { createColumn, updateColumn, deleteColumn, reorderColumns } = useTaskColumnMutations(
-    scope,
-    scope === 'business' ? currentBusiness?.id : undefined,
-    scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
+    columnScope,
+    undefined,
+    columnBoardId,
   );
   const columns = columnsData ?? [];
 
@@ -101,16 +104,14 @@ export function TasksClient() {
     pageSize,
     search: debouncedSearch || undefined,
     sort,
-    scope,
-    businessId: scope === 'business' ? currentBusiness?.id : undefined,
-    boardId: scope === 'board' && selectedBoardId ? selectedBoardId : undefined,
+    assigneeId: activeTab === 'my' ? (user?.id ?? assigneeFilter ?? undefined) : (assigneeFilter ?? undefined),
+    boardId: typeof activeTab === 'number' ? activeTab : undefined,
     status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
     priority: priorityFilter.length > 0 ? priorityFilter.join(',') : undefined,
-    assigneeId: assigneeFilter ?? undefined,
     showArchived: showArchived ? 'true' : undefined,
     tagIds: tagFilter.length > 0 ? tagFilter.join(',') : undefined,
     parentOnly: true,
-  }), [page, pageSize, debouncedSearch, sort, scope, currentBusiness?.id, selectedBoardId, statusFilter, priorityFilter, assigneeFilter, tagFilter, viewMode, showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [page, pageSize, debouncedSearch, sort, activeTab, user?.id, assigneeFilter, statusFilter, priorityFilter, tagFilter, viewMode, showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: taskData, isLoading } = useTaskList(listParams);
   const { data: tags } = useTaskTags();
@@ -123,9 +124,8 @@ export function TasksClient() {
     localStorage.setItem('task-view-mode', mode);
   }, []);
 
-  const handleScopeChange = useCallback((newScope: TaskScope, boardId?: number) => {
-    setScope(newScope);
-    setSelectedBoardId(boardId ?? null);
+  const handleTabChange = useCallback((tab: 'my' | number) => {
+    setActiveTab(tab);
     setPage(1);
   }, []);
 
@@ -151,43 +151,32 @@ export function TasksClient() {
         }
       />
 
-      {/* スコープ切替 + ビューモード切替 */}
+      {/* タブ切替 + ビューモード切替 */}
       <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-2">
-        {/* スコープ + ボードタブ */}
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {/* 標準スコープ */}
-          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-            {[
-              { value: 'company' as const, label: '全社' },
-              { value: 'business' as const, label: '事業別' },
-              { value: 'personal' as const, label: 'マイタスク' },
-            ].map((s) => (
-              <button
-                key={s.value}
-                onClick={() => handleScopeChange(s.value)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                  scope === s.value && !selectedBoardId
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+        {/* マイタスク + ボードタブ */}
+        <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          {/* マイタスク */}
+          <button
+            onClick={() => handleTabChange('my')}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+              activeTab === 'my'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            マイタスク
+          </button>
 
-          {/* ボードタブ区切り */}
-          {(boards ?? []).length > 0 && (
-            <span className="text-muted-foreground/40">|</span>
-          )}
+          {/* 区切り */}
+          {(boards ?? []).length > 0 && <span className="text-muted-foreground/40">|</span>}
 
           {/* ボードタブ */}
           {(boards ?? []).map((board) => (
             <div key={board.id} className="flex items-center gap-0.5">
               <button
-                onClick={() => handleScopeChange('board', board.id)}
-                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                  scope === 'board' && selectedBoardId === board.id
+                onClick={() => handleTabChange(board.id)}
+                className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                  activeTab === board.id
                     ? 'bg-primary/10 text-primary border border-primary/30'
                     : 'text-muted-foreground hover:text-foreground border border-transparent'
                 }`}
@@ -195,7 +184,7 @@ export function TasksClient() {
                 <Users className="h-3.5 w-3.5" />
                 {board.name}
               </button>
-              {scope === 'board' && selectedBoardId === board.id && (
+              {activeTab === board.id && (
                 <button
                   onClick={() => setShowBoardSettings(board.id)}
                   className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -408,9 +397,7 @@ export function TasksClient() {
       {/* 作成モーダル */}
       {showCreateModal.open && (
         <TaskCreateModal
-          defaultScope={scope}
-          defaultBusinessId={scope === 'business' ? currentBusiness?.id : undefined}
-          defaultBoardId={scope === 'board' ? selectedBoardId ?? undefined : undefined}
+          defaultBoardId={typeof activeTab === 'number' ? activeTab : undefined}
           defaultColumnId={showCreateModal.columnId}
           onClose={() => setShowCreateModal({ open: false })}
           onCreated={(task) => {
@@ -427,7 +414,7 @@ export function TasksClient() {
           onClose={() => setShowBoardSettings(null)}
           onDeleted={() => {
             setShowBoardSettings(null);
-            handleScopeChange('company');
+            handleTabChange('my');
           }}
         />
       )}
@@ -439,7 +426,7 @@ export function TasksClient() {
           onCreate={async (name) => {
             const board = await createBoard.mutateAsync({ name });
             setShowCreateBoard(false);
-            handleScopeChange('board', (board as { id: number }).id);
+            handleTabChange((board as { id: number }).id);
           }}
         />
       )}
