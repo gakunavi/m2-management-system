@@ -83,10 +83,22 @@ export async function GET(request: NextRequest) {
     }
 
     // 「自分のタスクを表示」フィルター
+    // 自分が直接担当 OR 自分が担当のサブタスクを持つ親タスク
     if (searchParams.get('onlyMine') === 'true') {
-      filters.push({ assignees: { some: { userId: user.id } } });
+      filters.push({
+        OR: [
+          { assignees: { some: { userId: user.id } } },
+          { children: { some: { assignees: { some: { userId: user.id } } } } },
+        ],
+      });
     } else if (assigneeIdParam) {
-      filters.push({ assignees: { some: { userId: parseInt(assigneeIdParam, 10) } } });
+      const assigneeId = parseInt(assigneeIdParam, 10);
+      filters.push({
+        OR: [
+          { assignees: { some: { userId: assigneeId } } },
+          { children: { some: { assignees: { some: { userId: assigneeId } } } } },
+        ],
+      });
     }
 
     const where: Prisma.TaskWhereInput = {

@@ -387,6 +387,9 @@ export function TasksClient() {
               }
             }}
             onReorderColumns={(items) => reorderColumns.mutate(items)}
+            onMakeSubtask={(taskId, parentTaskId, version) => {
+              updateTask.mutate({ id: taskId, parentTaskId, version });
+            }}
           />
           {showColumnModal != null && (
             <ColumnEditModal
@@ -665,7 +668,7 @@ function TaskListView({
     const { active, over } = event;
     setActiveId(null);
 
-    // サブタスク化モード: 1.5秒ホバー後にドロップ → サブタスク化
+    // サブタスク化モード: 1秒ホバー後にドロップ → サブタスク化
     if (subtaskDrop.state.isSubtaskMode && subtaskDrop.state.targetTaskId) {
       const draggedId = Number(active.id);
       const targetId = subtaskDrop.state.targetTaskId;
@@ -813,6 +816,9 @@ function TaskListView({
                     onArchiveToggle={handleArchiveToggle}
                     onStatusChange={handleStatusChange}
                     onPriorityChange={handlePriorityChange}
+                    onDetachSubtask={(taskId, version) => {
+                      updateTask.mutate({ id: taskId, parentTaskId: null, version });
+                    }}
                     gridCols={GRID_COLS}
                     isSubtaskTarget={subtaskDrop.state.isSubtaskMode && subtaskDrop.state.targetTaskId === task.id}
                   />
@@ -871,6 +877,7 @@ function TaskRowWithChildren({
   onArchiveToggle,
   onStatusChange,
   onPriorityChange,
+  onDetachSubtask,
   gridCols,
   isSubtaskTarget,
 }: {
@@ -881,6 +888,7 @@ function TaskRowWithChildren({
   onArchiveToggle: (id: number, isArchived: boolean) => void;
   onStatusChange: (id: number, status: string) => void;
   onPriorityChange: (id: number, priority: string) => void;
+  onDetachSubtask: (taskId: number, version: number) => void;
   gridCols: string;
   isSubtaskTarget: boolean;
 }) {
@@ -907,6 +915,7 @@ function TaskRowWithChildren({
           isLast={index === children.length - 1}
           onClick={() => onTaskClick(child.id)}
           onArchiveToggle={onArchiveToggle}
+          onDetach={onDetachSubtask}
           gridCols={gridCols}
         />
       ))}
@@ -1039,12 +1048,14 @@ function ChildTaskRow({
   isLast,
   onClick,
   onArchiveToggle,
+  onDetach,
   gridCols,
 }: {
   task: TaskListItem;
   isLast: boolean;
   onClick: () => void;
   onArchiveToggle: (id: number, isArchived: boolean) => void;
+  onDetach: (taskId: number, version: number) => void;
   gridCols: string;
 }) {
   const isOverdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
@@ -1056,11 +1067,19 @@ function ChildTaskRow({
       style={{ backgroundColor: 'rgba(59,130,246,0.04)' }}
       onClick={onClick}
     >
-      {/* ツリー記号 */}
-      <div className="py-1.5 pl-6">
+      {/* サブタスク解除ボタン + ツリー記号 */}
+      <div className="py-1.5 pl-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); onDetach(task.id, task.version); }}
+          className="text-muted-foreground/40 hover:text-red-500 transition-colors p-0.5 rounded hover:bg-red-50"
+          title="サブタスクから外す"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="py-1.5 pl-2">
         <span className="text-blue-400/70 font-mono text-sm">{isLast ? '└' : '├'}</span>
       </div>
-      <div className="py-1.5" />
       <div className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">{task.taskNo}</div>
       <div className="px-3 py-1.5 min-w-0">
         <div className="flex items-center gap-2 pl-5">

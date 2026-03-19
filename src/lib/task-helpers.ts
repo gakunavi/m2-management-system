@@ -77,6 +77,7 @@ export const updateTaskSchema = z.object({
   boardId: z.number().int().positive().optional().nullable(),
   checklist: z.array(checklistItemSchema).optional(),
   columnId: z.number().int().positive().optional().nullable(),
+  parentTaskId: z.number().int().positive().optional().nullable(),
   sortOrder: z.number().int().optional(),
   relatedEntityType: z.enum(['project', 'customer', 'partner']).optional().nullable(),
   relatedEntityId: z.number().int().positive().optional().nullable(),

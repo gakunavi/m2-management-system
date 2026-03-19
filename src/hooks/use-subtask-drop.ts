@@ -16,7 +16,7 @@ import type { TaskListItem } from '@/types/task';
  * - 既に親を持つタスク（サブタスク）は再ネスト不可
  */
 
-const HOVER_THRESHOLD_MS = 1500;
+const HOVER_THRESHOLD_MS = 1000;
 
 export interface SubtaskDropState {
   /** サブタスク化モードが有効か */
@@ -86,32 +86,37 @@ export function useSubtaskDrop() {
     draggingTask: TaskListItem | null | undefined,
     overTask: TaskListItem | null | undefined,
   ) => {
-    // ホバー先が変わった or タスク上にいない → タイマーリセット
-    if (overTaskId !== hoveringOverRef.current) {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      hoveringOverRef.current = overTaskId;
+    // nullは一瞬の空白（行間をまたぐ時など）→ タイマーを維持
+    if (overTaskId === null) return;
 
-      // サブタスク化モードを解除
-      setState((prev) => {
-        if (prev.isSubtaskMode) {
-          return { ...prev, isSubtaskMode: false, targetTaskId: null };
-        }
-        return prev;
-      });
+    // 同じタスクの上 → 何もしない（タイマー継続）
+    if (overTaskId === hoveringOverRef.current) return;
 
-      // バリデーション通過時のみタイマー開始
-      if (overTaskId != null && canBecomeSubtask(draggingTask, overTask)) {
-        timerRef.current = setTimeout(() => {
-          setState({
-            isSubtaskMode: true,
-            targetTaskId: overTaskId,
-            draggingTaskId: draggingIdRef.current,
-          });
-        }, HOVER_THRESHOLD_MS);
+    // 別のタスクに移動 → タイマーリセット
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    hoveringOverRef.current = overTaskId;
+
+    // サブタスク化モードを解除
+    setState((prev) => {
+      if (prev.isSubtaskMode) {
+        return { ...prev, isSubtaskMode: false, targetTaskId: null };
       }
+      return prev;
+    });
+
+    // バリデーション通過時のみタイマー開始
+    const valid = canBecomeSubtask(draggingTask, overTask);
+    if (valid) {
+      timerRef.current = setTimeout(() => {
+        setState({
+          isSubtaskMode: true,
+          targetTaskId: overTaskId,
+          draggingTaskId: draggingIdRef.current,
+        });
+      }, HOVER_THRESHOLD_MS);
     }
   }, []);
 
