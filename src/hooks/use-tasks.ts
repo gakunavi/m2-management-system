@@ -88,15 +88,16 @@ export function useTaskList(params: TaskListParams) {
 // タスクダッシュボード
 // ============================================
 
+export interface TaskDashboardSection {
+  count: number;
+  items: TaskListItem[];
+}
+
 export interface TaskDashboardData {
-  summary: {
-    todo: number;
-    inProgress: number;
-    overdue: number;
-    total: number;
-  };
-  upcoming: TaskListItem[];
-  overdue: TaskListItem[];
+  myTasks: TaskDashboardSection;
+  upcoming: TaskDashboardSection;
+  overdue: TaskDashboardSection;
+  withDueDate: TaskDashboardSection;
 }
 
 export function useTaskDashboard() {

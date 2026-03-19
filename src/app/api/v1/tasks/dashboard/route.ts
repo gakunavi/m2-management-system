@@ -33,76 +33,75 @@ export async function GET() {
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const sevenDaysLater = new Date(todayStart);
-    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+    const threeDaysLater = new Date(todayStart);
+    threeDaysLater.setDate(threeDaysLater.getDate() + 3);
 
     const baseWhere = {
       assignees: { some: { userId: user.id } },
       isArchived: false,
       parentTaskId: null,
+      status: { notIn: ['done'] as string[] },
     };
 
-    // Summary counts
-    const [todoCount, inProgressCount, overdueCount, totalCount] = await Promise.all([
-      prisma.task.count({
-        where: { ...baseWhere, status: 'todo' },
+    // 4つのクエリを並列実行
+    const [myTasks, upcomingTasks, overdueTasks, withDueDateTasks] = await Promise.all([
+      // 1. マイタスク（全アクティブタスク、最新5件）
+      prisma.task.findMany({
+        where: baseWhere,
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        include: taskListInclude,
       }),
-      prisma.task.count({
-        where: { ...baseWhere, status: 'in_progress' },
-      }),
-      prisma.task.count({
+      // 2. 期限間近マイタスク（3日以内、期限順）
+      prisma.task.findMany({
         where: {
           ...baseWhere,
-          status: { notIn: ['done'] },
+          dueDate: {
+            gte: todayStart,
+            lte: threeDaysLater,
+          },
+        },
+        orderBy: { dueDate: 'asc' },
+        take: 5,
+        include: taskListInclude,
+      }),
+      // 3. 期限超過マイタスク（期限切れ、新しい順）
+      prisma.task.findMany({
+        where: {
+          ...baseWhere,
           dueDate: { lt: todayStart },
         },
+        orderBy: { dueDate: 'desc' },
+        take: 5,
+        include: taskListInclude,
       }),
-      prisma.task.count({
+      // 4. 期限付きマイタスク（期限があるもの、期限順）
+      prisma.task.findMany({
         where: {
           ...baseWhere,
-          status: { notIn: ['done'] },
+          dueDate: { not: null },
         },
+        orderBy: { dueDate: 'asc' },
+        take: 5,
+        include: taskListInclude,
       }),
     ]);
 
-    // Upcoming tasks (due within 7 days, not done, ordered by dueDate asc)
-    const upcomingTasks = await prisma.task.findMany({
-      where: {
-        ...baseWhere,
-        status: { notIn: ['done'] },
-        dueDate: {
-          gte: todayStart,
-          lte: sevenDaysLater,
-        },
-      },
-      orderBy: { dueDate: 'asc' },
-      take: 5,
-      include: taskListInclude,
-    });
-
-    // Overdue tasks (past due, not done, ordered by dueDate desc)
-    const overdueTasks = await prisma.task.findMany({
-      where: {
-        ...baseWhere,
-        status: { notIn: ['done'] },
-        dueDate: { lt: todayStart },
-      },
-      orderBy: { dueDate: 'desc' },
-      take: 5,
-      include: taskListInclude,
-    });
+    // カウントも並列取得
+    const [myTasksCount, upcomingCount, overdueCount, withDueDateCount] = await Promise.all([
+      prisma.task.count({ where: baseWhere }),
+      prisma.task.count({ where: { ...baseWhere, dueDate: { gte: todayStart, lte: threeDaysLater } } }),
+      prisma.task.count({ where: { ...baseWhere, dueDate: { lt: todayStart } } }),
+      prisma.task.count({ where: { ...baseWhere, dueDate: { not: null } } }),
+    ]);
 
     return NextResponse.json({
       success: true,
       data: {
-        summary: {
-          todo: todoCount,
-          inProgress: inProgressCount,
-          overdue: overdueCount,
-          total: totalCount,
-        },
-        upcoming: upcomingTasks.map(formatTaskListItem),
-        overdue: overdueTasks.map(formatTaskListItem),
+        myTasks: { count: myTasksCount, items: myTasks.map(formatTaskListItem) },
+        upcoming: { count: upcomingCount, items: upcomingTasks.map(formatTaskListItem) },
+        overdue: { count: overdueCount, items: overdueTasks.map(formatTaskListItem) },
+        withDueDate: { count: withDueDateCount, items: withDueDateTasks.map(formatTaskListItem) },
       },
     });
   } catch (error) {

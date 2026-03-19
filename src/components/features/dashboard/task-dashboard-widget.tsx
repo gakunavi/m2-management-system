@@ -1,11 +1,13 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import Link from 'next/link';
-import { ListTodo, AlertTriangle, Calendar, ArrowRight } from 'lucide-react';
+import { ListTodo, AlertTriangle, Clock, Calendar, ArrowRight, Circle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTaskDashboard } from '@/hooks/use-tasks';
+import { TASK_PRIORITY_OPTIONS } from '@/types/task';
 import type { TaskListItem } from '@/types/task';
+import type { TaskDashboardSection } from '@/hooks/use-tasks';
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -13,23 +15,115 @@ function formatDate(dateStr: string | null): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function TaskRow({ task, isOverdue }: { task: TaskListItem; isOverdue?: boolean }) {
+// ============================================
+// タスク行
+// ============================================
+
+function TaskRow({ task, highlight }: { task: TaskListItem; highlight?: 'overdue' | 'upcoming' }) {
+  const priorityDef = TASK_PRIORITY_OPTIONS.find((p) => p.value === task.priority);
+  const assignees = (task as unknown as { assignees?: { id: number; userName: string }[] }).assignees ?? [];
+  const assigneeLabel = assignees.length === 0 ? '' : assignees.length === 1 ? assignees[0].userName : `${assignees[0].userName} +${assignees.length - 1}`;
+
   return (
     <Link
       href="/tasks"
-      className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors"
+      className={cn(
+        'flex items-center gap-2 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted/60',
+        highlight === 'overdue' && 'bg-red-50/50',
+      )}
     >
-      <span className={cn('truncate', isOverdue && 'text-red-600')}>
-        {task.taskNo} {task.title}
+      <Circle
+        className="h-2 w-2 flex-shrink-0"
+        fill={priorityDef?.color ?? '#94a3b8'}
+        stroke="none"
+      />
+      <span className={cn('flex-1 truncate', highlight === 'overdue' && 'text-red-700 font-medium')}>
+        {task.title}
       </span>
+      {assigneeLabel && (
+        <span className="text-[11px] text-muted-foreground truncate max-w-[60px] hidden sm:inline">
+          {assigneeLabel}
+        </span>
+      )}
       {task.dueDate && (
-        <span className={cn('shrink-0 text-xs', isOverdue ? 'text-red-500' : 'text-muted-foreground')}>
-          ({formatDate(task.dueDate)})
+        <span className={cn(
+          'text-[11px] flex-shrink-0',
+          highlight === 'overdue' ? 'text-red-500 font-medium' : highlight === 'upcoming' ? 'text-orange-500 font-medium' : 'text-muted-foreground',
+        )}>
+          {formatDate(task.dueDate)}
         </span>
       )}
     </Link>
   );
 }
+
+// ============================================
+// セクション
+// ============================================
+
+function DashboardSection({
+  icon,
+  label,
+  section,
+  highlight,
+  iconColor,
+  defaultOpen = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  section: TaskDashboardSection;
+  highlight?: 'overdue' | 'upcoming';
+  iconColor?: string;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 w-full px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+      >
+        <span className={iconColor}>{icon}</span>
+        <span className="text-sm font-medium flex-1">{label}</span>
+        <span className={cn(
+          'text-xs font-bold px-2 py-0.5 rounded-full',
+          section.count > 0 && highlight === 'overdue' ? 'bg-red-100 text-red-700' :
+          section.count > 0 ? 'bg-muted text-foreground' : 'bg-muted text-muted-foreground',
+        )}>
+          {section.count}
+        </span>
+        <span className="text-muted-foreground text-xs">{isOpen ? '▼' : '▶'}</span>
+      </button>
+
+      {isOpen && (
+        <div className="border-t">
+          {section.items.length > 0 ? (
+            <div className="divide-y divide-border/50">
+              {section.items.map((task) => (
+                <TaskRow key={task.id} task={task} highlight={highlight} />
+              ))}
+              {section.count > section.items.length && (
+                <Link
+                  href="/tasks"
+                  className="block px-3 py-2 text-xs text-center text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  他 {section.count - section.items.length} 件を表示 →
+                </Link>
+              )}
+            </div>
+          ) : (
+            <p className="px-3 py-4 text-sm text-muted-foreground text-center">対象のマイタスクはありません</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// メインウィジェット
+// ============================================
 
 export const TaskDashboardWidget = memo(function TaskDashboardWidget() {
   const { data, isLoading } = useTaskDashboard();
@@ -41,7 +135,7 @@ export const TaskDashboardWidget = memo(function TaskDashboardWidget() {
           <ListTodo className="h-5 w-5 text-muted-foreground" />
           <h3 className="font-semibold">マイタスク</h3>
         </div>
-        <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+        <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
           読み込み中...
         </div>
       </div>
@@ -50,79 +144,54 @@ export const TaskDashboardWidget = memo(function TaskDashboardWidget() {
 
   if (!data) return null;
 
-  const { summary, upcoming, overdue } = data;
-  const hasNoTasks = summary.total === 0 && overdue.length === 0 && upcoming.length === 0;
-
   return (
     <div className="rounded-lg border bg-card p-5">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <ListTodo className="h-5 w-5 text-muted-foreground" />
-        <h3 className="font-semibold">マイタスク</h3>
-      </div>
-
-      {/* Summary badges */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-          未着手 {summary.todo}
-        </span>
-        <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-          進行中 {summary.inProgress}
-        </span>
-        {summary.overdue > 0 && (
-          <span className="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
-            期限超過 {summary.overdue}
-          </span>
-        )}
-      </div>
-
-      {hasNoTasks ? (
-        <div className="h-20 flex items-center justify-center text-muted-foreground text-sm">
-          タスクはありません
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ListTodo className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-semibold">マイタスク</h3>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Overdue section */}
-          {overdue.length > 0 && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <AlertTriangle className="h-4 w-4 text-red-500" />
-                <span className="text-sm font-medium text-red-600">期限超過</span>
-              </div>
-              <div className="space-y-0.5">
-                {overdue.map((task) => (
-                  <TaskRow key={task.id} task={task} isOverdue />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upcoming section */}
-          {upcoming.length > 0 && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">今後7日</span>
-              </div>
-              <div className="space-y-0.5">
-                {upcoming.map((task) => (
-                  <TaskRow key={task.id} task={task} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Footer link */}
-      <div className="mt-4 pt-3 border-t">
         <Link
           href="/tasks"
-          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          タスク管理を開く
-          <ArrowRight className="h-3.5 w-3.5" />
+          すべて表示
+          <ArrowRight className="h-3 w-3" />
         </Link>
+      </div>
+
+      {/* 4セクション */}
+      <div className="space-y-2">
+        <DashboardSection
+          icon={<ListTodo className="h-4 w-4" />}
+          label="マイタスク"
+          section={data.myTasks}
+          iconColor="text-blue-500"
+          defaultOpen
+        />
+        <DashboardSection
+          icon={<Clock className="h-4 w-4" />}
+          label="期限間近マイタスク"
+          section={data.upcoming}
+          highlight="upcoming"
+          iconColor="text-orange-500"
+          defaultOpen={data.upcoming.count > 0}
+        />
+        <DashboardSection
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="期限超過マイタスク"
+          section={data.overdue}
+          highlight="overdue"
+          iconColor="text-red-500"
+          defaultOpen={data.overdue.count > 0}
+        />
+        <DashboardSection
+          icon={<Calendar className="h-4 w-4" />}
+          label="期限付きマイタスク"
+          section={data.withDueDate}
+          iconColor="text-muted-foreground"
+        />
       </div>
     </div>
   );
