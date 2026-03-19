@@ -262,4 +262,151 @@ export const aiFunctions: ChatCompletionTool[] = [
       },
     },
   },
+  // ============================================
+  // タスク管理系
+  // ============================================
+  {
+    type: 'function',
+    function: {
+      name: 'get_my_tasks',
+      description:
+        '自分が担当しているタスクの一覧を取得します。「今日のタスクは？」「期限超過のタスクは？」「マイタスクを見せて」などの質問に使います。',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['todo', 'in_progress', 'done', 'on_hold'],
+            description: 'ステータスでフィルター。省略時は完了以外の全ステータス。',
+          },
+          due_filter: {
+            type: 'string',
+            enum: ['overdue', 'today', 'this_week', 'all'],
+            description:
+              '期限フィルター。overdue=期限超過、today=今日期限、this_week=今週期限、all=全て。省略時はall。',
+          },
+          board_id: {
+            type: 'number',
+            description: 'ボードIDでフィルター。省略時は全ボード+マイタスク。',
+          },
+          limit: {
+            type: 'number',
+            description: '取得件数上限。デフォルト10。',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_task_detail',
+      description:
+        'タスク番号またはIDでタスクの詳細情報を取得します。「TASK-0001の詳細は？」「タスクID 5の状況は？」などの質問に使います。',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_no: {
+            type: 'string',
+            description: 'タスク番号。例: "TASK-0001"',
+          },
+          task_id: {
+            type: 'number',
+            description: 'タスクID。task_noが指定されている場合は不要。',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_board_tasks',
+      description:
+        'グループボードのタスク一覧を取得します。「営業チームのタスクは？」「ボードの状況は？」などの質問に使います。',
+      parameters: {
+        type: 'object',
+        properties: {
+          board_id: {
+            type: 'number',
+            description: 'ボードID。必須。',
+          },
+          status: {
+            type: 'string',
+            enum: ['todo', 'in_progress', 'done', 'on_hold'],
+            description: 'ステータスでフィルター。省略時は全ステータス。',
+          },
+          limit: {
+            type: 'number',
+            description: '取得件数上限。デフォルト20。',
+          },
+        },
+        required: ['board_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_task',
+      description:
+        '新しいタスクを作成します。「A社への提案タスクを作成して」「明日までにレポートを書くタスクを追加」などの指示に使います。',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'タスク名。必須。',
+          },
+          description: {
+            type: 'string',
+            description: '説明文。省略可。',
+          },
+          priority: {
+            type: 'string',
+            enum: ['urgent', 'high', 'medium', 'low'],
+            description: '優先度。デフォルトはmedium。',
+          },
+          due_date: {
+            type: 'string',
+            description: '期限。YYYY-MM-DD形式。省略可。',
+          },
+          board_id: {
+            type: 'number',
+            description: 'ボードID。省略時はマイタスク。',
+          },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task_status',
+      description:
+        'タスクのステータスを変更します。「TASK-0001を完了にして」「タスクID 3を進行中にして」などの指示に使います。',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_no: {
+            type: 'string',
+            description: 'タスク番号。例: "TASK-0001"',
+          },
+          task_id: {
+            type: 'number',
+            description: 'タスクID。task_noが指定されている場合は不要。',
+          },
+          status: {
+            type: 'string',
+            enum: ['todo', 'in_progress', 'done', 'on_hold'],
+            description: '変更先のステータス。必須。',
+          },
+        },
+        required: ['status'],
+      },
+    },
+  },
 ];

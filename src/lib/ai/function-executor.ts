@@ -20,6 +20,7 @@ import {
   getRevenueMonth,
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
+import { generateTaskNo } from '@/lib/task-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 interface UserContext {
@@ -900,6 +901,299 @@ export async function executeGetPartnerPerformanceChange(
 }
 
 // ============================================
+// get_my_tasks
+// ============================================
+
+export async function executeGetMyTasks(
+  args: { status?: string; due_filter?: string; board_id?: number; limit?: number },
+  user: UserContext,
+): Promise<string> {
+  const limit = Math.min(50, args.limit ?? 10);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const where: Record<string, unknown> = {
+    assignees: { some: { userId: user.id } },
+    isArchived: false,
+    parentTaskId: null,
+  };
+
+  if (args.status) {
+    where.status = args.status;
+  } else {
+    where.status = { not: 'done' };
+  }
+
+  if (args.board_id) {
+    where.boardId = args.board_id;
+  }
+
+  // 期限フィルター
+  if (args.due_filter === 'overdue') {
+    where.dueDate = { lt: today };
+    where.status = { not: 'done' };
+  } else if (args.due_filter === 'today') {
+    const tomorrow = new Date(today);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    where.dueDate = { gte: today, lt: tomorrow };
+  } else if (args.due_filter === 'this_week') {
+    const endOfWeek = new Date(today);
+    const dayOfWeek = endOfWeek.getUTCDay();
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    endOfWeek.setUTCDate(endOfWeek.getUTCDate() + daysUntilSunday);
+    endOfWeek.setUTCHours(23, 59, 59, 999);
+    where.dueDate = { gte: today, lte: endOfWeek };
+  }
+
+  const tasks = await prisma.task.findMany({
+    where,
+    include: {
+      assignees: { select: { userName: true } },
+      column: { select: { name: true } },
+      tags: { include: { tag: { select: { name: true, color: true } } } },
+      board: { select: { name: true } },
+    },
+    orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }],
+    take: limit,
+  });
+
+  const result = tasks.map((t) => ({
+    taskNo: t.taskNo,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+    dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+    boardName: t.board?.name ?? 'マイタスク',
+    columnName: t.column?.name ?? null,
+    assignees: t.assignees.map((a) => a.userName).join(', '),
+    tags: t.tags.map((tt) => tt.tag.name).join(', '),
+  }));
+
+  return JSON.stringify({ tasks: result, totalShown: result.length });
+}
+
+// ============================================
+// get_task_detail
+// ============================================
+
+export async function executeGetTaskDetail(
+  args: { task_no?: string; task_id?: number },
+  _user: UserContext, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<string> {
+  if (!args.task_no && !args.task_id) {
+    return JSON.stringify({ error: 'task_no または task_id を指定してください' });
+  }
+
+  const where: Record<string, unknown> = {};
+  if (args.task_no) {
+    where.taskNo = args.task_no;
+  } else {
+    where.id = args.task_id;
+  }
+
+  const task = await prisma.task.findFirst({
+    where,
+    include: {
+      assignees: { select: { userName: true } },
+      column: { select: { name: true } },
+      tags: { include: { tag: { select: { name: true, color: true } } } },
+      board: { select: { name: true } },
+      children: {
+        select: { taskNo: true, title: true, status: true, priority: true },
+        where: { isArchived: false },
+      },
+      attachments: { select: { id: true } },
+      createdBy: { select: { userName: true } },
+    },
+  });
+
+  if (!task) {
+    const identifier = args.task_no ?? `ID:${args.task_id}`;
+    return JSON.stringify({ error: `タスク ${identifier} が見つかりません` });
+  }
+
+  const checklist = (task.checklist ?? []) as Array<{ text: string; checked: boolean }>;
+  const checklistDone = checklist.filter((c) => c.checked).length;
+
+  return JSON.stringify({
+    taskNo: task.taskNo,
+    title: task.title,
+    description: task.description ?? null,
+    status: task.status,
+    priority: task.priority,
+    dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+    boardName: task.board?.name ?? 'マイタスク',
+    columnName: task.column?.name ?? null,
+    assignees: task.assignees.map((a) => a.userName),
+    tags: task.tags.map((tt) => tt.tag.name),
+    createdBy: task.createdBy?.userName ?? '-',
+    createdAt: task.createdAt.toISOString().slice(0, 10),
+    updatedAt: task.updatedAt.toISOString().slice(0, 10),
+    completedAt: task.completedAt ? task.completedAt.toISOString().slice(0, 10) : null,
+    memo: task.memo ?? null,
+    taskUrl: task.taskUrl ?? null,
+    checklist: { total: checklist.length, done: checklistDone },
+    subtasks: task.children.map((c) => ({
+      taskNo: c.taskNo,
+      title: c.title,
+      status: c.status,
+      priority: c.priority,
+    })),
+    attachmentCount: task.attachments.length,
+  });
+}
+
+// ============================================
+// get_board_tasks
+// ============================================
+
+export async function executeGetBoardTasks(
+  args: { board_id: number; status?: string; limit?: number },
+  _user: UserContext, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<string> {
+  const limit = Math.min(50, args.limit ?? 20);
+
+  const board = await prisma.taskBoard.findUnique({
+    where: { id: args.board_id },
+    select: { id: true, name: true },
+  });
+  if (!board) return JSON.stringify({ error: `ボードID ${args.board_id} が見つかりません` });
+
+  const where: Record<string, unknown> = {
+    boardId: args.board_id,
+    isArchived: false,
+    parentTaskId: null,
+  };
+  if (args.status) {
+    where.status = args.status;
+  }
+
+  const tasks = await prisma.task.findMany({
+    where,
+    include: {
+      assignees: { select: { userName: true } },
+      column: { select: { name: true } },
+      tags: { include: { tag: { select: { name: true } } } },
+    },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    take: limit,
+  });
+
+  const result = tasks.map((t) => ({
+    taskNo: t.taskNo,
+    title: t.title,
+    status: t.status,
+    priority: t.priority,
+    dueDate: t.dueDate ? t.dueDate.toISOString().slice(0, 10) : null,
+    columnName: t.column?.name ?? null,
+    assignees: t.assignees.map((a) => a.userName).join(', '),
+    tags: t.tags.map((tt) => tt.tag.name).join(', '),
+  }));
+
+  return JSON.stringify({ boardName: board.name, tasks: result, totalShown: result.length });
+}
+
+// ============================================
+// create_task
+// ============================================
+
+export async function executeCreateTask(
+  args: { title: string; description?: string; priority?: string; due_date?: string; board_id?: number },
+  user: UserContext,
+): Promise<string> {
+  const taskNo = await generateTaskNo();
+
+  const data: Record<string, unknown> = {
+    taskNo,
+    title: args.title,
+    description: args.description ?? null,
+    priority: args.priority ?? 'medium',
+    status: 'todo',
+    scope: 'company',
+    createdById: user.id,
+    boardId: args.board_id ?? null,
+  };
+
+  if (args.due_date) {
+    data.dueDate = new Date(args.due_date + 'T00:00:00.000Z');
+  }
+
+  const task = await prisma.task.create({
+    data: data as Parameters<typeof prisma.task.create>[0]['data'],
+  });
+
+  // 作成者を担当者として追加
+  const creator = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { userName: true },
+  });
+
+  await prisma.taskAssignee.create({
+    data: {
+      taskId: task.id,
+      userId: user.id,
+      userName: creator?.userName ?? 'Unknown',
+    },
+  });
+
+  return JSON.stringify({
+    message: 'タスクを作成しました',
+    taskNo: task.taskNo,
+    title: task.title,
+    priority: task.priority,
+    dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+    boardId: task.boardId,
+  });
+}
+
+// ============================================
+// update_task_status
+// ============================================
+
+export async function executeUpdateTaskStatus(
+  args: { task_no?: string; task_id?: number; status: string },
+  _user: UserContext, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<string> {
+  if (!args.task_no && !args.task_id) {
+    return JSON.stringify({ error: 'task_no または task_id を指定してください' });
+  }
+
+  const where: Record<string, unknown> = {};
+  if (args.task_no) {
+    where.taskNo = args.task_no;
+  } else {
+    where.id = args.task_id;
+  }
+
+  const task = await prisma.task.findFirst({ where, select: { id: true, taskNo: true } });
+  if (!task) {
+    const identifier = args.task_no ?? `ID:${args.task_id}`;
+    return JSON.stringify({ error: `タスク ${identifier} が見つかりません` });
+  }
+
+  const updateData: Record<string, unknown> = { status: args.status };
+  if (args.status === 'done') {
+    updateData.completedAt = new Date();
+  } else {
+    updateData.completedAt = null;
+  }
+
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: updateData,
+    select: { taskNo: true, title: true, status: true, completedAt: true },
+  });
+
+  return JSON.stringify({
+    message: `タスク ${updated.taskNo} のステータスを「${updated.status}」に変更しました`,
+    taskNo: updated.taskNo,
+    title: updated.title,
+    status: updated.status,
+    completedAt: updated.completedAt ? updated.completedAt.toISOString().slice(0, 10) : null,
+  });
+}
+
+// ============================================
 // メインディスパッチャー
 // ============================================
 
@@ -931,6 +1225,16 @@ export async function executeFunctionCall(
       return executeGetKpiComparison(args as { month_a: string; month_b: string; business_id?: number }, user);
     case 'get_partner_performance_change':
       return executeGetPartnerPerformanceChange(args as { month_a: string; month_b: string; business_id: number }, user);
+    case 'get_my_tasks':
+      return executeGetMyTasks(args as { status?: string; due_filter?: string; board_id?: number; limit?: number }, user);
+    case 'get_task_detail':
+      return executeGetTaskDetail(args as { task_no?: string; task_id?: number }, user);
+    case 'get_board_tasks':
+      return executeGetBoardTasks(args as { board_id: number; status?: string; limit?: number }, user);
+    case 'create_task':
+      return executeCreateTask(args as { title: string; description?: string; priority?: string; due_date?: string; board_id?: number }, user);
+    case 'update_task_status':
+      return executeUpdateTaskStatus(args as { task_no?: string; task_id?: number; status: string }, user);
     default:
       return JSON.stringify({ error: `未知の関数: ${functionName}` });
   }
