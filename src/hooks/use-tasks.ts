@@ -32,6 +32,8 @@ export interface TaskListParams {
   scope?: string;
   businessId?: number;
   boardId?: number;
+  myTasks?: string;
+  onlyMine?: string;
   status?: string;
   priority?: string;
   assigneeId?: number;
@@ -53,6 +55,8 @@ function buildTaskQueryString(params: TaskListParams): string {
   if (params.scope) sp.set('scope', params.scope);
   if (params.businessId) sp.set('businessId', String(params.businessId));
   if (params.boardId) sp.set('boardId', String(params.boardId));
+  if (params.myTasks) sp.set('myTasks', params.myTasks);
+  if (params.onlyMine) sp.set('onlyMine', params.onlyMine);
   if (params.status) sp.set('status', params.status);
   if (params.priority) sp.set('priority', params.priority);
   if (params.assigneeId) sp.set('assigneeId', String(params.assigneeId));
