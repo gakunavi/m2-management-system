@@ -99,7 +99,7 @@ export function TaskChecklist({ items, onChange }: TaskChecklistProps) {
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); }
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleAddItem(); }
           }}
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           placeholder="項目を追加..."

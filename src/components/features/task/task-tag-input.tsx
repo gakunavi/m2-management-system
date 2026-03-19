@@ -105,7 +105,7 @@ export function TaskTagInput({ selectedTagIds, onChange }: TaskTagInputProps) {
                     onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
                     className="w-20 rounded border px-1 py-0.5 text-xs"
                     autoFocus
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateTag(); if (e.key === 'Escape') setEditingTag(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleUpdateTag(); if (e.key === 'Escape') setEditingTag(null); }}
                   />
                   <div className="flex gap-0.5">
                     {DEFAULT_COLORS.map((c) => (

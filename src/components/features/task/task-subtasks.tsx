@@ -112,7 +112,7 @@ export function TaskSubtasks({ taskId, subtasks: children, parentTask, onNavigat
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); handleCreateSubtask(); }
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleCreateSubtask(); }
               if (e.key === 'Escape') { setShowAddForm(false); setNewTitle(''); }
             }}
             className="flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm"

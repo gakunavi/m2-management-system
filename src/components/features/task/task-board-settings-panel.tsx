@@ -81,7 +81,7 @@ export function TaskBoardSettingsPanel({ boardId, onClose, onDeleted }: TaskBoar
                   onChange={(e) => setEditName(e.target.value)}
                   className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm"
                   autoFocus
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateName(); if (e.key === 'Escape') setIsEditing(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleUpdateName(); if (e.key === 'Escape') setIsEditing(false); }}
                 />
                 <Button size="sm" onClick={handleUpdateName}>保存</Button>
                 <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>取消</Button>

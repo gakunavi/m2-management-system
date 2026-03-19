@@ -37,21 +37,52 @@ export function TasksClient() {
   const { user } = useAuth();
   const { updateTask, reorderTasks } = useTaskMutations();
 
-  // ビューモード
+  // ビューモード（ボードごとに保存）
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [, setViewModeLoaded] = useState(false);
-
-  // クライアントでlocalStorageから復元（hydrationミスマッチ防止）
-  useEffect(() => {
-    const saved = localStorage.getItem('task-view-mode') as ViewMode | null;
-    if (saved && ['list', 'kanban', 'calendar'].includes(saved)) {
-      setViewMode(saved);
-    }
-    setViewModeLoaded(true);
-  }, []);
+  const [clientReady, setClientReady] = useState(false);
 
   // タブ: 'my' = マイタスク, number = boardId
   const [activeTab, setActiveTab] = useState<'my' | number>('my');
+
+  // ボードごとの表示形式をlocalStorageで管理
+  const getViewModeKey = (tab: 'my' | number) => `task-view-mode-${tab === 'my' ? 'my' : `board-${tab}`}`;
+  const getDefaultBoardKey = () => `task-default-board-${user?.id ?? 'unknown'}`;
+
+  // クライアント初期化: デフォルトボード + 表示形式を復元
+  useEffect(() => {
+    const savedBoard = localStorage.getItem(getDefaultBoardKey());
+    let initialTab: 'my' | number = 'my';
+    if (savedBoard && savedBoard !== 'my') {
+      const boardId = parseInt(savedBoard, 10);
+      if (!isNaN(boardId)) initialTab = boardId;
+    }
+    setActiveTab(initialTab);
+
+    const savedView = localStorage.getItem(getViewModeKey(initialTab)) as ViewMode | null;
+    if (savedView && ['list', 'kanban', 'calendar'].includes(savedView)) {
+      setViewMode(savedView);
+    }
+    setClientReady(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ボード切替時: そのボードの保存済み表示形式に自動切替
+  const handleTabChange = useCallback((tab: 'my' | number) => {
+    setActiveTab(tab);
+    setPage(1);
+    localStorage.setItem(getDefaultBoardKey(), String(tab));
+    const savedView = localStorage.getItem(getViewModeKey(tab)) as ViewMode | null;
+    if (savedView && ['list', 'kanban', 'calendar'].includes(savedView)) {
+      setViewMode(savedView);
+    } else {
+      setViewMode('list'); // デフォルト
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 表示形式変更時: 現在のボードに紐づけて保存
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem(getViewModeKey(activeTab), mode);
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showBoardSettings, setShowBoardSettings] = useState<number | null>(null);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
 
@@ -118,16 +149,6 @@ export function TasksClient() {
 
   const tasks = taskData?.data ?? [];
   const meta = taskData?.meta;
-
-  const handleViewModeChange = useCallback((mode: ViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem('task-view-mode', mode);
-  }, []);
-
-  const handleTabChange = useCallback((tab: 'my' | number) => {
-    setActiveTab(tab);
-    setPage(1);
-  }, []);
 
   const handleSort = useCallback((field: string) => {
     setSort((prev) => {
@@ -458,7 +479,7 @@ function BoardCreateModal({ onClose, onCreate }: { onClose: () => void; onCreate
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               placeholder="例: 営業チーム、役員ボード..."
               autoFocus
-              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onCreate(name.trim()); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim()) onCreate(name.trim()); }}
             />
           </div>
         </div>
@@ -516,7 +537,7 @@ function ColumnEditModal({
               placeholder="例: 未着手、進行中、完了..."
               autoFocus
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && name.trim()) onSave(name.trim(), color);
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim()) onSave(name.trim(), color);
               }}
             />
           </div>
