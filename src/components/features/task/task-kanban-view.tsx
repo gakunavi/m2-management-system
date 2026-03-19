@@ -249,12 +249,12 @@ function TaskCardContent({
             style={{ backgroundColor: statusDef?.color ?? '#94a3b8' }}
           >
             {TASK_STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>ステータス：{o.label}</option>
             ))}
           </select>
         ) : (
           <span className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white" style={{ backgroundColor: statusDef?.color ?? '#94a3b8' }}>
-            {statusDef?.label ?? task.status}
+            ステータス：{statusDef?.label ?? task.status}
           </span>
         )}
         {(() => {
@@ -282,7 +282,7 @@ function TaskCardContent({
             style={{ backgroundColor: `${priorityDef?.color ?? '#94a3b8'}20`, color: priorityDef?.color ?? '#94a3b8' }}
           >
             {TASK_PRIORITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>優先度：{o.label}</option>
             ))}
           </select>
         ) : priorityDef && (
