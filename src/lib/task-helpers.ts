@@ -139,6 +139,7 @@ export function formatTaskListItem(task: any) {
     scope: task.scope,
     businessId: task.businessId,
     businessName: task.business?.businessName ?? null,
+    boardId: task.boardId ?? null,
     columnId: task.columnId ?? null,
     columnName: task.column?.name ?? null,
     sortOrder: task.sortOrder ?? 0,

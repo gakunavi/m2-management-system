@@ -45,6 +45,7 @@ export interface TaskListItem {
   parentTaskId: number | null;
   relatedEntityType: string | null;
   relatedEntityId: number | null;
+  boardId: number | null;
   columnId: number | null;
   columnName: string | null;
   notifyLevel: TaskNotifyLevel;

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight, ExternalLink, Archive, Users } from 'lucide-react';
+import { X, CheckSquare, ListTodo, Link2, StickyNote, ChevronRight, ExternalLink, Archive, Users, Copy, ArrowRightLeft, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useTaskDetail, useTaskMutations } from '@/hooks/use-tasks';
+import { useTaskDetail, useTaskMutations, useTaskBoards } from '@/hooks/use-tasks';
 import { useTaskAttachments } from '@/hooks/use-task-attachments';
 import { useAuth } from '@/hooks/use-auth';
 import { TaskChecklist } from './task-checklist';
@@ -37,10 +37,13 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
     ? navigationStack[0]
     : (task?.parentTaskId ?? null);
   const { data: parentTask } = useTaskDetail(parentIdForBreadcrumb);
-  const { updateTask, deleteTask } = useTaskMutations();
+  const { updateTask, deleteTask, copyTask, moveTask } = useTaskMutations();
   const { upload: attachmentUpload, remove: attachmentRemove } = useTaskAttachments(currentTaskId);
+  const { data: boards } = useTaskBoards();
   const { user, isAdmin } = useAuth();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
 
   // 子タスクに遷移
   const navigateToChild = useCallback((childId: number) => {
@@ -99,6 +102,35 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
     },
     [task, currentTaskId, updateTask],
   );
+
+  const handleCopy = async (targetBoardId?: number | null) => {
+    if (!task) return;
+    try {
+      await copyTask.mutateAsync({
+        id: currentTaskId,
+        boardId: targetBoardId,
+      });
+      setShowActionMenu(false);
+    } catch {
+      // エラーはmutation側で処理
+    }
+  };
+
+  const handleMove = async (targetBoardId: number | null) => {
+    if (!task) return;
+    try {
+      await moveTask.mutateAsync({
+        id: currentTaskId,
+        boardId: targetBoardId,
+        version: task.version,
+      });
+      setShowMoveMenu(false);
+      setShowActionMenu(false);
+      onClose();
+    } catch {
+      // エラーはmutation側で処理
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm('このタスクを削除しますか？サブタスクも全て削除されます。')) return;
@@ -180,9 +212,76 @@ export function TaskDetailPanel({ taskId: initialTaskId, onClose }: TaskDetailPa
                 </span>
               )}
             </div>
-            <button onClick={onClose} className="rounded-md p-2 sm:p-1 hover:bg-muted min-h-[44px] min-w-[44px] flex items-center justify-center">
-              <X className="h-5 w-5 sm:h-4 sm:w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {/* アクションメニュー（移動・コピー） */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowActionMenu(!showActionMenu)}
+                  className="rounded-md p-2 sm:p-1 hover:bg-muted min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  title="アクション"
+                >
+                  <MoreHorizontal className="h-5 w-5 sm:h-4 sm:w-4" />
+                </button>
+                {showActionMenu && (
+                  <>
+                    <div className="fixed inset-0 z-50" onClick={() => { setShowActionMenu(false); setShowMoveMenu(false); }} />
+                    <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border bg-background shadow-lg">
+                      {/* ボード間移動 */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowMoveMenu(!showMoveMenu)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                        >
+                          <ArrowRightLeft className="h-4 w-4" />
+                          ボードに移動
+                        </button>
+                        {showMoveMenu && (
+                          <div className="absolute left-0 top-full z-50 mt-0.5 w-56 rounded-md border bg-background shadow-lg max-h-64 overflow-y-auto">
+                            {/* マイタスクに移動 */}
+                            <button
+                              onClick={() => handleMove(null)}
+                              disabled={task.boardId === null}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              マイタスク
+                              {task.boardId === null && <span className="ml-auto text-xs text-muted-foreground">現在</span>}
+                            </button>
+                            <div className="border-t" />
+                            {(boards ?? []).map((board) => (
+                              <button
+                                key={board.id}
+                                onClick={() => handleMove(board.id)}
+                                disabled={task.boardId === board.id}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                {board.name}
+                                {task.boardId === board.id && <span className="ml-auto text-xs text-muted-foreground">現在</span>}
+                              </button>
+                            ))}
+                            {(!boards || boards.length === 0) && (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">ボードがありません</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="border-t" />
+                      {/* コピー */}
+                      <button
+                        onClick={() => handleCopy()}
+                        disabled={copyTask.isPending}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                      >
+                        <Copy className="h-4 w-4" />
+                        {copyTask.isPending ? 'コピー中...' : 'タスクをコピー'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={onClose} className="rounded-md p-2 sm:p-1 hover:bg-muted min-h-[44px] min-w-[44px] flex items-center justify-center">
+                <X className="h-5 w-5 sm:h-4 sm:w-4" />
+              </button>
+            </div>
           </div>
         </div>
 

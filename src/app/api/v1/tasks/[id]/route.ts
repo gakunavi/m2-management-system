@@ -120,7 +120,19 @@ export async function PATCH(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tagIds, notifyTargetUserIds, assigneeUserIds, assigneeNames, version: _version, checklist, dueDate, status, columnId, ...rest } = data;
+    const { tagIds, notifyTargetUserIds, assigneeUserIds, assigneeNames, version: _version, checklist, dueDate, status, columnId, boardId, ...rest } = data;
+
+    // ボード変更時は columnId をリセット（ボード間でカラムは共有されないため）
+    let resolvedColumnId = columnId;
+    if (boardId !== undefined) {
+      const currentTask = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: { boardId: true },
+      });
+      if (currentTask && boardId !== currentTask.boardId) {
+        resolvedColumnId = null;
+      }
+    }
 
     // ステータス変更に伴う completedAt の更新
     let completedAt: Date | null | undefined = undefined;
@@ -193,7 +205,8 @@ export async function PATCH(
         data: {
           ...rest,
           ...(status !== undefined ? { status } : {}),
-          ...(columnId !== undefined ? { columnId: columnId ?? null } : {}),
+          ...(resolvedColumnId !== undefined ? { columnId: resolvedColumnId ?? null } : {}),
+          ...(boardId !== undefined ? { boardId: boardId ?? null } : {}),
           ...(checklistValue !== undefined ? { checklist: checklistValue } : {}),
           ...(dueDateValue !== undefined ? { dueDate: dueDateValue } : {}),
           ...(completedAt !== undefined ? { completedAt } : {}),

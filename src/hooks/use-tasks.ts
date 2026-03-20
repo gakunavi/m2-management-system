@@ -164,7 +164,19 @@ export function useTaskMutations() {
     onSuccess: invalidateTasks,
   });
 
-  return { createTask, updateTask, deleteTask, reorderTasks };
+  const copyTask = useMutation({
+    mutationFn: ({ id, boardId }: { id: number; boardId?: number | null }) =>
+      apiClient.create<TaskListItem>(`/tasks/${id}/copy`, { boardId }),
+    onSuccess: invalidateTasks,
+  });
+
+  const moveTask = useMutation({
+    mutationFn: ({ id, boardId, version }: { id: number; boardId: number | null; version: number }) =>
+      apiClient.patch<TaskDetail>(`/tasks/${id}`, { boardId, version }),
+    onSuccess: invalidateTasks,
+  });
+
+  return { createTask, updateTask, deleteTask, reorderTasks, copyTask, moveTask };
 }
 
 // ============================================
