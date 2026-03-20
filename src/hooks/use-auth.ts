@@ -19,7 +19,7 @@ export interface AuthUser {
 }
 
 export function useAuth() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
 
   const user = useMemo((): AuthUser | null => {
     if (!session?.user) return null;
@@ -54,6 +54,10 @@ export function useAuth() {
     await nextAuthSignOut({ callbackUrl: '/login' });
   }, []);
 
+  const refreshSession = useCallback(async () => {
+    await update();
+  }, [update]);
+
   return {
     user,
     isLoading,
@@ -64,5 +68,6 @@ export function useAuth() {
     canDelete,
     isPartner,
     signOut,
+    refreshSession,
   };
 }

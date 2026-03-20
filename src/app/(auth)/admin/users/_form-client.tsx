@@ -121,7 +121,7 @@ interface Props {
 
 export function UserFormClient({ mode, userId }: Props) {
   const router = useRouter();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: currentUser, refreshSession } = useAuth();
   const { toast } = useToast();
 
   // 既存ユーザー取得（編集時）
@@ -197,7 +197,11 @@ export function UserFormClient({ mode, userId }: Props) {
       }
       return json;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // 自分自身を編集した場合、セッション（右上の名前表示等）を更新
+      if (mode === 'edit' && userId && currentUser && String(currentUser.id) === userId) {
+        await refreshSession();
+      }
       toast({
         type: 'success',
         message: mode === 'new' ? 'ユーザーを作成しました' : 'ユーザー情報を更新しました',
