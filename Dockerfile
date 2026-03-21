@@ -22,6 +22,11 @@ RUN npx prisma generate
 
 # Next.js ビルド（standalone 出力）
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# ビルド時に埋め込む公開環境変数（NEXT_PUBLIC_* はビルド時に必要）
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=""
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+
 RUN npm run build
 
 # ============================================
