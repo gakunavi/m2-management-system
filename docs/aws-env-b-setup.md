@@ -270,7 +270,8 @@ aws secretsmanager create-secret \
 ```
 
 > **注意**: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` はビルド時にクライアントJSに埋め込まれるため、
-> Secrets Managerではなく **ECSタスク定義の環境変数** に直接設定してください。
+> Secrets Managerではなく **GitHub Secrets → docker build --build-arg** で渡します。
+> `deploy-b.yml` で `NEXT_PUBLIC_VAPID_PUBLIC_KEY_B` として参照されます。
 
 ---
 
@@ -340,8 +341,12 @@ aws secretsmanager list-secrets --filter Key=name,Values=m2b/ \
 | Secret名 | 値 |
 |-----------|-----|
 | `AWS_ROLE_ARN_B` | `arn:aws:iam::367012942826:role/m2-github-actions-role` |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY_B` | 環境B用のVAPID公開鍵 |
 
-既存の `AWS_ROLE_ARN` (環境A) はそのまま残す。
+既存の `AWS_ROLE_ARN`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (環境A) はそのまま残す。
+
+> `NEXT_PUBLIC_VAPID_PUBLIC_KEY_B` はビルド時にNext.jsのクライアントJSに埋め込まれます。
+> `VAPID_PRIVATE_KEY` はSecrets Manager (`m2b/vapid-private-key`) で実行時に注入されます。
 
 ---
 
