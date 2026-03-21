@@ -262,7 +262,15 @@ aws secretsmanager create-secret \
 aws secretsmanager create-secret \
   --name m2b/cron-secret \
   --secret-string "$(openssl rand -hex 32)"
+
+# Web Push VAPID 秘密鍵（サーバー側のみ）
+aws secretsmanager create-secret \
+  --name m2b/vapid-private-key \
+  --secret-string "<VAPID秘密鍵>"
 ```
+
+> **注意**: `NEXT_PUBLIC_VAPID_PUBLIC_KEY` はビルド時にクライアントJSに埋め込まれるため、
+> Secrets Managerではなく **ECSタスク定義の環境変数** に直接設定してください。
 
 ---
 
