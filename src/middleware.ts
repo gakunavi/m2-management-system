@@ -150,7 +150,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // 静的ファイル・アイコン・アップロード画像を除外
-    '/((?!_next/static|_next/image|favicon|icon-|apple-touch-icon|uploads|manifest).*)',
+    // 静的ファイル・アイコン・SW・アップロード画像を除外
+    '/((?!_next/static|_next/image|favicon|icon-|apple-touch-icon|uploads|manifest|sw\\.js).*)',
   ],
 };

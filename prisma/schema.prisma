@@ -41,6 +41,7 @@ model User {
   createdInquiries           Inquiry[]                @relation("InquiryCreator")
   uploadedInquiryAttachments InquiryAttachment[]      @relation("InquiryAttachmentUploader")
   notifications              Notification[]
+  pushSubscriptions          PushSubscription[]
   createdBusinessDocuments   BusinessDocument[]       @relation("BusinessDocumentCreator")
   notifiedBusinessDocuments  BusinessDocument[]       @relation("BusinessDocumentNotifier")
   createdAnnouncements       Announcement[]           @relation("AnnouncementAuthor")
@@ -715,6 +716,22 @@ model Notification {
 
   @@index([userId, isRead, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  endpoint  String   @db.Text
+  p256dh    String   @db.VarChar(255)
+  auth      String   @db.VarChar(255)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 model BusinessDocument {

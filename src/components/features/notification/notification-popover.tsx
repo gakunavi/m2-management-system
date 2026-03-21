@@ -2,11 +2,12 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, CheckCheck, ArrowRightCircle, Info, AlertTriangle, Clock, Settings, FileText, CheckSquare } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, ArrowRightCircle, Info, AlertTriangle, Clock, Settings, FileText, CheckSquare, BellOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useNotifications } from '@/hooks/use-notifications';
+import { usePushSubscription } from '@/hooks/use-push-subscription';
 import type { NotificationType, NotificationItem } from '@/types/notification';
 
 const TYPE_CONFIG: Record<NotificationType, { icon: typeof Bell; className: string }> = {
@@ -44,6 +45,66 @@ function formatRelativeTime(dateStr: string): string {
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}日前`;
   return new Date(dateStr).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
+}
+
+function PushNotificationBanner() {
+  const { isSupported, permission, isSubscribed, isLoading, subscribe, unsubscribe } = usePushSubscription();
+
+  if (!isSupported) return null;
+
+  // 拒否済み
+  if (permission === 'denied') {
+    return (
+      <div className="px-3 py-2 border-b bg-muted/30">
+        <p className="text-xs text-muted-foreground">
+          <BellOff className="h-3 w-3 inline mr-1" />
+          プッシュ通知はブラウザ設定でブロックされています
+        </p>
+      </div>
+    );
+  }
+
+  // 購読済み
+  if (isSubscribed) {
+    return (
+      <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          <BellRing className="h-3 w-3 inline mr-1" />
+          プッシュ通知 ON
+        </p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 text-xs text-muted-foreground"
+          onClick={unsubscribe}
+          disabled={isLoading}
+        >
+          解除
+        </Button>
+      </div>
+    );
+  }
+
+  // 未許可 — 有効化を促す
+  return (
+    <div className="px-3 py-2 border-b bg-blue-50/50 dark:bg-blue-950/20">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-foreground">
+          <BellRing className="h-3 w-3 inline mr-1" />
+          プッシュ通知を受け取れます
+        </p>
+        <Button
+          variant="default"
+          size="sm"
+          className="h-6 text-xs"
+          onClick={subscribe}
+          disabled={isLoading}
+        >
+          {isLoading ? '設定中...' : '有効にする'}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function NotificationRow({
@@ -143,6 +204,9 @@ export function NotificationPopover() {
             </Button>
           )}
         </div>
+
+        {/* Push notification banner */}
+        <PushNotificationBanner />
 
         {/* Body */}
         <div className="max-h-96 overflow-y-auto">
