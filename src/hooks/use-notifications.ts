@@ -55,6 +55,26 @@ export function useNotifications(page = 1, pageSize = 20) {
     },
   });
 
+  const deleteNotification = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/v1/notifications/${id}/delete`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('通知を削除できませんでした');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: NOTIFICATION_KEY });
+    },
+  });
+
+  const deleteAll = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/notifications/delete-all', { method: 'DELETE' });
+      if (!res.ok) throw new Error('一括削除できませんでした');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: NOTIFICATION_KEY });
+    },
+  });
+
   return {
     notifications: data?.notifications ?? [],
     unreadCount: data?.unreadCount ?? 0,
@@ -62,6 +82,8 @@ export function useNotifications(page = 1, pageSize = 20) {
     isLoading,
     markAsRead,
     markAllAsRead,
+    deleteNotification,
+    deleteAll,
   };
 }
 

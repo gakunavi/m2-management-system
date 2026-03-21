@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, BellRing, CheckCheck, ArrowRightCircle, Info, AlertTriangle, Clock, Settings, FileText, CheckSquare, BellOff } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, ArrowRightCircle, Info, AlertTriangle, Clock, Settings, FileText, CheckSquare, X, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -47,61 +47,54 @@ function formatRelativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' });
 }
 
-function PushNotificationBanner() {
+function PushNotificationToggle() {
   const { isSupported, permission, isSubscribed, isLoading, subscribe, unsubscribe } = usePushSubscription();
 
   if (!isSupported) return null;
 
-  // 拒否済み
   if (permission === 'denied') {
     return (
       <div className="px-3 py-2 border-b bg-muted/30">
         <p className="text-xs text-muted-foreground">
-          <BellOff className="h-3 w-3 inline mr-1" />
           プッシュ通知はブラウザ設定でブロックされています
         </p>
       </div>
     );
   }
 
-  // 購読済み
-  if (isSubscribed) {
-    return (
-      <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          <BellRing className="h-3 w-3 inline mr-1" />
-          プッシュ通知 ON
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 text-xs text-muted-foreground"
-          onClick={unsubscribe}
-          disabled={isLoading}
-        >
-          解除
-        </Button>
-      </div>
-    );
-  }
+  const handleToggle = () => {
+    if (isLoading) return;
+    if (isSubscribed) {
+      unsubscribe();
+    } else {
+      subscribe();
+    }
+  };
 
-  // 未許可 — 有効化を促す
   return (
-    <div className="px-3 py-2 border-b bg-blue-50/50 dark:bg-blue-950/20">
+    <div className="px-3 py-2 border-b bg-muted/30">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-foreground">
-          <BellRing className="h-3 w-3 inline mr-1" />
-          プッシュ通知を受け取れます
-        </p>
-        <Button
-          variant="default"
-          size="sm"
-          className="h-6 text-xs"
-          onClick={subscribe}
+        <div className="flex items-center gap-1.5">
+          <BellRing className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs text-foreground">プッシュ通知</span>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isSubscribed}
+          aria-label="プッシュ通知の切替"
           disabled={isLoading}
+          onClick={handleToggle}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
+            isSubscribed ? 'bg-primary' : 'bg-input'
+          }`}
         >
-          {isLoading ? '設定中...' : '有効にする'}
-        </Button>
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ${
+              isSubscribed ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
       </div>
     </div>
   );
@@ -111,10 +104,12 @@ function NotificationRow({
   item,
   onRead,
   onNavigate,
+  onDelete,
 }: {
   item: NotificationItem;
   onRead: (id: number) => void;
   onNavigate: (path: string) => void;
+  onDelete: (id: number) => void;
 }) {
   const typeConf = TYPE_CONFIG[item.notificationType] ?? TYPE_CONFIG.system;
   const Icon = typeConf.icon;
@@ -125,11 +120,16 @@ function NotificationRow({
     if (path) onNavigate(path);
   }, [item.id, item.isRead, path, onRead, onNavigate]);
 
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete(item.id);
+  }, [item.id, onDelete]);
+
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b last:border-b-0 ${
+      className={`group w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors border-b last:border-b-0 ${
         !item.isRead ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''
       }`}
     >
@@ -137,12 +137,22 @@ function NotificationRow({
         <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${typeConf.className}`} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className={`text-sm leading-tight truncate ${!item.isRead ? 'font-medium' : ''}`}>
+            <p className={`text-sm leading-tight truncate flex-1 ${!item.isRead ? 'font-medium' : ''}`}>
               {item.notificationTitle}
             </p>
-            {!item.isRead && (
-              <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              {!item.isRead && (
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+              )}
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="h-5 w-5 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-muted-foreground/20 transition-opacity"
+                aria-label="通知を削除"
+              >
+                <X className="h-3 w-3 text-muted-foreground" />
+              </button>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
             {item.notificationMessage}
@@ -158,7 +168,7 @@ function NotificationRow({
 
 export function NotificationPopover() {
   const router = useRouter();
-  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, deleteNotification, deleteAll } = useNotifications();
 
   const handleRead = useCallback((id: number) => {
     markAsRead.mutate(id);
@@ -167,6 +177,10 @@ export function NotificationPopover() {
   const handleNavigate = useCallback((path: string) => {
     router.push(path);
   }, [router]);
+
+  const handleDelete = useCallback((id: number) => {
+    deleteNotification.mutate(id);
+  }, [deleteNotification]);
 
   return (
     <Popover>
@@ -191,22 +205,36 @@ export function NotificationPopover() {
               </span>
             )}
           </div>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => markAllAsRead.mutate()}
-              disabled={markAllAsRead.isPending}
-            >
-              <CheckCheck className="h-3.5 w-3.5 mr-1" />
-              すべて既読
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => markAllAsRead.mutate()}
+                disabled={markAllAsRead.isPending}
+              >
+                <CheckCheck className="h-3.5 w-3.5 mr-1" />
+                すべて既読
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={() => deleteAll.mutate()}
+                disabled={deleteAll.isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                すべて削除
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* Push notification banner */}
-        <PushNotificationBanner />
+        {/* Push notification toggle */}
+        <PushNotificationToggle />
 
         {/* Body */}
         <div className="max-h-96 overflow-y-auto">
@@ -234,6 +262,7 @@ export function NotificationPopover() {
                 item={n}
                 onRead={handleRead}
                 onNavigate={handleNavigate}
+                onDelete={handleDelete}
               />
             ))
           )}
