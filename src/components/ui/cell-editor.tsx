@@ -94,20 +94,28 @@ export function CellEditor({ config, value, onCommit, onCancel }: CellEditorProp
 
   if (config.type === 'textarea') {
     return (
-      <Textarea
-        ref={textareaRef}
-        defaultValue={strValue}
-        onBlur={(e) => onCommit(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            onCancel();
-          }
-        }}
-        placeholder={config.placeholder}
-        className="h-auto min-h-[60px] border-0 rounded-none focus-visible:ring-1 focus-visible:ring-ring text-sm p-1 resize-none"
-        rows={3}
-      />
+      <div className="flex flex-col w-full">
+        <Textarea
+          ref={textareaRef}
+          defaultValue={strValue}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              onCancel();
+            }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              onCommit((e.currentTarget as HTMLTextAreaElement).value);
+            }
+          }}
+          placeholder={config.placeholder}
+          className="h-auto min-h-[60px] border-0 rounded-none focus-visible:ring-1 focus-visible:ring-ring text-sm p-1 resize-none"
+          rows={3}
+        />
+        <div className="px-1 py-0.5 bg-muted/50 border-t text-[10px] text-muted-foreground">
+          Ctrl+Enter で保存
+        </div>
+      </div>
     );
   }
 

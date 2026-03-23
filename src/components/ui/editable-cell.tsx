@@ -56,7 +56,13 @@ export function EditableCell({
       // Radix の SelectContent はポータルにレンダーされるので data 属性で検知
       const portalEl = (target as Element).closest?.('[data-radix-popper-content-wrapper]');
       if (portalEl) return;
-      // セル外クリック → キャンセル
+      // textarea の場合はセル外クリックで保存を試みる
+      const textarea = cell.querySelector('textarea');
+      if (textarea) {
+        handleCommitRef.current(textarea.value);
+        return;
+      }
+      // その他はキャンセル
       handleCancelRef.current();
     };
 
