@@ -171,6 +171,15 @@ export function MovementsClient() {
     });
   }, [rawProjects, statusSort, monthSort, statusSortMap]);
 
+  // 最終・失注ステータスのコードSet（行グレーアウト用）
+  const inactiveStatusCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const s of allStatusDefs) {
+      if (s.statusIsFinal || s.statusIsLost) codes.add(s.statusCode);
+    }
+    return codes;
+  }, [allStatusDefs]);
+
   // テーブル幅の計算（案件情報 + ステップ数 * セル幅 + 営業ステータス）
   const minWidth = useMemo(() => 200 + templates.length * 120 + 140, [templates.length]);
 
@@ -337,13 +346,21 @@ export function MovementsClient() {
                 </div>
 
                 {/* データ行 */}
-                {projects.map((project) => (
+                {projects.map((project) => {
+                  const isInactive = inactiveStatusCodes.has(project.projectSalesStatus);
+                  return (
                   <div
                     key={project.id}
-                    className="border-b flex hover:bg-accent/30 transition-colors"
+                    className={cn(
+                      'border-b flex hover:bg-accent/30 transition-colors',
+                      isInactive && 'opacity-40',
+                    )}
                   >
                     <div
-                      className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 bg-card z-10 cursor-pointer hover:brightness-95 transition-all"
+                      className={cn(
+                        'w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 z-10 cursor-pointer hover:brightness-95 transition-all',
+                        isInactive ? 'bg-muted' : 'bg-card',
+                      )}
                       onClick={() => router.push(`/projects/${project.id}?from=/movements,案件ムーブメント`)}
                     >
                       <div className="text-sm font-medium truncate" title={project.customerName ?? ''}>
@@ -365,7 +382,10 @@ export function MovementsClient() {
                     </div>
 
                     <div
-                      className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex items-center justify-center sticky left-[200px] sm:left-[280px] bg-card z-10 cursor-pointer hover:brightness-95 transition-all"
+                      className={cn(
+                        'w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex items-center justify-center sticky left-[200px] sm:left-[280px] z-10 cursor-pointer hover:brightness-95 transition-all',
+                        isInactive ? 'bg-muted' : 'bg-card',
+                      )}
                       onClick={() => setModal({ type: 'salesStatus', project })}
                     >
                       {project.projectSalesStatusLabel ? (
@@ -465,7 +485,8 @@ export function MovementsClient() {
                       );
                     })}
                   </div>
-                ))}
+                  );
+                })}
 
                 {projects.length === 0 && (
                   <div className="px-6 py-12 text-center text-sm text-muted-foreground">

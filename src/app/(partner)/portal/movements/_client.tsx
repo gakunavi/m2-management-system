@@ -145,6 +145,15 @@ export function PortalMovementsClient() {
     });
   }, [rawProjects, statusSort, monthSort, statusSortMap]);
 
+  // 最終・失注ステータスのコードSet（行グレーアウト用）
+  const inactiveStatusCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const s of allStatusDefs) {
+      if (s.statusIsFinal || s.statusIsLost) codes.add(s.statusCode);
+    }
+    return codes;
+  }, [allStatusDefs]);
+
   const minWidth = useMemo(() => 200 + templates.length * 120 + 140, [templates.length]);
 
   if (!hasHydrated || !selectedBusinessId) return <LoadingSpinner />;
@@ -257,12 +266,20 @@ export function PortalMovementsClient() {
             </div>
 
             {/* データ行 */}
-            {projects.map((project) => (
+            {projects.map((project) => {
+              const isInactive = inactiveStatusCodes.has(project.projectSalesStatus);
+              return (
               <div
                 key={project.id}
-                className="border-b flex hover:bg-accent/30 transition-colors"
+                className={cn(
+                  'border-b flex hover:bg-accent/30 transition-colors',
+                  isInactive && 'opacity-40',
+                )}
               >
-                <div className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 bg-card z-10 hover:brightness-95 transition-all">
+                <div className={cn(
+                  'w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 z-10 hover:brightness-95 transition-all',
+                  isInactive ? 'bg-muted' : 'bg-card',
+                )}>
                   <div className="text-sm font-medium truncate" title={project.customerName ?? ''}>
                     {project.customerName ?? '顧客未設定'}
                   </div>
@@ -278,7 +295,10 @@ export function PortalMovementsClient() {
                   )}
                 </div>
 
-                <div className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex items-center justify-center sticky left-[200px] sm:left-[280px] bg-card z-10">
+                <div className={cn(
+                  'w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex items-center justify-center sticky left-[200px] sm:left-[280px] z-10',
+                  isInactive ? 'bg-muted' : 'bg-card',
+                )}>
                   {project.projectSalesStatusLabel ? (
                     <StatusBadge
                       label={project.projectSalesStatusLabel}
@@ -363,7 +383,8 @@ export function PortalMovementsClient() {
                   );
                 })}
               </div>
-            ))}
+              );
+            })}
 
             {projects.length === 0 && (
               <div className="px-6 py-12 text-center text-sm text-muted-foreground">
