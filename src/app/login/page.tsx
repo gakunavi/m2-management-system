@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // useSearchParams を使うコンポーネントを分離（Suspense boundary 必須）
 const PARTNER_DOMAIN = 'partner.gakunavi.co.jp';
@@ -26,6 +27,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +44,18 @@ function LoginForm() {
       setError('メールアドレスまたはパスワードが正しくありません');
       setIsLoading(false);
       return;
+    }
+
+    // 「ログイン状態を保持」がOFFの場合、セッションCookieに変換（ブラウザ閉じで消える）
+    if (!rememberMe) {
+      document.cookie.split(';').forEach((c) => {
+        const name = c.split('=')[0].trim();
+        if (name.includes('next-auth.session-token') || name.includes('__Secure-next-auth.session-token')) {
+          const value = c.split('=').slice(1).join('=');
+          // max-age を省略して再設定 → セッションCookieになる
+          document.cookie = `${name}=${value}; path=/;`;
+        }
+      });
     }
 
     const defaultRedirect = isPartnerDomain ? '/portal' : '/dashboard';
@@ -89,6 +103,17 @@ function LoginForm() {
             required
             autoComplete="current-password"
           />
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="rememberMe"
+            checked={rememberMe}
+            onCheckedChange={(checked) => setRememberMe(checked === true)}
+          />
+          <Label htmlFor="rememberMe" className="text-sm font-normal cursor-pointer">
+            ログイン状態を保持する
+          </Label>
         </div>
 
         <Button
