@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle, Circle, Play, SkipForward, Link2 } from 'lucide-react';
+import { CheckCircle, Circle, Play, SkipForward, XCircle, Link2 } from 'lucide-react';
 import { MovementEditModal } from '@/components/features/project/movement-edit-modal';
 import type { MovementData } from '@/components/features/project/movement-edit-modal';
 import { GanttChart, type ViewMode } from '@/components/features/project/gantt-chart';
@@ -25,6 +25,7 @@ const STATUS_CONFIG: Record<MovementStatus, { label: string; bg: string; iconCol
   started:   { label: '進行中',     bg: 'bg-blue-50',   iconColor: 'text-blue-600',   icon: Play },
   completed: { label: '完了',       bg: 'bg-green-50',  iconColor: 'text-green-600',  icon: CheckCircle },
   skipped:   { label: 'スキップ',   bg: 'bg-yellow-50', iconColor: 'text-yellow-600', icon: SkipForward },
+  unnecessary: { label: '不要',     bg: 'bg-gray-200',   iconColor: 'text-gray-500',   icon: XCircle },
 };
 
 function formatCompactDate(iso: string | null): string {
@@ -112,6 +113,10 @@ export function ProjectMovementsTab({ entityId }: Props) {
           <SkipForward className="h-3.5 w-3.5 text-yellow-600" />
           <span>スキップ</span>
         </div>
+        <div className="flex items-center gap-1">
+          <XCircle className="h-3.5 w-3.5 text-gray-500" />
+          <span>不要</span>
+        </div>
         <span className="text-muted-foreground">セルをクリックして編集</span>
       </div>
 
@@ -147,11 +152,24 @@ export function ProjectMovementsTab({ entityId }: Props) {
                   <div
                     key={movement.id}
                     className={cn(
-                      'w-[120px] sm:w-[140px] shrink-0 px-2 py-4 border-r flex flex-col items-center justify-center cursor-pointer hover:opacity-80 transition-opacity',
+                      'w-[120px] sm:w-[140px] shrink-0 px-2 py-4 border-r flex flex-col items-center justify-center cursor-pointer hover:opacity-80 transition-opacity relative',
                       config.bg,
+                      movement.movementStatus === 'unnecessary' && 'opacity-60',
                     )}
                     onClick={() => setEditingMovement(movement)}
                   >
+                    {/* 不要オーバーレイ: 対角線×で不要を示す */}
+                    {movement.movementStatus === 'unnecessary' && (
+                      <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+                        <div className="absolute inset-0" style={{
+                          background: 'linear-gradient(to top right, transparent calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% + 1px), transparent calc(50% + 1px))',
+                        }} />
+                        <div className="absolute inset-0" style={{
+                          background: 'linear-gradient(to bottom right, transparent calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% + 1px), transparent calc(50% + 1px))',
+                        }} />
+                      </div>
+                    )}
+
                     <Icon className={cn('h-5 w-5 mb-1.5', config.iconColor)} />
 
                     {/* 進捗バー */}
@@ -162,13 +180,18 @@ export function ProjectMovementsTab({ entityId }: Props) {
                           movement.movementStatus === 'completed' && 'bg-green-500 w-full',
                           movement.movementStatus === 'started' && 'bg-blue-500 w-full',
                           movement.movementStatus === 'skipped' && 'bg-yellow-500 w-full',
+                          movement.movementStatus === 'unnecessary' && 'bg-gray-400 w-full',
                           movement.movementStatus === 'pending' && 'bg-gray-300 w-0',
                         )}
                       />
                     </div>
 
                     {/* ステータスラベル */}
-                    <span className={cn('text-xs font-medium mb-1', config.iconColor)}>
+                    <span className={cn(
+                      'text-xs font-medium mb-1',
+                      config.iconColor,
+                      movement.movementStatus === 'unnecessary' && 'line-through',
+                    )}>
                       {config.label}
                     </span>
 

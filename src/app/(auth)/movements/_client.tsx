@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, CheckCircle, Circle, Play, SkipForward, LayoutGrid, GanttChartSquare } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, CheckCircle, Circle, Play, SkipForward, XCircle, LayoutGrid, GanttChartSquare } from 'lucide-react';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -32,6 +32,7 @@ const STATUS_CELL: Record<MovementStatus, { bg: string; icon: typeof CheckCircle
   started:   { bg: 'bg-blue-50',    icon: Play,        iconColor: 'text-blue-600' },
   completed: { bg: 'bg-green-50',   icon: CheckCircle, iconColor: 'text-green-600' },
   skipped:   { bg: 'bg-yellow-50',  icon: SkipForward, iconColor: 'text-yellow-600' },
+  unnecessary: { bg: 'bg-gray-200',  icon: XCircle,     iconColor: 'text-gray-500' },
 };
 
 function formatCompactDate(iso: string | null): string {
@@ -281,6 +282,10 @@ export function MovementsClient() {
                 <SkipForward className="h-3.5 w-3.5 text-yellow-600" />
                 <span>スキップ</span>
               </div>
+              <div className="flex items-center gap-1">
+                <XCircle className="h-3.5 w-3.5 text-gray-500" />
+                <span>不要</span>
+              </div>
             </div>
           </div>
 
@@ -392,12 +397,15 @@ export function MovementsClient() {
                       const config = STATUS_CELL[movement.movementStatus as MovementStatus] ?? STATUS_CELL.pending;
                       const Icon = config.icon;
 
+                      const isUnnecessary = movement.movementStatus === 'unnecessary';
+
                       return (
                         <div
                           key={template.id}
                           className={cn(
-                            'w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex flex-col items-center justify-center cursor-pointer hover:opacity-80 transition-opacity',
+                            'w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r flex flex-col items-center justify-center cursor-pointer hover:opacity-80 transition-opacity relative',
                             config.bg,
+                            isUnnecessary && 'opacity-60',
                           )}
                           onClick={() => {
                             const movementData: MovementData = {
@@ -412,6 +420,17 @@ export function MovementsClient() {
                             setModal({ type: 'movement', movement: movementData });
                           }}
                         >
+                          {/* 不要オーバーレイ: 対角線×で不要を示す */}
+                          {isUnnecessary && (
+                            <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+                              <div className="absolute inset-0" style={{
+                                background: 'linear-gradient(to top right, transparent calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% + 1px), transparent calc(50% + 1px))',
+                              }} />
+                              <div className="absolute inset-0" style={{
+                                background: 'linear-gradient(to bottom right, transparent calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% - 1px), rgb(156 163 175 / 0.5) calc(50% + 1px), transparent calc(50% + 1px))',
+                              }} />
+                            </div>
+                          )}
                           <Icon className={cn('h-4 w-4 mb-1', config.iconColor)} />
                           <div className="w-full bg-gray-200 rounded-full h-1 mb-1">
                             <div
@@ -420,6 +439,7 @@ export function MovementsClient() {
                                 movement.movementStatus === 'completed' && 'bg-green-500 w-full',
                                 movement.movementStatus === 'started' && 'bg-blue-500 w-full',
                                 movement.movementStatus === 'skipped' && 'bg-yellow-500 w-full',
+                                isUnnecessary && 'bg-gray-400 w-full',
                                 movement.movementStatus === 'pending' && 'bg-gray-300 w-0',
                               )}
                             />

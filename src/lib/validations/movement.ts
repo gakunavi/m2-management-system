@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const MOVEMENT_STATUSES = ['pending', 'started', 'completed', 'skipped'] as const;
+export const MOVEMENT_STATUSES = ['pending', 'started', 'completed', 'skipped', 'unnecessary'] as const;
 export type MovementStatus = (typeof MOVEMENT_STATUSES)[number];
 
 export const updateMovementSchema = z.object({

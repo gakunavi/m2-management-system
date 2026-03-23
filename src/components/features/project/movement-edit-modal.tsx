@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Circle, Play, CheckCircle, SkipForward, Link2 } from 'lucide-react';
+import { Circle, Play, CheckCircle, SkipForward, XCircle, Link2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -67,6 +67,7 @@ const STATUS_OPTIONS: { value: MovementStatus; label: string; icon: typeof Circl
   { value: 'started',   label: '進行中', icon: Play,        color: 'text-blue-600',   activeClass: 'bg-blue-600 text-white border-blue-600' },
   { value: 'completed', label: '完了',   icon: CheckCircle, color: 'text-green-600',  activeClass: 'bg-green-600 text-white border-green-600' },
   { value: 'skipped',   label: 'スキップ', icon: SkipForward, color: 'text-yellow-600', activeClass: 'bg-yellow-600 text-white border-yellow-600' },
+  { value: 'unnecessary', label: '不要',   icon: XCircle,     color: 'text-gray-500',   activeClass: 'bg-gray-600 text-white border-gray-600' },
 ];
 
 /** ISO文字列 → YYYY-MM-DD（date input用） */
@@ -118,6 +119,10 @@ export function MovementEditModal({
         setEndDate('');
         break;
       case 'skipped':
+        setEndDate('');
+        break;
+      case 'unnecessary':
+        setStartDate('');
         setEndDate('');
         break;
     }

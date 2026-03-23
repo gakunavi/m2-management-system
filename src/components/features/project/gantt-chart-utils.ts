@@ -345,6 +345,8 @@ export function getBarColorClasses(status: MovementStatus): string {
       return 'bg-blue-500';
     case 'skipped':
       return 'bg-gray-300 border border-dashed border-gray-400';
+    case 'unnecessary':
+      return 'bg-gray-300 border border-dashed border-gray-500';
     default:
       return 'bg-gray-200';
   }
@@ -356,6 +358,7 @@ export function getStatusLabel(status: MovementStatus): string {
     case 'completed': return '完了';
     case 'started': return '進行中';
     case 'skipped': return 'スキップ';
+    case 'unnecessary': return '不要';
     default: return '未着手';
   }
 }
