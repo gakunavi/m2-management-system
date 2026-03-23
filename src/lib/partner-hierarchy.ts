@@ -9,28 +9,24 @@ type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transa
 /**
  * 階層番号（tierNumber）を生成する
  *
- * - 1次代理店（parentId = null）: "1", "2", "3"…
- * - 2次代理店（parentId → 1次）: "1-1", "1-2"…
- * - 3次代理店（parentId → 2次）: "1-1-1", "1-1-2"…
+ * - 1次代理店（parentId = null）: 代理店コード（例: "AG-0001"）
+ * - 2次代理店（parentId → 1次）: 親のtierNumber + "-1", "-2"…
+ * - 3次代理店（parentId → 2次）: 親のtierNumber + "-1-1", "-1-2"…
+ *
+ * 兄弟の連番は既存MAXから+1（削除後も重複しない）
  */
 export async function generateTierNumber(
   tx: TxClient,
   partnerTier: string | null,
   parentId: number | null,
+  partnerCode: string,
 ): Promise<string | null> {
   // 階層ラベルが未設定なら tierNumber も null
   if (!partnerTier) return null;
 
   if (partnerTier === '1次代理店' || !parentId) {
-    // 1次代理店: ルートレベルの連番
-    const siblings = await tx.partner.count({
-      where: {
-        parentId: null,
-        partnerTier: '1次代理店',
-        partnerTierNumber: { not: null },
-      },
-    });
-    return String(siblings + 1);
+    // 1次代理店: 代理店コードそのもの
+    return partnerCode;
   }
 
   // 2次・3次: 親の tierNumber を取得して子連番を付与
@@ -40,14 +36,28 @@ export async function generateTierNumber(
   });
   if (!parent?.partnerTierNumber) return null;
 
-  const childCount = await tx.partner.count({
+  // 既存の兄弟から連番の最大値を取得
+  const siblings = await tx.partner.findMany({
     where: {
       parentId,
-      partnerTierNumber: { not: null },
+      partnerTierNumber: { not: null, startsWith: `${parent.partnerTierNumber}-` },
     },
+    select: { partnerTierNumber: true },
   });
 
-  return `${parent.partnerTierNumber}-${childCount + 1}`;
+  let maxSeq = 0;
+  const prefix = `${parent.partnerTierNumber}-`;
+  for (const s of siblings) {
+    if (!s.partnerTierNumber) continue;
+    const suffix = s.partnerTierNumber.slice(prefix.length);
+    // 直接の子の連番のみ（"-1" は OK、"-1-1" はスキップ）
+    if (!suffix.includes('-')) {
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+    }
+  }
+
+  return `${parent.partnerTierNumber}-${maxSeq + 1}`;
 }
 
 /**
@@ -89,6 +99,31 @@ export async function recalculateDescendantTierNumbers(
 
     // 再帰的に孫も更新
     await recalculateDescendantTierNumbers(tx, children[i].id);
+  }
+}
+
+/**
+ * 全代理店のグループ全体の階層番号を再計算する（マイグレーション用）
+ * 1次 → 代理店コード、N次 → 親のtierNumber + 連番
+ */
+export async function recalculateAllTierNumbers(
+  tx: TxClient,
+): Promise<void> {
+  // 1次代理店を全て更新: tierNumber = partnerCode
+  const roots = await tx.partner.findMany({
+    where: { partnerTier: '1次代理店' },
+    orderBy: { id: 'asc' },
+    select: { id: true, partnerCode: true },
+  });
+
+  for (const root of roots) {
+    await tx.partner.update({
+      where: { id: root.id },
+      data: { partnerTierNumber: root.partnerCode },
+    });
+
+    // 子孫を再帰的に再計算
+    await recalculateDescendantTierNumbers(tx, root.id);
   }
 }
 

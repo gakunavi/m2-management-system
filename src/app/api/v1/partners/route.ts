@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
       }
 
       const partnerCode = await generatePartnerCode();
-      const partnerTierNumber = await generateTierNumber(tx, partnerTier, effectiveParentId);
+      const partnerTierNumber = await generateTierNumber(tx, partnerTier, effectiveParentId, partnerCode);
 
       return tx.partner.create({
         data: {

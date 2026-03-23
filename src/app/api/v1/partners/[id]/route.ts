@@ -121,7 +121,7 @@ export async function PATCH(
 
     const current = await prisma.partner.findUnique({
       where: { id: partnerId },
-      select: { version: true, partnerIsActive: true, partnerTier: true, parentId: true, partnerName: true, partnerPhone: true },
+      select: { version: true, partnerIsActive: true, partnerTier: true, parentId: true, partnerName: true, partnerPhone: true, partnerCode: true },
     });
     if (!current) throw ApiError.notFound('代理店が見つかりません');
     if (!current.partnerIsActive) throw ApiError.notFound('代理店が見つかりません');
@@ -186,7 +186,7 @@ export async function PATCH(
       const tierChanged = newTier !== current.partnerTier;
       if (tierChanged || parentChanged) {
         const effectiveParentId = newTier === '1次代理店' ? null : newParentId;
-        partnerTierNumber = await generateTierNumber(tx, newTier, effectiveParentId);
+        partnerTierNumber = await generateTierNumber(tx, newTier, effectiveParentId, current.partnerCode);
       }
 
       const result = await tx.partner.update({

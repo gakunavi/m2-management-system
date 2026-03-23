@@ -44,6 +44,7 @@ export async function PATCH(
 
     const existing = await prisma.partnerBusinessLink.findFirst({
       where: { id: linkIdNum, partnerId },
+      include: { partner: { select: { partnerCode: true } } },
     });
     if (!existing) throw ApiError.notFound('事業リンクが見つかりません');
 
@@ -93,7 +94,7 @@ export async function PATCH(
         }
 
         // 階層番号生成
-        const businessTierNumber = await generateBusinessTierNumber(tx, existing.businessId, newTier, newParentId);
+        const businessTierNumber = await generateBusinessTierNumber(tx, existing.businessId, newTier, newParentId, existing.partner.partnerCode);
 
         // 更新
         await tx.partnerBusinessLink.update({
