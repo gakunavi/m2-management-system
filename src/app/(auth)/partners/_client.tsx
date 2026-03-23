@@ -1,15 +1,64 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState, useMemo, useCallback } from 'react';
+import { Link2 } from 'lucide-react';
 import { EntityListTemplate } from '@/components/templates/entity-list-template';
 import { partnerListConfig } from '@/config/entities/partner';
 import { useBusinessColumns } from '@/hooks/use-business-columns';
+import { useBusiness } from '@/hooks/use-business';
+import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { LinkPartnerToBusinessDialog } from '@/components/features/partner/link-partner-to-business-dialog';
 
 function PartnersPageContent() {
   const { config } = useBusinessColumns(partnerListConfig, 'partner');
+  const { businesses, selectedBusinessId } = useBusiness();
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  return <EntityListTemplate config={config} />;
+  const selectedBusiness = useMemo(
+    () => businesses.find((b) => b.id === selectedBusinessId),
+    [businesses, selectedBusinessId],
+  );
+
+  const handleLinkComplete = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  // 事業選択時: createAction でモーダル起動ボタンに差し替え
+  const finalConfig = useMemo(() => {
+    if (!selectedBusinessId || !selectedBusiness) return config;
+
+    return {
+      ...config,
+      createAction: {
+        label: '事業に代理店を紐付け',
+        render: () => (
+          <Button onClick={() => setLinkDialogOpen(true)}>
+            <Link2 className="mr-2 h-4 w-4" />
+            事業に代理店を紐付け
+          </Button>
+        ),
+      },
+      // createPathを無効にして通常の新規作成ボタンを非表示に
+      createPath: undefined,
+    };
+  }, [config, selectedBusinessId, selectedBusiness]);
+
+  return (
+    <>
+      <EntityListTemplate key={refreshKey} config={finalConfig} />
+      {selectedBusinessId && selectedBusiness && (
+        <LinkPartnerToBusinessDialog
+          businessId={selectedBusinessId}
+          businessName={selectedBusiness.businessName}
+          open={linkDialogOpen}
+          onOpenChange={setLinkDialogOpen}
+          onComplete={handleLinkComplete}
+        />
+      )}
+    </>
+  );
 }
 
 export function PartnersClient() {

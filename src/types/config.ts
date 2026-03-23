@@ -145,6 +145,11 @@ export type EntityListConfig = {
   detailPath: (id: number) => string;
   /** 新規作成ページのパス。undefined の場合は新規作成ボタンを非表示 */
   createPath?: string;
+  /** createPath の代わりにカスタムボタンを表示（事業選択時の紐付けモーダル等） */
+  createAction?: {
+    label: string;
+    render: () => ReactNode;
+  };
   businessScoped?: boolean;
   permissions?: {
     hideCreateButton?: string[];

@@ -383,7 +383,8 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
                 visibleColumnKeys={visibleColumnKeys}
               />
             )}
-            {!hideCreate && config.createPath && (
+            {!hideCreate && config.createAction && config.createAction.render()}
+            {!hideCreate && !config.createAction && config.createPath && (
               <Button onClick={() => router.push(config.createPath!)}>
                 <Plus className="mr-2 h-4 w-4" />
                 新規作成
@@ -445,7 +446,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
             title="データがありません"
             description="条件を変更するか、新しいデータを登録してください"
             action={
-              !hideCreate && config.createPath
+              !hideCreate && !config.createAction && config.createPath
                 ? { label: '新規作成', onClick: () => router.push(config.createPath!) }
                 : undefined
             }
