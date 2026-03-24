@@ -15,7 +15,6 @@ const updateBusinessSchema = z.object({
   businessCode: z.string().min(1).max(20).optional(),
   businessName: z.string().min(1).max(100).optional(),
   businessDescription: z.string().optional().nullable(),
-  businessProjectPrefix: z.string().max(10).optional().nullable(),
   businessConfig: z.record(z.unknown()).optional(),
   businessSortOrder: z.number().int().min(0).optional(),
   businessIsActive: z.boolean().optional(),

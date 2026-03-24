@@ -83,7 +83,6 @@ model Business {
   createdBy                   Int?                          @map("created_by")
   updatedBy                   Int?                          @map("updated_by")
   version                     Int                           @default(1)
-  businessProjectPrefix       String?                       @map("business_project_prefix") @db.VarChar(10)
   statusDefinitions           BusinessStatusDefinition[]
   customerBankAccounts        CustomerBankAccount[]
   customerLinks               CustomerBusinessLink[]

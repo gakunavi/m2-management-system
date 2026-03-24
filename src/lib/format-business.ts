@@ -9,7 +9,6 @@ export interface BusinessRow {
   businessName: string;
   businessDescription: string | null;
   businessConfig: unknown;
-  businessProjectPrefix: string | null;
   businessIsActive: boolean;
   businessSortOrder: number;
   version: number;

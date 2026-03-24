@@ -22,7 +22,6 @@ import type { EntityListConfig, EntityDetailConfig, EntityFormConfig } from '@/t
 interface BusinessConfigData {
   id: number;
   businessName: string;
-  businessProjectPrefix: string | null;
   businessConfig: {
     projectFields?: ProjectFieldDefinition[];
   } | null;

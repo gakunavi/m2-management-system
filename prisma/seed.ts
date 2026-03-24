@@ -73,7 +73,6 @@ async function main() {
         businessCode: 'moag',
         businessName: 'MOAG事業',
         businessDescription: 'MOAG（省エネ機器）の営業管理',
-        businessProjectPrefix: 'MG',
         businessConfig: {
           projectFields: [
             {
@@ -197,7 +196,6 @@ async function main() {
         businessCode: 'service_a',
         businessName: 'サービスA事業',
         businessDescription: 'サービスAの営業管理',
-        businessProjectPrefix: 'SA',
         businessConfig: {
           projectFields: [
             {

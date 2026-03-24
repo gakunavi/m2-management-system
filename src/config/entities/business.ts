@@ -147,7 +147,6 @@ export const businessDetailConfig: EntityDetailConfig = {
               { key: 'businessCode', label: '事業コード', type: 'text' },
               { key: 'businessName', label: '事業名', type: 'text', colSpan: 2 },
               { key: 'businessDescription', label: '説明', type: 'text', colSpan: 2 },
-              { key: 'businessProjectPrefix', label: '案件プレフィックス', type: 'text' },
             ],
           },
           {
@@ -228,13 +227,6 @@ export const businessFormConfig: EntityFormConfig = {
           type: 'text',
           required: true,
           placeholder: '例：moag',
-        },
-        {
-          key: 'businessProjectPrefix',
-          label: '案件プレフィックス',
-          type: 'text',
-          placeholder: '例：MG',
-          description: '案件番号の先頭に付く文字列（例: MG → MG-0001）',
         },
         {
           key: 'businessName',
