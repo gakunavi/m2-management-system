@@ -313,7 +313,7 @@ export const partnerListConfig: EntityListConfig = {
       label: '状態',
       type: 'boolean',
       trueLabel: '有効',
-      falseLabel: '無効（削除済み）',
+      falseLabel: '無効',
     },
     {
       key: 'partnerAddress',
