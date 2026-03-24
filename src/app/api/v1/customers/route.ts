@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
       ...whereDateRange(searchParams, 'createdAt'),
       ...whereNumberRange(searchParams, 'customerCapital'),
       ...whereDateRange(searchParams, 'customerEstablishedDate'),
-      ...(whereBoolean(searchParams, 'isActive', 'customerIsActive') ?? { customerIsActive: true }),
+      ...(whereBoolean(searchParams, 'isActive', 'customerIsActive') ?? {}),
       ...businessIdFilter,
     };
 

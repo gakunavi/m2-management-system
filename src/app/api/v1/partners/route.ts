@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
       ...whereContains(searchParams, 'partnerAddress'),
       ...whereDateRange(searchParams, 'createdAt'),
       ...whereDateRange(searchParams, 'partnerEstablishedDate'),
-      ...(whereBoolean(searchParams, 'isActive', 'partnerIsActive') ?? { partnerIsActive: true }),
+      ...(whereBoolean(searchParams, 'isActive', 'partnerIsActive') ?? {}),
       ...businessIdFilter,
     };
 

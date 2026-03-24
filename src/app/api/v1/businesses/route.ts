@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
           }
         : {}),
       ...whereDateRange(searchParams, 'createdAt'),
-      ...(whereBoolean(searchParams, 'isActive', 'businessIsActive') ?? { businessIsActive: true }),
+      ...(whereBoolean(searchParams, 'isActive', 'businessIsActive') ?? {}),
     };
 
     const orderBy = buildOrderBy(sortItems, BUSINESS_SORT_FIELDS, [{ field: 'businessSortOrder', direction: 'asc' }]);
