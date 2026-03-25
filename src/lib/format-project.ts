@@ -28,6 +28,7 @@ export function formatProject(project: ProjectWithRelations) {
     projectCustomData: project.projectCustomData,
     projectStatusChangedAt: project.projectStatusChangedAt?.toISOString() ?? null,
     projectIsActive: project.projectIsActive,
+    portalVisible: project.portalVisible,
     version: project.version,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
