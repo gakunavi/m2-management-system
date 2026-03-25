@@ -147,6 +147,27 @@ function compareByOptionOrder(
   return aIdx - bIdx;
 }
 
+/** 数値を含む文字列の自然順ソート（"MO-1","MO-2","MO-11" の順になる） */
+function naturalCompare(a: string, b: string): number {
+  const aParts = a.split(/(\d+)/);
+  const bParts = b.split(/(\d+)/);
+  const len = Math.min(aParts.length, bParts.length);
+
+  for (let i = 0; i < len; i++) {
+    const ap = aParts[i];
+    const bp = bParts[i];
+
+    if (/^\d+$/.test(ap) && /^\d+$/.test(bp)) {
+      const diff = parseInt(ap, 10) - parseInt(bp, 10);
+      if (diff !== 0) return diff;
+    } else {
+      const diff = ap.localeCompare(bp, 'ja');
+      if (diff !== 0) return diff;
+    }
+  }
+  return aParts.length - bParts.length;
+}
+
 /** null を末尾に配置する汎用比較関数 */
 function compareValues(a: unknown, b: unknown): number {
   // null/undefined は末尾
@@ -162,8 +183,8 @@ function compareValues(a: unknown, b: unknown): number {
     return a === b ? 0 : a ? -1 : 1;
   }
 
-  // 文字列比較
-  return String(a).localeCompare(String(b), 'ja');
+  // 文字列比較（自然順ソート）
+  return naturalCompare(String(a), String(b));
 }
 
 /**
