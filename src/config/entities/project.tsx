@@ -255,10 +255,10 @@ export const projectListConfig: EntityListConfig = {
       defaultVisible: false,
       edit: { type: 'checkbox' },
       render: (value) => {
-        const visible = value as boolean;
-        return visible ? '表示' : (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>
-        );
+        if (value === false) {
+          return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>;
+        }
+        return '表示';
       },
     },
     { key: 'updatedAt', label: '更新日時', width: 150, sortable: true },
@@ -518,10 +518,10 @@ export const projectDetailConfig: EntityDetailConfig = {
                 label: 'ポータル表示',
                 type: 'text',
                 render: (value) => {
-                  const visible = value as boolean;
-                  return visible ? '表示' : (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>
-                  );
+                  if (value === false) {
+                    return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>;
+                  }
+                  return '表示';
                 },
               },
               { key: 'projectNotes', label: '備考', type: 'text', colSpan: 2 },
@@ -674,6 +674,7 @@ export const projectFormConfig: EntityFormConfig = {
     // 事業固有フィールドセクションは useProjectConfig で動的追加
   ],
 
+  defaultValues: { portalVisible: true },
   validationSchema: projectBaseSchema,
   redirectAfterSave: (id) => `/projects/${id}`,
   warnOnLeave: true,
