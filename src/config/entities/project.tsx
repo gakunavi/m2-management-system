@@ -253,6 +253,7 @@ export const projectListConfig: EntityListConfig = {
       width: 100,
       sortable: true,
       defaultVisible: false,
+      edit: { type: 'checkbox' },
       render: (value) => {
         const visible = value as boolean;
         return visible ? '表示' : (
