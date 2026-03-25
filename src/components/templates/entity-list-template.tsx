@@ -287,6 +287,35 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
     [setPageSize, preferences, savePreferences, activeViewId, views, updateViewSettings],
   );
 
+  /** ソート変更時のラッパー: グローバル設定 + アクティブビューに保存 */
+  const handleSortItemsChange = useCallback(
+    (items: { field: string; direction: 'asc' | 'desc' }[]) => {
+      setSortItems(items);
+      // グローバル設定に sortState を保存
+      const updatedPrefs: PersistedColumnSettings = {
+        columnOrder: preferences?.columnOrder ?? [],
+        columnVisibility: preferences?.columnVisibility ?? {},
+        columnWidths: preferences?.columnWidths ?? {},
+        sortState: items,
+        columnPinning: preferences?.columnPinning,
+        pageSize: preferences?.pageSize,
+      };
+      savePreferences(updatedPrefs);
+      // アクティブビューにも反映（共有ビューは読み取り専用）
+      if (activeViewId !== null) {
+        const view = views.find((v) => v.id === activeViewId);
+        if (view && !view.ownerName) {
+          updateViewSettings(activeViewId, {
+            ...(view.settings as SavedViewSettings),
+            columnSettings: updatedPrefs,
+            sortItems: items,
+          });
+        }
+      }
+    },
+    [setSortItems, preferences, savePreferences, activeViewId, views, updateViewSettings],
+  );
+
   // ============================================
   // 一括選択の状態管理
   // ============================================
@@ -459,6 +488,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               config={config}
               sortItems={sortItems}
               onSort={setSort}
+              onSortItemsChange={handleSortItemsChange}
               loading={loading}
               preferences={preferences}
               savePreferences={savePreferencesWithView}
@@ -471,6 +501,8 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               selectedIds={hasBatchActions ? selectedIds : undefined}
               onSelectRow={hasBatchActions ? handleSelectRow : undefined}
               onSelectAll={hasBatchActions ? handleSelectAll : undefined}
+              pageSize={pagination.pageSize}
+              onPageSizeChange={handlePageSizeChange}
             />
             <Pagination
               currentPage={pagination.currentPage}

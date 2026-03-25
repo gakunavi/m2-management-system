@@ -28,10 +28,11 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowUpDown, ArrowUp, ArrowDown, GripVertical, ExternalLink, Pin } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, GripVertical, ExternalLink, Pin, SlidersHorizontal } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { ColumnSettingsPanel } from './column-settings-panel';
+import { TableDisplaySettingsModal } from './table-display-settings-modal';
 import { FilterPanel } from './filter-bar';
 import { EditableCell } from './editable-cell';
 import type { ColumnDef, EntityListConfig, FilterDef } from '@/types/config';
@@ -160,6 +161,7 @@ interface SpreadsheetTableProps {
   config: EntityListConfig;
   sortItems: SortItem[];
   onSort: (field: string) => void;
+  onSortItemsChange?: (items: SortItem[]) => void;
   loading?: boolean;
   preferences: ReturnType<typeof useTablePreferences>['preferences'];
   savePreferences: ReturnType<typeof useTablePreferences>['savePreferences'];
@@ -172,6 +174,8 @@ interface SpreadsheetTableProps {
   selectedIds?: Set<number>;
   onSelectRow?: (id: number, checked: boolean) => void;
   onSelectAll?: (checked: boolean) => void;
+  pageSize?: number;
+  onPageSizeChange?: (size: number) => void;
 }
 
 export function SpreadsheetTable({
@@ -180,6 +184,7 @@ export function SpreadsheetTable({
   config,
   sortItems,
   onSort,
+  onSortItemsChange,
   loading,
   preferences,
   savePreferences,
@@ -192,6 +197,8 @@ export function SpreadsheetTable({
   selectedIds,
   onSelectRow,
   onSelectAll,
+  pageSize: currentPageSize = 25,
+  onPageSizeChange,
 }: SpreadsheetTableProps) {
   const router = useRouter();
   const resizingRef = useRef<{ colId: string; startX: number; startWidth: number } | null>(null);
@@ -458,20 +465,32 @@ export function SpreadsheetTable({
   });
 
   // ============================================
-  // リセット
+  // 表示設定モーダル
   // ============================================
 
-  const handleReset = useCallback(() => {
-    setPinnedCols([]);
-    savePreferences({
-      columnOrder: defaultColumnOrder,
-      columnVisibility: defaultColumnVisibility,
-      columnWidths: defaultColumnSizing,
-      sortState: [],
-      columnPinning: { left: [] },
-      pageSize: preferences?.pageSize,
-    });
-  }, [defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences, preferences?.pageSize]);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  const handleSettingsSave = useCallback(
+    (settings: {
+      columnOrder: string[];
+      columnVisibility: Record<string, boolean>;
+      columnWidths: Record<string, number>;
+      sortState: { field: string; direction: 'asc' | 'desc' }[];
+      columnPinning: { left: string[] };
+      pageSize: number;
+    }) => {
+      setPinnedCols(settings.columnPinning.left);
+      savePreferences({
+        columnOrder: settings.columnOrder,
+        columnVisibility: settings.columnVisibility,
+        columnWidths: settings.columnWidths,
+        sortState: settings.sortState,
+        columnPinning: settings.columnPinning,
+        pageSize: settings.pageSize,
+      });
+    },
+    [savePreferences],
+  );
 
   // ============================================
   // ドラッグ＆ドロップ（列並べ替え）
@@ -546,13 +565,33 @@ export function SpreadsheetTable({
             onClearAll={onClearFilters}
           />
         )}
-        <ColumnSettingsPanel
-          table={table}
-          onReset={handleReset}
-          pinnedCols={pinnedCols}
-          onTogglePin={handleTogglePin}
-        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setSettingsModalOpen(true)}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          列設定
+        </Button>
       </div>
+
+      {/* 表示設定モーダル */}
+      <TableDisplaySettingsModal
+        open={settingsModalOpen}
+        onOpenChange={setSettingsModalOpen}
+        columns={configColumns}
+        preferences={preferences}
+        defaultColumnOrder={defaultColumnOrder}
+        defaultColumnVisibility={defaultColumnVisibility}
+        defaultColumnSizing={defaultColumnSizing}
+        currentSortItems={sortItems}
+        currentPageSize={currentPageSize}
+        pinnedCols={pinnedCols}
+        onSave={handleSettingsSave}
+        onSortChange={onSortItemsChange ?? (() => {})}
+        onPageSizeChange={onPageSizeChange ?? (() => {})}
+      />
 
       {/* テーブル本体 */}
       <div className="overflow-auto rounded-md border max-h-[calc(100vh-300px)]">
