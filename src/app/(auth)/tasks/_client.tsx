@@ -370,10 +370,16 @@ export function TasksClient() {
             onAddTaskToColumn={(columnId) => setShowCreateModal({ open: true, columnId })}
             onReorder={(items) => {
               const taskMap = new Map(tasks.map((t) => [t.id, t]));
+              // 列名→タスクステータスのマッピング
+              const columnStatusMap = new Map<number, string>();
+              for (const col of columns) {
+                const matched = TASK_STATUS_OPTIONS.find((opt) => opt.label === col.name);
+                if (matched) columnStatusMap.set(col.id, matched.value);
+              }
               reorderTasks.mutate(
                 items.map((it) => ({
                   id: it.id,
-                  status: taskMap.get(it.id)?.status ?? 'todo',
+                  status: columnStatusMap.get(it.columnId) ?? taskMap.get(it.id)?.status ?? 'todo',
                   sortOrder: it.sortOrder,
                   columnId: it.columnId,
                 })),
