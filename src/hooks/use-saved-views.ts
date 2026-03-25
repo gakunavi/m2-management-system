@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
@@ -108,9 +108,15 @@ export function useSavedViews(tableKey: string) {
     [updateMutation],
   );
 
+  // デバウンス用ref（列幅変更等の高頻度更新でAPI連打を防止）
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updateViewSettings = useCallback(
-    (id: number, settings: SavedViewSettings) =>
-      updateMutation.mutateAsync({ id, settings }),
+    (id: number, settings: SavedViewSettings) => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        updateMutation.mutate({ id, settings });
+      }, 1000);
+    },
     [updateMutation],
   );
 
