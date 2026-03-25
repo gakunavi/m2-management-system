@@ -131,7 +131,7 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
 
     return {
       ...projectFormConfig,
-      defaultValues: businessId ? { businessId } : undefined,
+      defaultValues: { ...projectFormConfig.defaultValues, ...(businessId ? { businessId } : {}) },
       sections: [
         {
           ...projectFormConfig.sections[0],

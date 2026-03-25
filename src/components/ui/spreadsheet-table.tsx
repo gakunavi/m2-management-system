@@ -209,6 +209,20 @@ export function SpreadsheetTable({
     return vis;
   }, [configColumns]);
 
+  // 保存済み columnVisibility に存在しない列は defaultColumnVisibility をフォールバック
+  // （ビュー保存後に追加された列が勝手に表示されるのを防止）
+  const mergedColumnVisibility = useMemo<VisibilityState>(() => {
+    const saved = preferences?.columnVisibility;
+    if (!saved) return defaultColumnVisibility;
+    const merged: VisibilityState = { ...saved };
+    for (const [key, visible] of Object.entries(defaultColumnVisibility)) {
+      if (!(key in merged)) {
+        merged[key] = visible;
+      }
+    }
+    return merged;
+  }, [preferences?.columnVisibility, defaultColumnVisibility]);
+
   const defaultColumnOrder = useMemo<ColumnOrderState>(() => {
     const prefix = hasSelection ? ['_select', '_open'] : ['_open'];
     return [...prefix, ...configColumns.map((c) => c.key)];
@@ -261,7 +275,7 @@ export function SpreadsheetTable({
         // DB保存（バックグラウンド）
         savePreferences({
           columnOrder: preferences?.columnOrder ?? defaultColumnOrder,
-          columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
+          columnVisibility: mergedColumnVisibility,
           columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
           sortState: preferences?.sortState ?? [],
           columnPinning: { left: next },
@@ -397,12 +411,12 @@ export function SpreadsheetTable({
     data,
     columns: tanstackColumns,
     state: {
-      columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
+      columnVisibility: mergedColumnVisibility,
       columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
       columnSizing: preferences?.columnWidths ?? defaultColumnSizing,
     },
     onColumnVisibilityChange: (updater) => {
-      const current = preferences?.columnVisibility ?? defaultColumnVisibility;
+      const current = mergedColumnVisibility;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
@@ -418,7 +432,7 @@ export function SpreadsheetTable({
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: next,
-        columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
+        columnVisibility: mergedColumnVisibility,
         columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
         sortState: preferences?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
@@ -430,7 +444,7 @@ export function SpreadsheetTable({
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
-        columnVisibility: preferences?.columnVisibility ?? defaultColumnVisibility,
+        columnVisibility: mergedColumnVisibility,
         columnWidths: next,
         sortState: preferences?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
