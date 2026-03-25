@@ -91,10 +91,11 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
   const formData = useMemo<Record<string, unknown>>(() => {
     if (fetchedData) {
       const expanded = flattenNestedToFormKeys(fetchedData);
-      return { ...expanded, ...localEdits };
+      // defaultValues をフォールバック（DB未反映フィールドの初期値補完）
+      return { ...config.defaultValues, ...expanded, ...localEdits };
     }
     return localEdits;
-  }, [fetchedData, localEdits]);
+  }, [fetchedData, localEdits, config.defaultValues]);
 
   const setField = useCallback((key: string, value: unknown) => {
     setLocalEdits((prev) => ({ ...prev, [key]: value }));
