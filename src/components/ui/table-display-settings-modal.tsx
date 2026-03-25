@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -211,54 +212,48 @@ export function TableDisplaySettingsModal({
 
   // ============================================
   // Dialog open 時にローカル state を初期化
+  // ※ useEffect で open prop を監視する。Radix Dialog の onOpenChange は
+  //   内部操作（閉じる）でしか発火せず、外部から open=true をセットした
+  //   場合は呼ばれないため。
   // ============================================
 
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (nextOpen) {
-        // preferences からローカル state にコピー
-        const prefixCols = defaultColumnOrder.filter((id) => id.startsWith('_'));
-        const dataCols = (preferences?.columnOrder ?? defaultColumnOrder).filter(
-          (id) => !id.startsWith('_'),
-        );
-        // 新規列を末尾追加
-        const validSet = new Set(columns.map((c) => c.key));
-        const filteredDataCols = dataCols.filter((id) => validSet.has(id));
-        const missingCols = columns
-          .map((c) => c.key)
-          .filter((key) => !filteredDataCols.includes(key));
-        setLocalColumnOrder([...prefixCols, ...filteredDataCols, ...missingCols]);
+  const prevOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      // preferences からローカル state にコピー
+      const prefixCols = defaultColumnOrder.filter((id) => id.startsWith('_'));
+      const dataCols = (preferences?.columnOrder ?? defaultColumnOrder).filter(
+        (id) => !id.startsWith('_'),
+      );
+      // 新規列を末尾追加
+      const validSet = new Set(columns.map((c) => c.key));
+      const filteredDataCols = dataCols.filter((id) => validSet.has(id));
+      const missingCols = columns
+        .map((c) => c.key)
+        .filter((key) => !filteredDataCols.includes(key));
+      setLocalColumnOrder([...prefixCols, ...filteredDataCols, ...missingCols]);
 
-        const vis: Record<string, boolean> = {};
-        columns.forEach((col) => {
-          const savedVis = preferences?.columnVisibility;
-          if (savedVis && col.key in savedVis) {
-            vis[col.key] = savedVis[col.key];
-          } else {
-            vis[col.key] = col.defaultVisible !== false;
-          }
-        });
-        setLocalColumnVisibility(vis);
+      const vis: Record<string, boolean> = {};
+      columns.forEach((col) => {
+        const savedVis = preferences?.columnVisibility;
+        if (savedVis && col.key in savedVis) {
+          vis[col.key] = savedVis[col.key];
+        } else {
+          vis[col.key] = col.defaultVisible !== false;
+        }
+      });
+      setLocalColumnVisibility(vis);
 
-        setLocalPinnedCols(initialPinnedCols);
-        setLocalSortItems([...currentSortItems]);
-        setLocalPageSize(currentPageSize);
-        setSearchQuery('');
-        setBulkSelectedIds(new Set());
-        setShowResetConfirm(false);
-      }
-      onOpenChange(nextOpen);
-    },
-    [
-      onOpenChange,
-      columns,
-      preferences,
-      defaultColumnOrder,
-      initialPinnedCols,
-      currentSortItems,
-      currentPageSize,
-    ],
-  );
+      setLocalPinnedCols(initialPinnedCols);
+      setLocalSortItems([...currentSortItems]);
+      setLocalPageSize(currentPageSize);
+      setSearchQuery('');
+      setBulkSelectedIds(new Set());
+      setShowResetConfirm(false);
+      setActiveTab('columns');
+    }
+    prevOpenRef.current = open;
+  }, [open, columns, preferences, defaultColumnOrder, initialPinnedCols, currentSortItems, currentPageSize]);
 
   // ============================================
   // 派生データ
@@ -378,9 +373,11 @@ export function TableDisplaySettingsModal({
     setBulkSelectedIds(new Set());
   }, [bulkSelectedIds, columnMap]);
 
-  // D&D
+  // D&D — MouseSensor + TouchSensor を使用
+  // （PointerSensor は setPointerCapture を使い、Radix Dialog のポータル内で競合するため）
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -507,8 +504,11 @@ export function TableDisplaySettingsModal({
   // ============================================
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0"
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader className="px-6 pt-6 pb-0">
           <DialogTitle>テーブル表示設定</DialogTitle>
         </DialogHeader>
@@ -611,7 +611,7 @@ export function TableDisplaySettingsModal({
                       items={filteredVisibleIds}
                       strategy={verticalListSortingStrategy}
                     >
-                      <div className="space-y-1 max-h-[340px] overflow-y-auto pr-1">
+                      <div className="space-y-1 max-h-[340px] overflow-y-auto pr-1" style={{ touchAction: 'none' }}>
                         {filteredVisibleIds.length === 0 ? (
                           <p className="text-xs text-muted-foreground py-4 text-center">
                             {searchQuery
