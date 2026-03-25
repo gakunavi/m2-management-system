@@ -154,27 +154,32 @@ export function useEntityList(config: EntityListConfig) {
     setPage(1);
   }, []);
 
-  // ソート（単一列ソート）
-  // 1. 未ソート列をクリック → その列で昇順ソート（他の列は解除）
+  // ソート（複数列対応）
+  // 1. 未ソート列をクリック → 昇順で末尾に追加
   // 2. 昇順の列をクリック → 降順に切り替え
-  // 3. 降順の列をクリック → デフォルトソートに戻す
+  // 3. 降順の列をクリック → その列のソートを解除
   const handleSetSort = useCallback(
     (field: string) => {
       setSortItems((prev) => {
-        const existing = prev.find((s) => s.field === field);
+        const existingIndex = prev.findIndex((s) => s.field === field);
 
-        if (!existing) {
-          // 未ソート → この列単独で昇順ソート
-          return [{ field, direction: 'asc' as const }];
+        if (existingIndex < 0) {
+          // 未ソート → 昇順で追加
+          return [...prev, { field, direction: 'asc' as const }];
         }
 
-        if (existing.direction === 'asc') {
+        const current = prev[existingIndex];
+        if (current.direction === 'asc') {
           // 昇順 → 降順
-          return [{ field, direction: 'desc' as const }];
+          return prev.map((s, i) =>
+            i === existingIndex ? { ...s, direction: 'desc' as const } : s,
+          );
         }
 
-        // 降順 → デフォルトソートに戻す
-        return defaultSortItems;
+        // 降順 → 解除（リストから削除）
+        const next = prev.filter((_, i) => i !== existingIndex);
+        // 全て解除された場合はデフォルトに戻す
+        return next.length > 0 ? next : defaultSortItems;
       });
       setPage(1);
     },
