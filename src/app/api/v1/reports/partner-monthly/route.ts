@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     const projectWhere: Record<string, unknown> = {
       businessId,
       projectIsActive: true,
+      portalVisible: true,
     };
     if (partnerIds) {
       projectWhere.partnerId = { in: partnerIds };

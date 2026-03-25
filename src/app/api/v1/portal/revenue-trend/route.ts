@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     // プロジェクト取得（パートナースコープ）
     // ============================================
 
-    const projectWhere: Record<string, unknown> = { projectIsActive: true };
+    const projectWhere: Record<string, unknown> = { projectIsActive: true, portalVisible: true };
 
     if (user.role === 'partner_admin') {
       const partnerIds = await getBusinessPartnerScope(prisma, user.partnerId, businessId ?? undefined);

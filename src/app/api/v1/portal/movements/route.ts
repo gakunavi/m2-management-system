@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     const where: Record<string, any> = {
       businessId: bizId,
       projectIsActive: true,
+      portalVisible: true,
     };
 
     if (user.role === 'partner_admin') {

@@ -84,6 +84,7 @@ const createProjectSchema = z.object({
   projectNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
   projectRenovationNumber: z.string().max(100).optional().nullable().or(z.literal('')),
   projectCustomData: z.record(z.unknown()).optional().default({}),
+  portalVisible: z.boolean().optional().default(true),
 });
 
 const PROJECT_INCLUDE = {
@@ -130,12 +131,20 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get('filter[projectSalesStatus]');
     const assignedUserFilter = searchParams.get('filter[projectAssignedUserId]');
     const isActiveParam = searchParams.get('filter[isActive]');
+    const portalVisibleParam = searchParams.get('filter[portalVisible]');
     const customerIdParam = searchParams.get('filter[customerId]') || searchParams.get('customerId');
     const partnerIdParam = searchParams.get('filter[partnerId]') || searchParams.get('partnerId');
 
     const where: Record<string, unknown> = {
       projectIsActive: isActiveParam === 'false' ? false : true,
     };
+
+    // ポータル表示フィルター
+    if (portalVisibleParam === 'true') {
+      where.portalVisible = true;
+    } else if (portalVisibleParam === 'false') {
+      where.portalVisible = false;
+    }
 
     // 顧客フィルター（関連案件タブ用）
     if (customerIdParam) {
@@ -163,8 +172,10 @@ export async function GET(request: NextRequest) {
         const partnerIds = await getBusinessPartnerScope(prisma, user.partnerId, businessIdForScope);
         where.partnerId = { in: partnerIds };
       }
+      where.portalVisible = true;
     } else if (user.role === 'partner_staff') {
       where.projectAssignedUserId = user.id;
+      where.portalVisible = true;
     }
 
     // テキスト検索

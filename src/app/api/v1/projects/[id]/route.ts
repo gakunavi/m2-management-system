@@ -25,6 +25,7 @@ const updateProjectSchema = z.object({
   projectNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
   projectRenovationNumber: z.string().max(100).optional().nullable().or(z.literal('')),
   projectCustomData: z.record(z.unknown()).optional(),
+  portalVisible: z.boolean().optional(),
   version: z.number().int().min(1),
 });
 
@@ -74,6 +75,12 @@ export async function GET(
 
     // 代理店ユーザーのアクセス制御
     const user = session.user as { id: number; role: string; partnerId: number | null };
+    if (user.role === 'partner_admin' || user.role === 'partner_staff') {
+      // ポータル非表示の案件は代理店ユーザーにアクセス不可
+      if (!project.portalVisible) {
+        throw ApiError.forbidden('この案件へのアクセス権がありません');
+      }
+    }
     if (user.role === 'partner_admin' && user.partnerId) {
       const partnerIds = await getBusinessPartnerScope(prisma, user.partnerId, project.businessId);
       if (!partnerIds.includes(project.partnerId ?? -1)) {

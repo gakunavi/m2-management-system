@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
 
     const projectWhere: Record<string, unknown> = {
       projectIsActive: true,
+      portalVisible: true,
     };
 
     if (user.role === 'partner_admin') {

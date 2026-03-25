@@ -470,6 +470,7 @@ model Project {
   projectCustomData         Json              @default("{}") @map("project_custom_data")
   projectStatusChangedAt    DateTime?         @map("project_status_changed_at") @db.Timestamptz(6)
   projectIsActive           Boolean           @default(true) @map("project_is_active")
+  portalVisible             Boolean           @default(true) @map("portal_visible")
   version                   Int               @default(1)
   createdAt                 DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                 DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)

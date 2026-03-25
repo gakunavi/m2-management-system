@@ -30,6 +30,11 @@ export async function GET(request: NextRequest) {
       projectIsActive: true,
     };
 
+    // ポータルユーザーにはportalVisible制約を適用
+    if (user.role === 'partner_admin' || user.role === 'partner_staff') {
+      where.portalVisible = true;
+    }
+
     if (user.role === 'staff') {
       // staff は自分がアサインされた事業のみ
       const assignments = await prisma.userBusinessAssignment.findMany({

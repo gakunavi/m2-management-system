@@ -247,6 +247,19 @@ export const projectListConfig: EntityListConfig = {
       },
       defaultVisible: false,
     },
+    {
+      key: 'portalVisible',
+      label: 'ポータル',
+      width: 100,
+      sortable: true,
+      defaultVisible: false,
+      render: (value) => {
+        const visible = value as boolean;
+        return visible ? '表示' : (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>
+        );
+      },
+    },
     { key: 'updatedAt', label: '更新日時', width: 150, sortable: true },
     { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false },
   ],
@@ -275,6 +288,13 @@ export const projectListConfig: EntityListConfig = {
       type: 'boolean',
       trueLabel: '有効',
       falseLabel: '削除済み',
+    },
+    {
+      key: 'portalVisible',
+      label: 'ポータル表示',
+      type: 'boolean',
+      trueLabel: '表示',
+      falseLabel: '非表示',
     },
   ],
 
@@ -492,6 +512,17 @@ export const projectDetailConfig: EntityDetailConfig = {
                   );
                 },
               },
+              {
+                key: 'portalVisible',
+                label: 'ポータル表示',
+                type: 'text',
+                render: (value) => {
+                  const visible = value as boolean;
+                  return visible ? '表示' : (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>
+                  );
+                },
+              },
               { key: 'projectNotes', label: '備考', type: 'text', colSpan: 2 },
             ],
           },
@@ -623,6 +654,12 @@ export const projectFormConfig: EntityFormConfig = {
           label: '階層番号',
           type: 'text',
           placeholder: '階層番号を入力',
+        },
+        {
+          key: 'portalVisible',
+          label: 'ポータル表示',
+          type: 'checkbox',
+          description: 'OFFにすると代理店ポータルに表示されません',
         },
         {
           key: 'projectNotes',

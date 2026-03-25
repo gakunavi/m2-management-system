@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
     // WHERE 句構築
     const where: Record<string, unknown> = {
       projectIsActive: true,
+      portalVisible: true,
     };
 
     // ロール別スコープ制御

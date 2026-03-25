@@ -50,7 +50,7 @@ async function getPortalProjects(
   user: { id: number; role: string; partnerId: number },
   businessId: number | null,
 ): Promise<ScopedProject[]> {
-  const where: Record<string, unknown> = { projectIsActive: true };
+  const where: Record<string, unknown> = { projectIsActive: true, portalVisible: true };
 
   if (user.role === 'partner_admin') {
     const partnerIds = await getBusinessPartnerScope(prisma, user.partnerId, businessId ?? undefined);

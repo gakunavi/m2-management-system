@@ -30,6 +30,7 @@ export const projectBaseSchema = z.object({
     .optional()
     .nullable()
     .or(z.literal('')),
+  portalVisible: z.boolean().optional(),
 });
 
 export type ProjectBaseInput = z.infer<typeof projectBaseSchema>;
