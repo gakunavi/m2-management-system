@@ -60,6 +60,11 @@ export async function PATCH(
       let newTier = tierChanged ? data.businessTier ?? null : existing.businessTier;
       let newParentId = parentChanged ? data.businessParentId ?? null : existing.businessParentId;
 
+      // 自己参照チェック（自分自身を親に設定できない）
+      if (newParentId === partnerId) {
+        throw ApiError.badRequest('自分自身を親代理店に設定することはできません');
+      }
+
       // 1次代理店は親を持てない
       if (newTier === '1次代理店') {
         newParentId = null;

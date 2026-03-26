@@ -104,6 +104,26 @@ export function BusinessParentPartnerSelect({
     return () => clearTimeout(debounceRef.current);
   }, [search, isOpen, fetchCandidates]);
 
+  // ─── 状態0: 自己参照（不整合データ）→ 解除ボタンを表示 ───
+  if (value === excludePartnerId) {
+    return (
+      <div className="flex items-center gap-1 text-sm">
+        <Badge variant="destructive" className="text-xs font-normal">
+          不整合（自己参照）
+        </Badge>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5 shrink-0"
+          onClick={onClear}
+          aria-label="不整合を解除"
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
+
   // ─── 状態1: 1次代理店（親なし） ───
   if (currentTier === '1次代理店' && !value) {
     return (

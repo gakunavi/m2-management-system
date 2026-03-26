@@ -156,6 +156,13 @@ export async function PATCH(
     const parentChanged = rawParentId !== undefined && rawParentId !== current.parentId;
     const newParentId = rawParentId !== undefined ? (rawParentId ?? null) : current.parentId;
 
+    // 自己参照チェック（自分自身を親に設定できない）
+    if (newParentId === partnerId) {
+      throw new ApiError('VALIDATION_ERROR', '自分自身を親代理店に設定することはできません', 400, [
+        { field: 'parentId', message: '自分自身を親代理店に設定することはできません' },
+      ]);
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       // 親変更時: tier を自動再算出
       let newTier = current.partnerTier;

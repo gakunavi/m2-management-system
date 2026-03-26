@@ -152,6 +152,10 @@ export function ParentPartnerSelectField({
 
   // 候補を選択
   const handleSelect = (candidate: Candidate) => {
+    // 自己参照防止
+    const excludeId = formData?.id as number | undefined;
+    if (excludeId && candidate.id === excludeId) return;
+
     onChange(candidate.id);
     setSelectedCandidate(candidate);
     setIsOpen(false);
