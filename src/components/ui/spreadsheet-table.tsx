@@ -161,7 +161,6 @@ interface SpreadsheetTableProps {
   config: EntityListConfig;
   sortItems: SortItem[];
   onSort: (field: string) => void;
-  onSortItemsChange?: (items: SortItem[]) => void;
   loading?: boolean;
   preferences: ReturnType<typeof useTablePreferences>['preferences'];
   savePreferences: ReturnType<typeof useTablePreferences>['savePreferences'];
@@ -175,7 +174,6 @@ interface SpreadsheetTableProps {
   onSelectRow?: (id: number, checked: boolean) => void;
   onSelectAll?: (checked: boolean) => void;
   pageSize?: number;
-  onPageSizeChange?: (size: number) => void;
   /** ソート状態のみ更新（preferences再保存しない）— モーダル保存時に使用 */
   onSortItemsSet?: (items: SortItem[]) => void;
   /** ページサイズ状態のみ更新（preferences再保存しない）— モーダル保存時に使用 */
@@ -188,7 +186,6 @@ export function SpreadsheetTable({
   config,
   sortItems,
   onSort,
-  onSortItemsChange,
   loading,
   preferences,
   savePreferences,
@@ -202,7 +199,6 @@ export function SpreadsheetTable({
   onSelectRow,
   onSelectAll,
   pageSize: currentPageSize = 25,
-  onPageSizeChange,
   onSortItemsSet,
   onPageSizeSet,
 }: SpreadsheetTableProps) {
