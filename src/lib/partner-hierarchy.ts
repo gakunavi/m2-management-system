@@ -197,6 +197,7 @@ export function getTierDepth(tierLabel: string): number | null {
 /**
  * 親代理店の階層から子の階層ラベルを算出する
  * 親が null → '1次代理店'
+ * 親が tier 未設定 → 親を自動的に1次代理店に昇格し、子は '2次代理店'
  * 親が 'N次代理店' → '(N+1)次代理店'
  */
 export async function calculateTierFromParent(
@@ -207,9 +208,23 @@ export async function calculateTierFromParent(
 
   const parent = await tx.partner.findUnique({
     where: { id: parentId },
-    select: { partnerTier: true },
+    select: { partnerTier: true, partnerCode: true },
   });
-  if (!parent?.partnerTier) return '1次代理店';
+  if (!parent) return '1次代理店';
+
+  // 親が tier 未設定の場合、親を1次代理店に自動昇格
+  if (!parent.partnerTier) {
+    const tierNumber = await generateTierNumber(tx, '1次代理店', null, parent.partnerCode);
+    await tx.partner.update({
+      where: { id: parentId },
+      data: {
+        partnerTier: '1次代理店',
+        partnerTierNumber: tierNumber,
+        parentId: null,
+      },
+    });
+    return '2次代理店';
+  }
 
   const parentDepth = getTierDepth(parent.partnerTier);
   if (!parentDepth) return '1次代理店';

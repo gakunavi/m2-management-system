@@ -75,12 +75,31 @@ export async function PATCH(
         if (newParentId) {
           const parentLink = await tx.partnerBusinessLink.findFirst({
             where: { businessId: existing.businessId, partnerId: newParentId },
-            select: { businessTier: true },
+            include: { partner: { select: { partnerCode: true } } },
           });
-          if (!parentLink?.businessTier) {
-            throw ApiError.badRequest('指定された親代理店はこの事業で階層が設定されていません');
+          if (!parentLink) {
+            throw ApiError.badRequest('指定された親代理店はこの事業にリンクされていません');
           }
-          const parentMatch = parentLink.businessTier.match(/^(\d+)次代理店$/);
+
+          let parentTier = parentLink.businessTier;
+
+          // 親が階層未設定の場合、自動的に1次代理店に昇格
+          if (!parentTier) {
+            const parentTierNumber = await generateBusinessTierNumber(
+              tx, existing.businessId, '1次代理店', null, parentLink.partner.partnerCode,
+            );
+            await tx.partnerBusinessLink.update({
+              where: { id: parentLink.id },
+              data: {
+                businessTier: '1次代理店',
+                businessTierNumber: parentTierNumber,
+                businessParentId: null,
+              },
+            });
+            parentTier = '1次代理店';
+          }
+
+          const parentMatch = parentTier.match(/^(\d+)次代理店$/);
           if (!parentMatch) {
             throw ApiError.badRequest('親代理店の階層ラベルが不正です');
           }
