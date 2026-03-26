@@ -209,6 +209,9 @@ export function SpreadsheetTable({
   const router = useRouter();
   const resizingRef = useRef<{ colId: string; startX: number; startWidth: number } | null>(null);
   const hasSelection = selectedIds !== undefined && onSelectRow !== undefined;
+  // stale closure 防止: handleTogglePin / onColumnXxxChange から最新 preferences を参照
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
 
   // ============================================
   // 初期状態
@@ -285,19 +288,20 @@ export function SpreadsheetTable({
         const next = prev.includes(colId)
           ? prev.filter((id) => id !== colId)
           : [...prev, colId];
-        // DB保存（バックグラウンド）
+        // ref 経由で最新の preferences を取得（stale closure 防止）
+        const latest = preferencesRef.current;
         savePreferences({
-          columnOrder: preferences?.columnOrder ?? defaultColumnOrder,
-          columnVisibility: mergedColumnVisibility,
-          columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
-          sortState: preferences?.sortState ?? [],
+          columnOrder: latest?.columnOrder ?? defaultColumnOrder,
+          columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
+          columnWidths: latest?.columnWidths ?? defaultColumnSizing,
+          sortState: latest?.sortState ?? [],
           columnPinning: { left: next },
-          pageSize: preferences?.pageSize,
+          pageSize: latest?.pageSize,
         });
         return next;
       });
     },
-    [preferences, defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences],
+    [defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences],
   );
 
   /** ピン留めセルの sticky スタイルを返す。非ピン列は undefined */
@@ -431,37 +435,40 @@ export function SpreadsheetTable({
     onColumnVisibilityChange: (updater) => {
       const current = mergedColumnVisibility;
       const next = typeof updater === 'function' ? updater(current) : updater;
+      const latest = preferencesRef.current;
       savePreferences({
-        columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
+        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
         columnVisibility: next,
-        columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
-        sortState: preferences?.sortState ?? [],
+        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
+        sortState: latest?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: preferences?.pageSize,
+        pageSize: latest?.pageSize,
       });
     },
     onColumnOrderChange: (updater) => {
-      const current = reconciledColumnOrder ?? defaultColumnOrder;
+      const latest = preferencesRef.current;
+      const current = latest?.columnOrder ?? defaultColumnOrder;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: next,
-        columnVisibility: mergedColumnVisibility,
-        columnWidths: preferences?.columnWidths ?? defaultColumnSizing,
-        sortState: preferences?.sortState ?? [],
+        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
+        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
+        sortState: latest?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: preferences?.pageSize,
+        pageSize: latest?.pageSize,
       });
     },
     onColumnSizingChange: (updater) => {
-      const current = preferences?.columnWidths ?? defaultColumnSizing;
+      const latest = preferencesRef.current;
+      const current = latest?.columnWidths ?? defaultColumnSizing;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
-        columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
-        columnVisibility: mergedColumnVisibility,
+        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
+        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
         columnWidths: next,
-        sortState: preferences?.sortState ?? [],
+        sortState: latest?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: preferences?.pageSize,
+        pageSize: latest?.pageSize,
       });
     },
     getCoreRowModel: getCoreRowModel(),

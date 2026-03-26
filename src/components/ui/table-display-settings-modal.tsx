@@ -318,6 +318,13 @@ export function TableDisplaySettingsModal({
 
   const handleShowColumn = useCallback((colId: string) => {
     setLocalColumnVisibility((prev) => ({ ...prev, [colId]: true }));
+    // 表示中の列リストの先頭に移動（ユーザーがすぐ並べ替えしやすいように）
+    setLocalColumnOrder((prev) => {
+      const prefixCols = prev.filter((id) => id.startsWith('_'));
+      const dataCols = prev.filter((id) => !id.startsWith('_'));
+      const withoutCol = dataCols.filter((id) => id !== colId);
+      return [...prefixCols, colId, ...withoutCol];
+    });
   }, []);
 
   const handleTogglePin = useCallback((colId: string) => {

@@ -72,6 +72,9 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   const { preferences, savePreferences } = useTablePreferences(
     config.tableSettings.persistKey,
   );
+  // stale closure 防止: handlePageSizeChange / handleSortItemsChange から最新の preferences を参照
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
 
   const { updateCell } = useInlineCellEdit(config);
 
@@ -258,13 +261,14 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   const handlePageSizeChange = useCallback(
     (size: number) => {
       setPageSize(size);
-      // グローバル設定に pageSize を保存
+      // ref 経由で最新の preferences を取得（stale closure 防止）
+      const latest = preferencesRef.current;
       const updatedPrefs: PersistedColumnSettings = {
-        columnOrder: preferences?.columnOrder ?? [],
-        columnVisibility: preferences?.columnVisibility ?? {},
-        columnWidths: preferences?.columnWidths ?? {},
-        sortState: preferences?.sortState ?? [],
-        columnPinning: preferences?.columnPinning,
+        columnOrder: latest?.columnOrder ?? [],
+        columnVisibility: latest?.columnVisibility ?? {},
+        columnWidths: latest?.columnWidths ?? {},
+        sortState: latest?.sortState ?? [],
+        columnPinning: latest?.columnPinning,
         pageSize: size,
       };
       savePreferences(updatedPrefs);
@@ -284,21 +288,22 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
         }
       }
     },
-    [setPageSize, preferences, savePreferences, activeViewId, views, updateViewSettings],
+    [setPageSize, savePreferences, activeViewId, views, updateViewSettings],
   );
 
   /** ソート変更時のラッパー: グローバル設定 + アクティブビューに保存 */
   const handleSortItemsChange = useCallback(
     (items: { field: string; direction: 'asc' | 'desc' }[]) => {
       setSortItems(items);
-      // グローバル設定に sortState を保存
+      // ref 経由で最新の preferences を取得（stale closure 防止）
+      const latest = preferencesRef.current;
       const updatedPrefs: PersistedColumnSettings = {
-        columnOrder: preferences?.columnOrder ?? [],
-        columnVisibility: preferences?.columnVisibility ?? {},
-        columnWidths: preferences?.columnWidths ?? {},
+        columnOrder: latest?.columnOrder ?? [],
+        columnVisibility: latest?.columnVisibility ?? {},
+        columnWidths: latest?.columnWidths ?? {},
         sortState: items,
-        columnPinning: preferences?.columnPinning,
-        pageSize: preferences?.pageSize,
+        columnPinning: latest?.columnPinning,
+        pageSize: latest?.pageSize,
       };
       savePreferences(updatedPrefs);
       // アクティブビューにも反映（共有ビューは読み取り専用）
@@ -313,7 +318,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
         }
       }
     },
-    [setSortItems, preferences, savePreferences, activeViewId, views, updateViewSettings],
+    [setSortItems, savePreferences, activeViewId, views, updateViewSettings],
   );
 
   // ============================================
