@@ -153,11 +153,12 @@ export async function PATCH(
     const { version: _version, parentId: rawParentId, partnerTier: _ignoredTier, ...updateData } = data;
 
     // 親代理店の変更判定（N次対応: parentId から tier を自動算出）
-    const parentChanged = rawParentId !== undefined && rawParentId !== current.parentId;
+    // ※ null → null は変更なしとして扱う（フォームが毎回 parentId: null を送信するため）
     const newParentId = rawParentId !== undefined ? (rawParentId ?? null) : current.parentId;
+    const parentChanged = rawParentId !== undefined && newParentId !== current.parentId;
 
     // 自己参照チェック（自分自身を親に設定できない）
-    if (newParentId === partnerId) {
+    if (newParentId !== null && newParentId === partnerId) {
       throw new ApiError('VALIDATION_ERROR', '自分自身を親代理店に設定することはできません', 400, [
         { field: 'parentId', message: '自分自身を親代理店に設定することはできません' },
       ]);
@@ -166,8 +167,10 @@ export async function PATCH(
     const updated = await prisma.$transaction(async (tx) => {
       // 親変更時: tier を自動再算出
       let newTier = current.partnerTier;
+      let tierNeedsUpdate = false;
       if (parentChanged) {
         newTier = await calculateTierFromParent(tx, newParentId);
+        tierNeedsUpdate = true;
         const effectiveParentId = newTier === '1次代理店' ? null : newParentId;
 
         const tierError = await validateTierHierarchy(tx, newTier, effectiveParentId);
@@ -186,12 +189,16 @@ export async function PATCH(
             ]);
           }
         }
+      } else if (!newParentId && current.partnerTier && current.partnerTier !== '1次代理店') {
+        // 整合性修復: parentId が null なのに 2次以上の tier がセットされている不整合を検出しクリア
+        newTier = null;
+        tierNeedsUpdate = true;
       }
 
       // tierNumber の再計算
       let partnerTierNumber: string | null | undefined;
       const tierChanged = newTier !== current.partnerTier;
-      if (tierChanged || parentChanged) {
+      if (tierChanged || tierNeedsUpdate || parentChanged) {
         const effectiveParentId = newTier === '1次代理店' ? null : newParentId;
         partnerTierNumber = await generateTierNumber(tx, newTier, effectiveParentId, current.partnerCode);
       }
@@ -200,8 +207,8 @@ export async function PATCH(
         where: { id: partnerId },
         data: {
           ...updateData,
-          ...(parentChanged ? { parentId: newTier === '1次代理店' ? null : newParentId } : {}),
-          ...(parentChanged ? { partnerTier: newTier } : {}),
+          ...((parentChanged || tierNeedsUpdate) ? { parentId: newTier === '1次代理店' ? null : newParentId } : {}),
+          ...((parentChanged || tierNeedsUpdate) ? { partnerTier: newTier } : {}),
           ...(partnerTierNumber !== undefined ? { partnerTierNumber } : {}),
           partnerEstablishedDate:
             updateData.partnerEstablishedDate

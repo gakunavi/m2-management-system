@@ -176,9 +176,11 @@ export function ParentPartnerSelectField({
     setSelectedCandidate(null);
     setSearch('');
 
-    // N次対応: 親をクリアしたら1次代理店に戻す
+    // 親をクリアしたら tier もクリア（API側で parentId から自動算出するため）
+    // ※ 以前は '1次代理店' を自動セットしていたが、未選択のまま保存すると
+    //   意図せず1次代理店になる問題があったため、null に戻す
     if (isAutoTierMode && onSetField) {
-      onSetField('partnerTier', '1次代理店');
+      onSetField('partnerTier', null);
     }
   };
 
