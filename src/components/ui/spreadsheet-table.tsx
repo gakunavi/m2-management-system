@@ -176,6 +176,10 @@ interface SpreadsheetTableProps {
   onSelectAll?: (checked: boolean) => void;
   pageSize?: number;
   onPageSizeChange?: (size: number) => void;
+  /** ソート状態のみ更新（preferences再保存しない）— モーダル保存時に使用 */
+  onSortItemsSet?: (items: SortItem[]) => void;
+  /** ページサイズ状態のみ更新（preferences再保存しない）— モーダル保存時に使用 */
+  onPageSizeSet?: (size: number) => void;
 }
 
 export function SpreadsheetTable({
@@ -199,6 +203,8 @@ export function SpreadsheetTable({
   onSelectAll,
   pageSize: currentPageSize = 25,
   onPageSizeChange,
+  onSortItemsSet,
+  onPageSizeSet,
 }: SpreadsheetTableProps) {
   const router = useRouter();
   const resizingRef = useRef<{ colId: string; startX: number; startWidth: number } | null>(null);
@@ -480,6 +486,7 @@ export function SpreadsheetTable({
       pageSize: number;
     }) => {
       setPinnedCols(settings.columnPinning.left);
+      // preferences を一括保存（stale closure による上書きを防ぐため、ここで一元管理）
       savePreferences({
         columnOrder: settings.columnOrder,
         columnVisibility: settings.columnVisibility,
@@ -488,8 +495,11 @@ export function SpreadsheetTable({
         columnPinning: settings.columnPinning,
         pageSize: settings.pageSize,
       });
+      // ソート・ページサイズのローカル状態を更新（preferences再保存なし）
+      onSortItemsSet?.(settings.sortState);
+      onPageSizeSet?.(settings.pageSize);
     },
-    [savePreferences],
+    [savePreferences, onSortItemsSet, onPageSizeSet],
   );
 
   // ============================================
@@ -589,8 +599,6 @@ export function SpreadsheetTable({
         currentPageSize={currentPageSize}
         pinnedCols={pinnedCols}
         onSave={handleSettingsSave}
-        onSortChange={onSortItemsChange ?? (() => {})}
-        onPageSizeChange={onPageSizeChange ?? (() => {})}
       />
 
       {/* テーブル本体 */}

@@ -75,8 +75,6 @@ interface TableDisplaySettingsModalProps {
     columnPinning: { left: string[] };
     pageSize: number;
   }) => void;
-  onSortChange: (sortItems: SortItem[]) => void;
-  onPageSizeChange: (size: number) => void;
 }
 
 type TabId = 'basic' | 'columns' | 'sort';
@@ -181,8 +179,6 @@ export function TableDisplaySettingsModal({
   currentPageSize,
   pinnedCols: initialPinnedCols,
   onSave,
-  onSortChange,
-  onPageSizeChange,
 }: TableDisplaySettingsModalProps) {
   // ============================================
   // ローカル state（Save前に確定しない）
@@ -449,6 +445,8 @@ export function TableDisplaySettingsModal({
   // ============================================
 
   const handleSave = useCallback(() => {
+    // onSave が preferences 保存 + ソート/ページサイズ状態更新を一括で行う
+    // （別途 onSortChange/onPageSizeChange を呼ぶと stale closure で列順序が上書きされるため）
     onSave({
       columnOrder: localColumnOrder,
       columnVisibility: localColumnVisibility,
@@ -457,8 +455,6 @@ export function TableDisplaySettingsModal({
       columnPinning: { left: localPinnedCols },
       pageSize: localPageSize,
     });
-    onSortChange(localSortItems);
-    onPageSizeChange(localPageSize);
     onOpenChange(false);
   }, [
     localColumnOrder,
@@ -469,8 +465,6 @@ export function TableDisplaySettingsModal({
     preferences?.columnWidths,
     defaultColumnSizing,
     onSave,
-    onSortChange,
-    onPageSizeChange,
     onOpenChange,
   ]);
 

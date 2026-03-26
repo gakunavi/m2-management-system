@@ -503,6 +503,8 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               onSelectAll={hasBatchActions ? handleSelectAll : undefined}
               pageSize={pagination.pageSize}
               onPageSizeChange={handlePageSizeChange}
+              onSortItemsSet={setSortItems}
+              onPageSizeSet={setPageSize}
             />
             <Pagination
               currentPage={pagination.currentPage}
