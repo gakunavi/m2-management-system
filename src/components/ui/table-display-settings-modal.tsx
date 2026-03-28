@@ -48,6 +48,7 @@ import {
   Plus,
   X,
   RotateCcw,
+  ChevronRight,
 } from 'lucide-react';
 import type { ColumnDef, PersistedColumnSettings } from '@/types/config';
 import type { SortItem } from '@/types/api';
@@ -67,6 +68,8 @@ interface TableDisplaySettingsModalProps {
   currentSortItems: SortItem[];
   currentPageSize: number;
   pinnedCols: string[];
+  /** 非表示列のグループ表示順。指定なしの場合はアルファベット順 */
+  columnGroupOrder?: string[];
   onSave: (settings: {
     columnOrder: string[];
     columnVisibility: Record<string, boolean>;
@@ -86,6 +89,7 @@ type TabId = 'basic' | 'columns' | 'sort';
 interface SortableColumnItemProps {
   id: string;
   label: string;
+  group?: string;
   isSelected: boolean;
   isPinned: boolean;
   onToggleSelect: () => void;
@@ -96,6 +100,7 @@ interface SortableColumnItemProps {
 function SortableColumnItem({
   id,
   label,
+  group,
   isSelected,
   isPinned,
   onToggleSelect,
@@ -144,6 +149,11 @@ function SortableColumnItem({
         className="shrink-0"
       />
       <span className="flex-1 truncate">{label}</span>
+      {group && (
+        <span className="shrink-0 text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground leading-none">
+          {group}
+        </span>
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -178,6 +188,7 @@ export function TableDisplaySettingsModal({
   currentSortItems,
   currentPageSize,
   pinnedCols: initialPinnedCols,
+  columnGroupOrder,
   onSave,
 }: TableDisplaySettingsModalProps) {
   // ============================================
@@ -202,6 +213,18 @@ export function TableDisplaySettingsModal({
 
   // 一括選択
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+
+  // グループ折りたたみ（デフォルトは全て畳まれている）
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const handleToggleGroup = useCallback((group: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }, []);
 
   // リセット確認
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -246,6 +269,7 @@ export function TableDisplaySettingsModal({
       setSearchQuery('');
       setBulkSelectedIds(new Set());
       setShowResetConfirm(false);
+      setExpandedGroups(new Set());
       setActiveTab('columns');
     }
     prevOpenRef.current = open;
@@ -299,6 +323,29 @@ export function TableDisplaySettingsModal({
       );
     });
   }, [hiddenColumnIds, searchQuery, columnMap]);
+
+  // 非表示列をグループ別に分類（columnGroupOrder に従ってソート）
+  const groupedHiddenIds = useMemo(() => {
+    const groupMap = new Map<string, string[]>();
+    for (const id of filteredHiddenIds) {
+      const col = columnMap.get(id);
+      const group = col?.group || '基本情報';
+      if (!groupMap.has(group)) {
+        groupMap.set(group, []);
+      }
+      groupMap.get(group)!.push(id);
+    }
+    // columnGroupOrder が指定されていればその順、なければ出現順
+    if (columnGroupOrder && columnGroupOrder.length > 0) {
+      const sorted = Array.from(groupMap.entries()).sort(([a], [b]) => {
+        const ia = columnGroupOrder.indexOf(a);
+        const ib = columnGroupOrder.indexOf(b);
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      });
+      return sorted.map(([group, ids]) => ({ group, ids }));
+    }
+    return Array.from(groupMap.entries()).map(([group, ids]) => ({ group, ids }));
+  }, [filteredHiddenIds, columnMap, columnGroupOrder]);
 
   // ソート可能な列
   const sortableColumns = useMemo(
@@ -628,6 +675,7 @@ export function TableDisplaySettingsModal({
                                 key={colId}
                                 id={colId}
                                 label={col.label}
+                                group={col.group}
                                 isSelected={bulkSelectedIds.has(colId)}
                                 isPinned={localPinnedCols.includes(colId)}
                                 onToggleSelect={() =>
@@ -644,7 +692,7 @@ export function TableDisplaySettingsModal({
                   </DndContext>
                 </div>
 
-                {/* 右: 非表示の列 */}
+                {/* 右: 非表示の列（グループ別） */}
                 <div>
                   <h4 className="text-xs font-medium text-muted-foreground mb-2">
                     非表示の列
@@ -657,22 +705,62 @@ export function TableDisplaySettingsModal({
                           : '非表示の列がありません'}
                       </p>
                     ) : (
-                      filteredHiddenIds.map((colId) => {
-                        const col = columnMap.get(colId);
-                        if (!col) return null;
+                      groupedHiddenIds.map(({ group, ids }) => {
+                        const isExpanded = expandedGroups.has(group);
                         return (
-                          <div
-                            key={colId}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-dashed text-sm text-muted-foreground"
-                          >
-                            <span className="flex-1 truncate">{col.label}</span>
+                          <div key={group} className="mb-1">
+                            {/* グループヘッダー（折りたたみ） */}
                             <button
-                              onClick={() => handleShowColumn(colId)}
-                              className="shrink-0 hover:text-foreground transition-colors"
-                              title="表示する"
+                              onClick={() => handleToggleGroup(group)}
+                              className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted/70 rounded-sm transition-colors"
                             >
-                              <Eye className="h-3.5 w-3.5" />
+                              <ChevronRight
+                                className={cn(
+                                  'h-3 w-3 shrink-0 transition-transform duration-200',
+                                  isExpanded && 'rotate-90',
+                                )}
+                              />
+                              <span className="flex-1 text-left">{group}</span>
+                              <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+                                {ids.length}
+                              </span>
+                              {isExpanded && (
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    ids.forEach((colId) => handleShowColumn(colId));
+                                  }}
+                                  className="text-[10px] text-primary hover:text-primary/80 transition-colors whitespace-nowrap ml-1"
+                                  title={`${group}を全て表示`}
+                                >
+                                  全て表示
+                                </span>
+                              )}
                             </button>
+                            {/* 展開時のみ列を表示 */}
+                            {isExpanded && (
+                              <div className="mt-1 space-y-1 pl-1">
+                                {ids.map((colId) => {
+                                  const col = columnMap.get(colId);
+                                  if (!col) return null;
+                                  return (
+                                    <div
+                                      key={colId}
+                                      className="flex items-center gap-2 px-2 py-1.5 rounded-md border border-dashed text-sm text-muted-foreground"
+                                    >
+                                      <span className="flex-1 truncate">{col.label}</span>
+                                      <button
+                                        onClick={() => handleShowColumn(colId)}
+                                        className="shrink-0 hover:text-foreground transition-colors"
+                                        title="表示する"
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })

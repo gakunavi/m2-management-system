@@ -74,18 +74,31 @@ export async function GET(
     const partnerId = parseInt(id, 10);
     if (isNaN(partnerId)) throw ApiError.notFound('代理店が見つかりません');
 
+    const { searchParams } = _request.nextUrl;
+    const bizIdParam = searchParams.get('businessId');
+
     const partner = await prisma.partner.findUnique({
       where: { id: partnerId },
       include: {
         industry: { select: { id: true, industryName: true } },
         parent: { select: { id: true, partnerCode: true, partnerName: true } },
         contacts: CONTACT_INCLUDE,
+        businessLinks: {
+          where: { linkStatus: 'active' },
+          select: {
+            businessId: true,
+            businessTier: true,
+            businessTierNumber: true,
+            linkCustomData: true,
+          },
+        },
       },
     });
 
     if (!partner) throw ApiError.notFound('代理店が見つかりません');
 
-    return NextResponse.json({ success: true, data: formatPartner(partner) });
+    const bizId = bizIdParam ? parseInt(bizIdParam, 10) : undefined;
+    return NextResponse.json({ success: true, data: formatPartner(partner, bizId) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -117,11 +130,17 @@ export async function PATCH(
     if (isNaN(partnerId)) throw ApiError.notFound('代理店が見つかりません');
 
     const body = await request.json();
+
+    // linkCustomData / partnerCustomData の更新リクエストを先に取り出す（スキーマ外）
+    const linkCustomDataPatch = body.linkCustomData as Record<string, unknown> | undefined;
+    const partnerCustomDataPatch = body.partnerCustomData as Record<string, unknown> | undefined;
+    const linkBusinessId = body.businessId as number | undefined;
+
     const data = updatePartnerSchema.parse(body);
 
     const current = await prisma.partner.findUnique({
       where: { id: partnerId },
-      select: { version: true, partnerIsActive: true, partnerTier: true, parentId: true, partnerName: true, partnerPhone: true, partnerCode: true },
+      select: { version: true, partnerIsActive: true, partnerTier: true, parentId: true, partnerName: true, partnerPhone: true, partnerCode: true, partnerCustomData: true },
     });
     if (!current) throw ApiError.notFound('代理店が見つかりません');
     if (!current.partnerIsActive) throw ApiError.notFound('代理店が見つかりません');
@@ -224,6 +243,12 @@ export async function PATCH(
           partnerBpFormUrl: updateData.partnerBpFormUrl !== undefined ? (updateData.partnerBpFormUrl || null) : undefined,
           partnerBpFormKey: updateData.partnerBpFormKey !== undefined ? (updateData.partnerBpFormKey || null) : undefined,
           partnerFolderUrl: updateData.partnerFolderUrl !== undefined ? (updateData.partnerFolderUrl || null) : undefined,
+          ...(partnerCustomDataPatch ? {
+            partnerCustomData: {
+              ...((current.partnerCustomData as Record<string, unknown>) ?? {}),
+              ...partnerCustomDataPatch,
+            } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+          } : {}),
           version: { increment: 1 },
           updatedBy: user.id,
         },
@@ -231,6 +256,15 @@ export async function PATCH(
           industry: { select: { id: true, industryName: true } },
           parent: { select: { id: true, partnerCode: true, partnerName: true } },
           contacts: CONTACT_INCLUDE,
+          businessLinks: {
+            where: { linkStatus: 'active' },
+            select: {
+              businessId: true,
+              businessTier: true,
+              businessTierNumber: true,
+              linkCustomData: true,
+            },
+          },
         },
       });
 
@@ -239,10 +273,26 @@ export async function PATCH(
         await recalculateDescendantTierNumbers(tx, partnerId);
       }
 
+      // linkCustomData の更新（トランザクション内）
+      if (linkCustomDataPatch && linkBusinessId) {
+        const existingLink = await tx.partnerBusinessLink.findUnique({
+          where: { partnerId_businessId: { partnerId, businessId: linkBusinessId } },
+        });
+        if (existingLink) {
+          const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
+          await tx.partnerBusinessLink.update({
+            where: { id: existingLink.id },
+            data: {
+              linkCustomData: { ...existingData, ...linkCustomDataPatch } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+            },
+          });
+        }
+      }
+
       return result;
     });
 
-    return NextResponse.json({ success: true, data: formatPartner(updated) });
+    return NextResponse.json({ success: true, data: formatPartner(updated, linkBusinessId) });
   } catch (error) {
     return handleApiError(error);
   }

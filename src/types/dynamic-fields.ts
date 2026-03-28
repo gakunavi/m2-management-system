@@ -1,9 +1,10 @@
 /**
- * 事業固有フィールドの定義。
- * businesses.businessConfig.projectFields に格納される。
+ * エンティティ固有フィールドの定義。
+ * businesses.businessConfig.{projectFields|customerFields|partnerFields} に格納される。
+ * グローバル定義は system_settings.globalCustomerFields / globalPartnerFields に格納。
  */
-export interface ProjectFieldDefinition {
-  /** JSONキー（project_custom_data のキー） */
+export interface EntityFieldDefinition {
+  /** JSONキー（custom_data のキー） */
   key: string;
   /** 表示ラベル */
   label: string;
@@ -23,4 +24,12 @@ export interface ProjectFieldDefinition {
   visibleToPartner?: boolean;
   /** 一覧画面のフィルターに表示するか */
   filterable?: boolean;
+  /** 契約マスタ一覧にも表示するか（顧客/代理店フィールドのみ） */
+  showOnProject?: boolean;
 }
+
+/**
+ * 後方互換エイリアス。
+ * 既存コードの ProjectFieldDefinition 参照をそのまま維持する。
+ */
+export type ProjectFieldDefinition = EntityFieldDefinition;

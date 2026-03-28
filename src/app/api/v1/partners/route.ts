@@ -54,6 +54,7 @@ const createPartnerSchema = z.object({
   partnerBpFormKey: z.string().optional().nullable(),
   partnerFolderUrl: z.string().url().optional().nullable().or(z.literal('')),
   partnerNotes: z.string().optional().nullable(),
+  partnerCustomData: z.record(z.unknown()).optional().default({}),
 });
 
 // ============================================
@@ -128,6 +129,7 @@ export async function GET(request: NextRequest) {
               businessId: true,
               businessTier: true,
               businessTierNumber: true,
+              linkCustomData: true,
             },
           },
         },
@@ -227,6 +229,7 @@ export async function POST(request: NextRequest) {
           partnerBpFormKey: data.partnerBpFormKey || null,
           partnerFolderUrl: data.partnerFolderUrl || null,
           partnerNotes: data.partnerNotes ?? null,
+          partnerCustomData: (data.partnerCustomData ?? {}) as object,
           createdBy: user.id,
           updatedBy: user.id,
         },

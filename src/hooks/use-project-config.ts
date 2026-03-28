@@ -24,6 +24,8 @@ interface BusinessConfigData {
   businessName: string;
   businessConfig: {
     projectFields?: ProjectFieldDefinition[];
+    customerFields?: ProjectFieldDefinition[];
+    partnerFields?: ProjectFieldDefinition[];
   } | null;
 }
 
@@ -56,6 +58,16 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
     [businessData]
   );
 
+  // 3b. 顧客/代理店フィールドで showOnProject=true のものを抽出
+  const customerShowFields: ProjectFieldDefinition[] = useMemo(
+    () => (businessData?.businessConfig?.customerFields ?? []).filter((f) => f.showOnProject).sort((a, b) => a.sortOrder - b.sortOrder),
+    [businessData]
+  );
+  const partnerShowFields: ProjectFieldDefinition[] = useMemo(
+    () => (businessData?.businessConfig?.partnerFields ?? []).filter((f) => f.showOnProject).sort((a, b) => a.sortOrder - b.sortOrder),
+    [businessData]
+  );
+
   // 4. ステータス選択肢を構築
   const statusOptions = useMemo(
     () =>
@@ -68,10 +80,28 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
 
   // 5. 動的 listConfig
   const listConfig = useMemo<EntityListConfig>(() => {
-    const dynamicColumns = buildDynamicColumns(projectFields);
+    const dynamicColumns = buildDynamicColumns(projectFields, {
+      columnGroup: '契約マスタ情報',
+    });
+
+    // 顧客/代理店の showOnProject フィールド（読み取り専用）
+    const customerShowColumns = buildDynamicColumns(customerShowFields, {
+      dataKey: 'customerLinkCustomData',
+      patchEndpoint: null,
+      patchFieldPrefix: 'customerLinkCustomData',
+      columnGroup: '顧客マスタ情報',
+      columnKeyPrefix: 'customerLink',
+    });
+    const partnerShowColumns = buildDynamicColumns(partnerShowFields, {
+      dataKey: 'partnerLinkCustomData',
+      patchEndpoint: null,
+      patchFieldPrefix: 'partnerLinkCustomData',
+      columnGroup: '代理店マスタ情報',
+      columnKeyPrefix: 'partnerLink',
+    });
 
     // 固定列の後、システム列（updatedAt/createdAt）の前にカスタムフィールドを挿入する
-    // 列順: 主要固定 → 参照用固定 → カスタムフィールド → システム固定
+    // 列順: 主要固定 → 参照用固定 → 案件カスタム → 顧客カスタム → 代理店カスタム → システム固定
     const DYNAMIC_INSERT_BEFORE = 'updatedAt';
     const fixedColumns = projectListConfig.columns.map((col) => {
       if (col.key === 'projectSalesStatus') {
@@ -84,12 +114,15 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
     const mergedColumns = [
       ...fixedColumns.slice(0, spliceAt),
       ...dynamicColumns,
+      ...customerShowColumns,
+      ...partnerShowColumns,
       ...fixedColumns.slice(spliceAt),
     ];
 
     return {
       ...projectListConfig,
       columns: mergedColumns,
+      columnGroupOrder: ['契約マスタ情報', '顧客マスタ情報', '代理店マスタ情報', 'システム情報'],
       filters: [
         ...projectListConfig.filters.map((f) => {
           if (f.key === 'projectSalesStatus' && f.type === 'multi-select') {
@@ -118,7 +151,7 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
         },
       }),
     };
-  }, [projectFields, statusOptions]);
+  }, [projectFields, customerShowFields, partnerShowFields, statusOptions]);
 
   // 6. 動的 formConfig
   const formConfig = useMemo<EntityFormConfig>(() => {

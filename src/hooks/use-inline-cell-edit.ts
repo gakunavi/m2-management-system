@@ -54,6 +54,10 @@ export function useInlineCellEdit(config: EntityListConfig) {
           } else {
             body = { [customPatch.field]: value };
           }
+          // extraBody があればマージ（例: businessId）
+          if (customPatch.extraBody) {
+            body = { ...body, ...customPatch.extraBody };
+          }
           const updated = await apiClient.patch<Record<string, unknown>>(endpoint, body);
           // サーバーレスポンスで該当行を完全置換（新 version 取得）
           queryClient.setQueryData(queryKey, (old: unknown) => {

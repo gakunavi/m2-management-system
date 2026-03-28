@@ -34,15 +34,14 @@ export const customerListConfig: EntityListConfig = {
   inlineEditable: true,
   patchEndpoint: (id) => `/customers/${id}`,
   columns: [
-    // ===== 読み取り専用（自動生成）=====
-    { key: 'customerCode', label: '顧客コード', width: 120, sortable: true },
-
-    // ===== 編集可能フィールド =====
+    // ── 基本情報 ──
+    { key: 'customerCode', label: '顧客コード', width: 120, sortable: true, group: '基本情報' },
     {
       key: 'customerName',
       label: '顧客名',
       minWidth: 200,
       sortable: true,
+      group: '基本情報',
       edit: {
         type: 'text',
         placeholder: '例：株式会社〇〇',
@@ -52,27 +51,16 @@ export const customerListConfig: EntityListConfig = {
             : { success: false, error: '必須' },
       },
     },
-    {
-      key: 'customerSalutation',
-      label: '呼称',
-      width: 150,
-      sortable: true,
-      edit: { type: 'text', placeholder: '例：テクノ' },
-    },
-    {
-      key: 'customerType',
-      label: '種別',
-      width: 110,
-      sortable: true,
-      edit: { type: 'select', options: CUSTOMER_TYPE_OPTIONS },
-    },
-    // ===== 担当者情報（別テーブルの customPatch で編集）=====
+    { key: 'customerSalutation', label: '呼称', width: 150, sortable: true, group: '基本情報', edit: { type: 'text', placeholder: '例：テクノ' } },
+    { key: 'customerType', label: '種別', width: 110, sortable: true, group: '基本情報', edit: { type: 'select', options: CUSTOMER_TYPE_OPTIONS } },
+    // ── 担当者情報 ──
     {
       key: 'representativeName',
       label: '代表者',
       width: 140,
       sortable: false,
       defaultVisible: false,
+      group: '担当者情報',
       edit: { type: 'text', placeholder: '代表者名' },
       customPatch: {
         endpoint: (row) => row.representativeId ? `/customers/${row.id}/contacts/${row.representativeId}` : '',
@@ -89,6 +77,7 @@ export const customerListConfig: EntityListConfig = {
       label: '主担当者',
       width: 140,
       sortable: false,
+      group: '担当者情報',
       edit: { type: 'text', placeholder: '担当者名' },
       customPatch: {
         endpoint: (row) => row.primaryContactId ? `/customers/${row.id}/contacts/${row.primaryContactId}` : '',
@@ -106,6 +95,7 @@ export const customerListConfig: EntityListConfig = {
       width: 140,
       sortable: false,
       defaultVisible: false,
+      group: '担当者情報',
       edit: { type: 'phone', placeholder: '03-0000-0000' },
       customPatch: {
         endpoint: (row) => row.primaryContactId ? `/customers/${row.id}/contacts/${row.primaryContactId}` : '',
@@ -118,93 +108,35 @@ export const customerListConfig: EntityListConfig = {
       width: 200,
       sortable: false,
       defaultVisible: false,
+      group: '担当者情報',
       edit: { type: 'email', placeholder: 'example@example.com' },
       customPatch: {
         endpoint: (row) => row.primaryContactId ? `/customers/${row.id}/contacts/${row.primaryContactId}` : '',
         field: 'contactEmail',
       },
     },
-
-    // ===== その他フィールド =====
-    {
-      key: 'customerPostalCode',
-      label: '郵便番号',
-      width: 110,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'text', placeholder: '000-0000' },
-    },
-    {
-      key: 'customerAddress',
-      label: '住所',
-      minWidth: 200,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'text', placeholder: '都道府県・市区町村・番地' },
-    },
-    {
-      key: 'customerPhone',
-      label: '電話番号',
-      width: 140,
-      sortable: true,
-      edit: { type: 'phone', placeholder: '03-0000-0000' },
-    },
-    {
-      key: 'customerFax',
-      label: 'FAX',
-      width: 140,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'phone', placeholder: '03-0000-0000' },
-    },
-    {
-      key: 'customerEmail',
-      label: 'メール',
-      width: 200,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'email', placeholder: 'info@example.com' },
-    },
-    {
-      key: 'customerWebsite',
-      label: 'Webサイト',
-      width: 120,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'url', placeholder: 'https://example.com' },
-    },
+    // ── 連絡先 ──
+    { key: 'customerPostalCode', label: '郵便番号', width: 110, sortable: true, defaultVisible: false, group: '連絡先', edit: { type: 'text', placeholder: '000-0000' } },
+    { key: 'customerAddress', label: '住所', minWidth: 200, sortable: true, defaultVisible: false, group: '連絡先', edit: { type: 'text', placeholder: '都道府県・市区町村・番地' } },
+    { key: 'customerPhone', label: '電話番号', width: 140, sortable: true, group: '連絡先', edit: { type: 'phone', placeholder: '03-0000-0000' } },
+    { key: 'customerFax', label: 'FAX', width: 140, sortable: true, defaultVisible: false, group: '連絡先', edit: { type: 'phone', placeholder: '03-0000-0000' } },
+    { key: 'customerEmail', label: 'メール', width: 200, sortable: true, defaultVisible: false, group: '連絡先', edit: { type: 'email', placeholder: 'info@example.com' } },
+    { key: 'customerWebsite', label: 'Webサイト', width: 120, sortable: true, defaultVisible: false, group: '連絡先', edit: { type: 'url', placeholder: 'https://example.com' } },
+    // ── 企業情報 ──
     {
       key: 'industryId',
       label: '業種',
       width: 150,
       sortable: false,
-      edit: {
-        type: 'master-select',
-        optionsEndpoint: '/industries',
-        labelField: 'industryName',
-        placeholder: '業種を選択',
-      },
+      group: '企業情報',
+      edit: { type: 'master-select', optionsEndpoint: '/industries', labelField: 'industryName', placeholder: '業種を選択' },
       render: (_value, row) => {
         const industry = row.industry as { industryName: string } | null;
         return industry?.industryName ?? '-';
       },
     },
-    {
-      key: 'customerCorporateNumber',
-      label: '法人番号',
-      width: 150,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'text', placeholder: '13桁の数字' },
-    },
-    {
-      key: 'customerInvoiceNumber',
-      label: 'インボイス番号',
-      width: 160,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'text', placeholder: 'T + 13桁の数字' },
-    },
+    { key: 'customerCorporateNumber', label: '法人番号', width: 150, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'text', placeholder: '13桁の数字' } },
+    { key: 'customerInvoiceNumber', label: 'インボイス番号', width: 160, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'text', placeholder: 'T + 13桁の数字' } },
     {
       key: 'customerCapital',
       label: '資本金',
@@ -212,6 +144,7 @@ export const customerListConfig: EntityListConfig = {
       align: 'right',
       sortable: true,
       defaultVisible: false,
+      group: '企業情報',
       edit: { type: 'number', placeholder: '0' },
       render: (v) => (v != null ? `${Number(v).toLocaleString()}円` : '-'),
     },
@@ -221,49 +154,27 @@ export const customerListConfig: EntityListConfig = {
       width: 100,
       sortable: true,
       defaultVisible: false,
-      edit: {
-        type: 'select',
-        options: Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}月` })),
-      },
+      group: '企業情報',
+      edit: { type: 'select', options: Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}月` })) },
       render: (v) => (v != null ? `${v}月` : '-'),
     },
-    {
-      key: 'customerEstablishedDate',
-      label: '設立日',
-      width: 130,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'date' },
-    },
-    {
-      key: 'customerFolderUrl',
-      label: 'フォルダURL',
-      width: 120,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'url', placeholder: 'https://drive.example.com/...' },
-    },
-    {
-      key: 'customerNotes',
-      label: 'メモ',
-      width: 200,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'textarea' },
-    },
+    { key: 'customerEstablishedDate', label: '設立日', width: 130, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'date' } },
+    // ── その他 ──
+    { key: 'customerFolderUrl', label: 'フォルダURL', width: 120, sortable: true, defaultVisible: false, group: 'その他', edit: { type: 'url', placeholder: 'https://drive.example.com/...' } },
+    { key: 'customerNotes', label: 'メモ', width: 200, sortable: true, defaultVisible: false, group: 'その他', edit: { type: 'textarea' } },
     {
       key: 'customerIsActive',
       label: 'ステータス',
       width: 90,
       align: 'center',
       sortable: true,
+      group: 'その他',
       edit: { type: 'checkbox' },
       render: (value) => (value ? '有効' : '無効'),
     },
-
-    // ===== 読み取り専用（自動）=====
-    { key: 'updatedAt', label: '更新日時', width: 150, sortable: true },
-    { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false },
+    // ── システム ──
+    { key: 'updatedAt', label: '更新日時', width: 150, sortable: true, group: 'システム' },
+    { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false, group: 'システム' },
   ],
   search: {
     placeholder: '顧客名・顧客コード・担当者名で検索...',

@@ -178,6 +178,8 @@ interface SpreadsheetTableProps {
   onSortItemsSet?: (items: SortItem[]) => void;
   /** ページサイズ状態のみ更新（preferences再保存しない）— モーダル保存時に使用 */
   onPageSizeSet?: (size: number) => void;
+  /** 列表示設定モーダルのグループ表示順 */
+  columnGroupOrder?: string[];
 }
 
 export function SpreadsheetTable({
@@ -201,6 +203,7 @@ export function SpreadsheetTable({
   pageSize: currentPageSize = 25,
   onSortItemsSet,
   onPageSizeSet,
+  columnGroupOrder,
 }: SpreadsheetTableProps) {
   const router = useRouter();
   const resizingRef = useRef<{ colId: string; startX: number; startWidth: number } | null>(null);
@@ -601,6 +604,7 @@ export function SpreadsheetTable({
         currentSortItems={sortItems}
         currentPageSize={currentPageSize}
         pinnedCols={pinnedCols}
+        columnGroupOrder={columnGroupOrder}
         onSave={handleSettingsSave}
       />
 

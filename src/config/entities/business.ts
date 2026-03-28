@@ -179,6 +179,18 @@ export const businessDetailConfig: EntityDetailConfig = {
       config: {},
     },
     {
+      key: 'customerFields',
+      label: '顧客フィールド定義',
+      component: 'custom',
+      config: {},
+    },
+    {
+      key: 'partnerFields',
+      label: '代理店フィールド定義',
+      component: 'custom',
+      config: {},
+    },
+    {
       key: 'revenueRecognition',
       label: 'KPI定義',
       component: 'custom',

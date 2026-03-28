@@ -478,6 +478,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               pageSize={pagination.pageSize}
               onSortItemsSet={setSortItems}
               onPageSizeSet={setPageSize}
+              columnGroupOrder={config.columnGroupOrder}
             />
             <Pagination
               currentPage={pagination.currentPage}

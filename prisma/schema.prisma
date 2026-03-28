@@ -232,6 +232,7 @@ model Customer {
   customerFolderUrl       String?                @map("customer_folder_url") @db.VarChar(500)
   customerFiscalMonth     Int?                   @map("customer_fiscal_month") @db.SmallInt
   customerNotes           String?                @map("customer_notes")
+  customerCustomData      Json                   @default("{}") @map("customer_custom_data")
   customerIsActive        Boolean                @default(true) @map("customer_is_active")
   version                 Int                    @default(1)
   createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -348,6 +349,7 @@ model Partner {
   industryId             Int?                 @map("industry_id")
   partnerFolderUrl       String?              @map("partner_folder_url") @db.VarChar(500)
   partnerNotes           String?              @map("partner_notes")
+  partnerCustomData      Json                 @default("{}") @map("partner_custom_data")
   partnerIsActive        Boolean              @default(true) @map("partner_is_active")
   version                Int                  @default(1)
   createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)

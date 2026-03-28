@@ -3,16 +3,17 @@
 import { Suspense, useState, useMemo, useCallback } from 'react';
 import { Link2 } from 'lucide-react';
 import { EntityListTemplate } from '@/components/templates/entity-list-template';
-import { partnerListConfig } from '@/config/entities/partner';
 import { useBusinessColumns } from '@/hooks/use-business-columns';
+import { usePartnerConfig } from '@/hooks/use-partner-config';
 import { useBusiness } from '@/hooks/use-business';
 import { Button } from '@/components/ui/button';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { LinkPartnerToBusinessDialog } from '@/components/features/partner/link-partner-to-business-dialog';
 
 function PartnersPageContent() {
-  const { config } = useBusinessColumns(partnerListConfig, 'partner');
   const { businesses, selectedBusinessId } = useBusiness();
+  const { listConfig } = usePartnerConfig(selectedBusinessId);
+  const { config } = useBusinessColumns(listConfig, 'partner');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 

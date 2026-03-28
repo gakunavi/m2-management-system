@@ -48,6 +48,9 @@ export async function GET(
     const customerId = parseInt(id, 10);
     if (isNaN(customerId)) throw ApiError.notFound('顧客が見つかりません');
 
+    const { searchParams } = _request.nextUrl;
+    const bizIdParam = searchParams.get('businessId');
+
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
       include: {
@@ -65,12 +68,17 @@ export async function GET(
           },
           orderBy: { contactSortOrder: 'asc' },
         },
+        businessLinks: {
+          where: { linkStatus: 'active' },
+          select: { businessId: true, linkCustomData: true },
+        },
       },
     });
 
     if (!customer) throw ApiError.notFound('顧客が見つかりません');
 
-    return NextResponse.json({ success: true, data: formatCustomer(customer) });
+    const bizId = bizIdParam ? parseInt(bizIdParam, 10) : undefined;
+    return NextResponse.json({ success: true, data: formatCustomer(customer, bizId) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -103,12 +111,18 @@ export async function PATCH(
     if (isNaN(customerId)) throw ApiError.notFound('顧客が見つかりません');
 
     const body = await request.json();
+
+    // linkCustomData / customerCustomData の更新リクエストを先に取り出す（スキーマ外）
+    const linkCustomDataPatch = body.linkCustomData as Record<string, unknown> | undefined;
+    const customerCustomDataPatch = body.customerCustomData as Record<string, unknown> | undefined;
+    const linkBusinessId = body.businessId as number | undefined;
+
     const data = updateCustomerSchema.parse(body);
 
     // 楽観的ロック確認
     const current = await prisma.customer.findUnique({
       where: { id: customerId },
-      select: { version: true, customerIsActive: true, customerName: true, customerPhone: true },
+      select: { version: true, customerIsActive: true, customerName: true, customerPhone: true, customerCustomData: true },
     });
     if (!current) throw ApiError.notFound('顧客が見つかりません');
     if (!current.customerIsActive) throw ApiError.notFound('顧客が見つかりません');
@@ -152,6 +166,12 @@ export async function PATCH(
         customerCorporateNumber: updateData.customerCorporateNumber !== undefined ? (updateData.customerCorporateNumber || null) : undefined,
         customerInvoiceNumber: updateData.customerInvoiceNumber !== undefined ? (updateData.customerInvoiceNumber || null) : undefined,
         customerFolderUrl: updateData.customerFolderUrl !== undefined ? (updateData.customerFolderUrl || null) : undefined,
+        ...(customerCustomDataPatch ? {
+          customerCustomData: {
+            ...((current.customerCustomData as Record<string, unknown>) ?? {}),
+            ...customerCustomDataPatch,
+          } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+        } : {}),
         version: { increment: 1 },
         updatedBy: user.id,
       },
@@ -170,10 +190,31 @@ export async function PATCH(
           },
           orderBy: { contactSortOrder: 'asc' },
         },
+        businessLinks: {
+          where: { linkStatus: 'active' },
+          select: { businessId: true, linkCustomData: true },
+        },
       },
     });
 
-    return NextResponse.json({ success: true, data: formatCustomer(updated) });
+    // linkCustomData の更新（事業指定時のみ）
+    if (linkCustomDataPatch && linkBusinessId) {
+      const existingLink = await prisma.customerBusinessLink.findUnique({
+        where: { customerId_businessId: { customerId, businessId: linkBusinessId } },
+      });
+      if (existingLink) {
+        const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
+        await prisma.customerBusinessLink.update({
+          where: { id: existingLink.id },
+          data: {
+            linkCustomData: { ...existingData, ...linkCustomDataPatch } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+          },
+        });
+      }
+    }
+
+    const bizId = linkBusinessId;
+    return NextResponse.json({ success: true, data: formatCustomer(updated, bizId) });
   } catch (error) {
     return handleApiError(error);
   }

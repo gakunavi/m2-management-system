@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Eye, EyeOff, Save, Loader2 } from 'lucide-react';
+import { Settings, Eye, EyeOff, Save, Loader2, Users, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { GlobalCustomFieldsTab } from '@/components/features/settings/global-custom-fields-tab';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
@@ -178,6 +179,39 @@ export function SystemSettingsClient() {
           設定を保存
         </Button>
       </div>
+
+      {/* グローバルカスタムフィールド */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            顧客カスタムフィールド（グループ共通）
+          </CardTitle>
+          <CardDescription>
+            全事業共通で顧客に表示するカスタムフィールドを定義します。
+            事業ごとの固有フィールドは各事業の設定で管理してください。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GlobalCustomFieldsTab entityType="customer" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            代理店カスタムフィールド（グループ共通）
+          </CardTitle>
+          <CardDescription>
+            全事業共通で代理店に表示するカスタムフィールドを定義します。
+            事業ごとの固有フィールドは各事業の設定で管理してください。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GlobalCustomFieldsTab entityType="partner" />
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -14,17 +14,20 @@ export const projectListConfig: EntityListConfig = {
   patchEndpoint: (id) => `/projects/${id}`,
 
   columns: [
+    // ── 案件基本情報 ──
     {
       key: 'projectNo',
       label: '案件番号',
       width: 130,
       sortable: true,
+      group: '契約マスタ情報',
     },
     {
       key: 'customerName',
       label: '顧客',
       minWidth: 180,
       sortable: true,
+      group: '契約マスタ情報',
       render: (_value, row) => {
         const customer = row.customer as { id?: number; customerName?: string } | null;
         if (!customer?.customerName) return '-';
@@ -44,6 +47,7 @@ export const projectListConfig: EntityListConfig = {
       label: '営業ステータス',
       width: 160,
       sortable: true,
+      group: '契約マスタ情報',
       // options は useProjectConfig で注入
       edit: { type: 'select', options: [] },
       render: (_value, row) => {
@@ -59,6 +63,7 @@ export const projectListConfig: EntityListConfig = {
       label: '代理店',
       width: 180,
       sortable: true,
+      group: '契約マスタ情報',
       render: (_value, row) => {
         const partner = row.partner as { id?: number; partnerName?: string } | null;
         if (!partner?.partnerName) return '-';
@@ -78,6 +83,7 @@ export const projectListConfig: EntityListConfig = {
       label: '受注予定月',
       width: 130,
       sortable: true,
+      group: '契約マスタ情報',
       edit: { type: 'month' },
     },
     {
@@ -85,6 +91,7 @@ export const projectListConfig: EntityListConfig = {
       label: '担当者',
       width: 140,
       sortable: true,
+      group: '契約マスタ情報',
       edit: { type: 'text' },
     },
     {
@@ -92,14 +99,53 @@ export const projectListConfig: EntityListConfig = {
       label: '階層番号',
       width: 140,
       sortable: true,
+      group: '契約マスタ情報',
       edit: { type: 'text' },
     },
+    {
+      key: 'projectNotes',
+      label: '備考',
+      width: 200,
+      sortable: true,
+      defaultVisible: false,
+      group: '契約マスタ情報',
+      edit: { type: 'textarea' },
+    },
+    {
+      key: 'businessName',
+      label: '事業',
+      width: 140,
+      sortable: true,
+      defaultVisible: false,
+      group: '契約マスタ情報',
+      render: (_value, row) => {
+        const biz = row.business as { businessName?: string } | null;
+        return biz?.businessName ?? '-';
+      },
+    },
+    {
+      key: 'portalVisible',
+      label: 'ポータル',
+      width: 100,
+      sortable: true,
+      defaultVisible: false,
+      group: '契約マスタ情報',
+      edit: { type: 'checkbox' },
+      render: (value) => {
+        if (value === false) {
+          return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>;
+        }
+        return '表示';
+      },
+    },
+    // ── 顧客基本情報 ──
     {
       key: 'customerSalutation',
       label: '顧客呼称',
       width: 140,
       sortable: true,
       defaultVisible: false,
+      group: '顧客マスタ情報',
       render: (_value, row) => {
         const c = row.customer as { customerSalutation?: string | null } | null;
         return c?.customerSalutation || '-';
@@ -111,6 +157,7 @@ export const projectListConfig: EntityListConfig = {
       width: 110,
       sortable: true,
       defaultVisible: false,
+      group: '顧客マスタ情報',
       render: (_value, row) => {
         const c = row.customer as { customerType?: string | null } | null;
         return c?.customerType || '-';
@@ -122,6 +169,7 @@ export const projectListConfig: EntityListConfig = {
       width: 140,
       sortable: false,
       defaultVisible: false,
+      group: '顧客マスタ情報',
       render: (_value, row) => {
         const c = row.customer as { contacts?: { contactName: string }[] } | null;
         return c?.contacts?.[0]?.contactName || '-';
@@ -133,6 +181,7 @@ export const projectListConfig: EntityListConfig = {
       width: 160,
       sortable: true,
       defaultVisible: false,
+      group: '顧客マスタ情報',
       render: (_value, row) => {
         const c = row.customer as { customerWebsite?: string | null } | null;
         if (!c?.customerWebsite) return '-';
@@ -155,6 +204,7 @@ export const projectListConfig: EntityListConfig = {
       width: 110,
       sortable: true,
       defaultVisible: false,
+      group: '顧客マスタ情報',
       render: (_value, row) => {
         const c = row.customer as { customerFiscalMonth?: number | null } | null;
         return c?.customerFiscalMonth ? `${c.customerFiscalMonth}月` : '-';
@@ -166,6 +216,7 @@ export const projectListConfig: EntityListConfig = {
       width: 120,
       sortable: true,
       defaultVisible: false,
+      group: '顧客マスタ情報',
       render: (_value, row) => {
         const c = row.customer as { customerFolderUrl?: string | null } | null;
         if (!c?.customerFolderUrl) return '-';
@@ -183,12 +234,14 @@ export const projectListConfig: EntityListConfig = {
         );
       },
     },
+    // ── 代理店基本情報 ──
     {
       key: 'partnerCode',
       label: '代理店コード',
       width: 130,
       sortable: true,
       defaultVisible: false,
+      group: '代理店マスタ情報',
       render: (_value, row) => {
         const p = row.partner as { partnerCode?: string } | null;
         return p?.partnerCode || '-';
@@ -200,6 +253,7 @@ export const projectListConfig: EntityListConfig = {
       width: 140,
       sortable: true,
       defaultVisible: false,
+      group: '代理店マスタ情報',
       render: (_value, row) => {
         const p = row.partner as { partnerSalutation?: string | null } | null;
         return p?.partnerSalutation || '-';
@@ -211,6 +265,7 @@ export const projectListConfig: EntityListConfig = {
       width: 120,
       sortable: true,
       defaultVisible: false,
+      group: '代理店マスタ情報',
       render: (_value, row) => {
         const p = row.partner as { partnerFolderUrl?: string | null } | null;
         if (!p?.partnerFolderUrl) return '-';
@@ -228,41 +283,9 @@ export const projectListConfig: EntityListConfig = {
         );
       },
     },
-    {
-      key: 'projectNotes',
-      label: '備考',
-      width: 200,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'textarea' },
-    },
-    {
-      key: 'businessName',
-      label: '事業',
-      width: 140,
-      sortable: true,
-      render: (_value, row) => {
-        const biz = row.business as { businessName?: string } | null;
-        return biz?.businessName ?? '-';
-      },
-      defaultVisible: false,
-    },
-    {
-      key: 'portalVisible',
-      label: 'ポータル',
-      width: 100,
-      sortable: true,
-      defaultVisible: false,
-      edit: { type: 'checkbox' },
-      render: (value) => {
-        if (value === false) {
-          return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">非表示</span>;
-        }
-        return '表示';
-      },
-    },
-    { key: 'updatedAt', label: '更新日時', width: 150, sortable: true },
-    { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false },
+    // ── システム ──
+    { key: 'updatedAt', label: '更新日時', width: 150, sortable: true, group: 'システム情報' },
+    { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false, group: 'システム情報' },
   ],
 
   search: {

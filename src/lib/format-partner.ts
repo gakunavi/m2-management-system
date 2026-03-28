@@ -29,6 +29,7 @@ export interface PartnerRow {
   partnerBpFormKey: string | null;
   partnerFolderUrl: string | null;
   partnerNotes: string | null;
+  partnerCustomData?: unknown;
   partnerIsActive: boolean;
   version: number;
   createdAt: Date;
@@ -49,6 +50,7 @@ export interface PartnerRow {
     businessId: number;
     businessTier?: string | null;
     businessTierNumber?: string | null;
+    linkCustomData?: unknown;
   }[];
 }
 
@@ -61,23 +63,40 @@ export function formatPartner(p: PartnerRow, targetBusinessId?: number) {
   const representative = p.contacts?.find((ct) => ct.contactIsRepresentative) ?? null;
   const primaryContact = p.contacts?.find((ct) => ct.contactIsPrimary) ?? null;
 
-  // 事業別階層のオーバーライド
+  // グローバル partnerCustomData のフラット展開
+  const partnerCustomData = (p.partnerCustomData && typeof p.partnerCustomData === 'object')
+    ? p.partnerCustomData as Record<string, unknown>
+    : {};
+  const flatCustom: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(partnerCustomData)) {
+    flatCustom[`partnerGlobal_${key}`] = val;
+  }
+
+  // 事業別階層のオーバーライド + linkCustomData
   let displayTier = p.partnerTier;
   let displayTierNumber = p.partnerTierNumber;
+  let linkCustomData: Record<string, unknown> = {};
   if (targetBusinessId && p.businessLinks) {
     const bizLink = p.businessLinks.find((bl) => bl.businessId === targetBusinessId);
     if (bizLink) {
       displayTier = bizLink.businessTier ?? p.partnerTier;
       displayTierNumber = bizLink.businessTierNumber ?? p.partnerTierNumber;
+      if (bizLink.linkCustomData && typeof bizLink.linkCustomData === 'object') {
+        linkCustomData = bizLink.linkCustomData as Record<string, unknown>;
+        for (const [key, val] of Object.entries(linkCustomData)) {
+          flatCustom[`partnerLink_${key}`] = val;
+        }
+      }
     }
   }
 
   // contacts, parent, businessLinks を除外して新しいオブジェクトを構築
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { contacts: _contacts, parent: _parent, businessLinks: _businessLinks, partnerEstablishedDate, partnerCapital, createdAt, updatedAt, partnerTier: _tier, partnerTierNumber: _tierNum, ...rest } = p;
+  const { contacts: _contacts, parent: _parent, businessLinks: _businessLinks, partnerEstablishedDate, partnerCapital, partnerCustomData: _rawCustomData, createdAt, updatedAt, partnerTier: _tier, partnerTierNumber: _tierNum, ...rest } = p;
 
   return {
     ...rest,
+    ...flatCustom,
     partnerTier: displayTier,
     partnerTierNumber: displayTierNumber,
     partnerEstablishedDate: partnerEstablishedDate?.toISOString().split('T')[0] ?? null,
@@ -95,5 +114,7 @@ export function formatPartner(p: PartnerRow, targetBusinessId?: number) {
     primaryContactPhone: primaryContact?.contactPhone ?? null,
     primaryContactEmail: primaryContact?.contactEmail ?? null,
     businessLinkIds: p.businessLinks?.map((bl) => bl.businessId) ?? [],
+    partnerCustomData,
+    linkCustomData,
   };
 }

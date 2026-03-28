@@ -74,9 +74,15 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
 
   // 編集モード：既存データ取得（常に最新を取得して version 不整合を防ぐ）
   const { data: fetchedData, isLoading } = useQuery({
-    queryKey: [config.entityType, id],
+    queryKey: [config.entityType, id, config.extraSubmitData],
     queryFn: async () => {
-      const res = await fetch(`/api/v1${config.apiEndpoint}/${id!}`);
+      const params = new URLSearchParams();
+      // extraSubmitData の businessId をクエリパラメータとして付与（事業別カスタムデータ取得用）
+      const bizId = config.extraSubmitData?.businessId;
+      if (bizId != null) params.set('businessId', String(bizId));
+      const qs = params.toString();
+      const url = `/api/v1${config.apiEndpoint}/${id!}${qs ? `?${qs}` : ''}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error('データの取得に失敗しました');
       const json = await res.json() as { data: Record<string, unknown> };
       return json.data;
@@ -112,7 +118,10 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
     setErrors({});
 
     // ドット記法をネストされたオブジェクトに変換（バリデーション・API送信用）
-    const submissionData = unflattenDotKeys(formData);
+    const submissionData = {
+      ...unflattenDotKeys(formData),
+      ...(config.extraSubmitData ?? {}),
+    };
 
     // --- フロント側 Zod バリデーション ---
     const schema = config.validationSchema;

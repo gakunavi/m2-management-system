@@ -51,6 +51,7 @@ const createCustomerSchema = z.object({
   customerEstablishedDate: z.string().optional().nullable(),
   customerFolderUrl: z.string().url().optional().nullable().or(z.literal('')),
   customerNotes: z.string().optional().nullable(),
+  customerCustomData: z.record(z.unknown()).optional().default({}),
 });
 
 // ============================================
@@ -121,15 +122,17 @@ export async function GET(request: NextRequest) {
           },
           businessLinks: {
             where: { linkStatus: 'active' },
-            select: { businessId: true },
+            select: { businessId: true, linkCustomData: true },
           },
         },
       }),
     ]);
 
+    const businessIdNum = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
+
     return NextResponse.json({
       success: true,
-      data: customers.map(formatCustomer),
+      data: customers.map((c) => formatCustomer(c, businessIdNum)),
       meta: {
         page,
         pageSize,
@@ -196,6 +199,7 @@ export async function POST(request: NextRequest) {
         customerEstablishedDate: data.customerEstablishedDate ? new Date(data.customerEstablishedDate) : null,
         customerFolderUrl: data.customerFolderUrl || null,
         customerNotes: data.customerNotes ?? null,
+        customerCustomData: (data.customerCustomData ?? {}) as object,
         createdBy: user.id,
         updatedBy: user.id,
       },

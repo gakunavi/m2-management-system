@@ -34,6 +34,8 @@ export type CustomPatchConfig = {
   endpoint: (row: Record<string, unknown>) => string;
   /** API に送信するフィールド名（列の key と異なる場合に指定） */
   field: string;
+  /** PATCH ボディに追加するフィールド（例: { businessId: 1 }） */
+  extraBody?: Record<string, unknown>;
   /** PATCH 後にリスト全体を再取得する（デフォルト: true） */
   refetchOnSuccess?: boolean;
 };
@@ -52,6 +54,8 @@ export type ColumnDef = {
   edit?: CellEditConfig;
   /** 通常の patchEndpoint ではなく別 API に PATCH する設定 */
   customPatch?: CustomPatchConfig;
+  /** 列表示設定モーダルでのグループ分け（例: '基本情報', '事業カスタム項目'） */
+  group?: string;
 };
 
 // ============================================
@@ -167,6 +171,8 @@ export type EntityListConfig = {
     filters: Record<string, string>;
     setFilter: (key: string, value: string) => void;
   }) => ReactNode;
+  /** 列表示設定モーダルのグループ表示順 */
+  columnGroupOrder?: string[];
 };
 
 // ============================================
@@ -293,6 +299,8 @@ export type EntityFormConfig = {
   warnOnLeave?: boolean;
   /** 新規作成時にAPIへ送信する隠しフィールド（UIに表示しない） */
   defaultValues?: Record<string, unknown>;
+  /** フォーム送信時にAPIボディに追加するフィールド（例: { businessId: 1 }） */
+  extraSubmitData?: Record<string, unknown>;
 };
 
 export type FormSectionDef = {

@@ -1,5 +1,42 @@
 import type { FormFieldDef, ColumnDef, CellEditConfig, FilterDef } from '@/types/config';
-import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
+import type { EntityFieldDefinition } from '@/types/dynamic-fields';
+
+// ============================================
+// DynamicFieldOptions: エンティティ種別に応じた動的生成オプション
+// ============================================
+
+export interface DynamicFieldOptions {
+  /** 行データ上のJSONプロパティ名（例: 'projectCustomData', 'linkCustomData'） */
+  dataKey: string;
+  /** インラインPATCH先。null で読み取り専用 */
+  patchEndpoint: ((row: Record<string, unknown>) => string) | null;
+  /** PATCH ボディのフィールドパス（例: 'projectCustomData', 'linkCustomData'） */
+  patchFieldPrefix: string;
+  /** 列表示設定モーダル用のグループ名 */
+  columnGroup?: string;
+  /** 列キーのプレフィックス（名前空間衝突回避。例: 'customerLink'） */
+  columnKeyPrefix?: string;
+  /** インラインPATCH時にボディに追加するフィールド（例: { businessId: 1 }） */
+  patchExtraBody?: Record<string, unknown>;
+}
+
+/** 契約マスタ（既存互換）のデフォルトオプション */
+const DEFAULT_OPTIONS: DynamicFieldOptions = {
+  dataKey: 'projectCustomData',
+  patchEndpoint: (row) => `/projects/${row.id}`,
+  patchFieldPrefix: 'projectCustomData',
+};
+
+function resolveOptions(opts?: Partial<DynamicFieldOptions>): DynamicFieldOptions {
+  if (!opts) return DEFAULT_OPTIONS;
+  return { ...DEFAULT_OPTIONS, ...opts };
+}
+
+/** 列キーを生成。prefix が指定されていれば `prefix_key`、なければ `customData_key` */
+function colKey(fieldKey: string, opts: DynamicFieldOptions): string {
+  const prefix = opts.columnKeyPrefix || 'customData';
+  return `${prefix}_${fieldKey}`;
+}
 
 // ============================================
 // フォームフィールド生成
@@ -9,13 +46,17 @@ import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
  * フィールド定義から FormFieldDef 配列を生成する。
  * EntityFormConfig の sections に追加するために使用。
  */
-export function buildFormFields(fields: ProjectFieldDefinition[]): FormFieldDef[] {
+export function buildFormFields(
+  fields: EntityFieldDefinition[],
+  opts?: Partial<DynamicFieldOptions>,
+): FormFieldDef[] {
+  const o = resolveOptions(opts);
   return fields
     .filter((f) => f.type !== 'formula') // formula型はフォームに表示しない
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => {
       const base: FormFieldDef = {
-        key: `projectCustomData.${field.key}`,
+        key: `${o.dataKey}.${field.key}`,
         label: field.label,
         type: mapFieldType(field.type),
         required: field.required ?? false,
@@ -34,7 +75,7 @@ export function buildFormFields(fields: ProjectFieldDefinition[]): FormFieldDef[
 }
 
 function mapFieldType(
-  type: ProjectFieldDefinition['type']
+  type: EntityFieldDefinition['type']
 ): FormFieldDef['type'] {
   switch (type) {
     case 'text':     return 'text';
@@ -57,47 +98,59 @@ function mapFieldType(
 /**
  * フィールド定義から ColumnDef 配列を生成する。
  * EntityListConfig の columns に追加するために使用。
+ * opts.patchEndpoint が null の場合は読み取り専用（edit/customPatch なし）。
  */
-export function buildDynamicColumns(fields: ProjectFieldDefinition[]): ColumnDef[] {
+export function buildDynamicColumns(
+  fields: EntityFieldDefinition[],
+  opts?: Partial<DynamicFieldOptions>,
+): ColumnDef[] {
+  const o = resolveOptions(opts);
+  const readOnly = o.patchEndpoint === null;
+
   return fields
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => {
+      const key = colKey(field.key, o);
+
       // formula型: 読み取り専用・計算値をサーバー側で注入済み
       if (field.type === 'formula') {
         return {
-          key: `customData_${field.key}`,
+          key,
           label: field.label,
           width: getDefaultWidth(field.type),
           sortable: true,
           defaultVisible: false,
+          group: o.columnGroup,
           render: (_value: unknown, row: Record<string, unknown>) => {
-            // サーバー側で flatCustom に注入済みの計算値を使用
-            const val = row[`customData_${field.key}`];
+            const val = row[key];
             return formatDynamicValue(val, 'formula');
           },
         } satisfies ColumnDef;
       }
 
       const col: ColumnDef = {
-        key: `customData_${field.key}`,
+        key,
         label: field.label,
         width: getDefaultWidth(field.type),
         sortable: true,
         defaultVisible: false,
-        // URL型: render を提供せず EditableCell のネイティブURL表示（青文字+アイコン+truncate）に委任
-        // ※ API レスポンスで customData_* キーにフラット展開済みなので value が取れる
+        group: o.columnGroup,
+        // URL型: render を提供せず EditableCell のネイティブURL表示に委任
         ...(field.type !== 'url' && {
           render: (_value: unknown, row: Record<string, unknown>) => {
-            const customData = row.projectCustomData as Record<string, unknown> | null;
+            const customData = row[o.dataKey] as Record<string, unknown> | null;
             const val = customData?.[field.key];
             return formatDynamicValue(val, field.type);
           },
         }),
-        edit: buildDynamicCellEdit(field),
-        customPatch: {
-          endpoint: (row: Record<string, unknown>) => `/projects/${row.id}`,
-          field: `projectCustomData.${field.key}`,
-        },
+        ...(readOnly ? {} : {
+          edit: buildDynamicCellEdit(field),
+          customPatch: {
+            endpoint: o.patchEndpoint!,
+            field: `${o.patchFieldPrefix}.${field.key}`,
+            ...(o.patchExtraBody ? { extraBody: o.patchExtraBody } : {}),
+          },
+        }),
       };
       return col;
     });
@@ -111,12 +164,16 @@ export function buildDynamicColumns(fields: ProjectFieldDefinition[]): ColumnDef
  * filterable フラグが true のフィールド定義から FilterDef 配列を生成する。
  * select → multi-select フィルター、checkbox → boolean フィルター、text → text フィルター。
  */
-export function buildDynamicFilters(fields: ProjectFieldDefinition[]): FilterDef[] {
+export function buildDynamicFilters(
+  fields: EntityFieldDefinition[],
+  keyPrefix?: string,
+): FilterDef[] {
+  const prefix = keyPrefix || 'customField';
   return fields
     .filter((f) => f.filterable)
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field): FilterDef => {
-      const filterKey = `customField_${field.key}`;
+      const filterKey = `${prefix}_${field.key}`;
       switch (field.type) {
         case 'select':
           return {
@@ -145,7 +202,7 @@ export function buildDynamicFilters(fields: ProjectFieldDefinition[]): FilterDef
     });
 }
 
-function getDefaultWidth(type: ProjectFieldDefinition['type']): number {
+function getDefaultWidth(type: EntityFieldDefinition['type']): number {
   switch (type) {
     case 'textarea': return 200;
     case 'number':   return 120;
@@ -160,7 +217,7 @@ function getDefaultWidth(type: ProjectFieldDefinition['type']): number {
 
 export function formatDynamicValue(
   value: unknown,
-  type: ProjectFieldDefinition['type']
+  type: EntityFieldDefinition['type']
 ): string {
   if (value == null) return '-';
   switch (type) {
@@ -172,7 +229,7 @@ export function formatDynamicValue(
 }
 
 function buildDynamicCellEdit(
-  field: ProjectFieldDefinition
+  field: EntityFieldDefinition
 ): CellEditConfig | undefined {
   switch (field.type) {
     case 'text':     return { type: 'text' };
@@ -208,21 +265,22 @@ export type FieldDisplayDef = {
  * EntityDetailConfig の info タブに「事業固有情報」セクションとして追加。
  */
 export function buildDynamicDisplayFields(
-  fields: ProjectFieldDefinition[]
+  fields: EntityFieldDefinition[],
+  opts?: Partial<DynamicFieldOptions>,
 ): FieldDisplayDef[] {
+  const o = resolveOptions(opts);
   return fields
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((field) => ({
-      key: field.type === 'formula' ? `customData_${field.key}` : `projectCustomData.${field.key}`,
+      key: field.type === 'formula' ? colKey(field.key, o) : `${o.dataKey}.${field.key}`,
       label: field.label,
       type: 'text' as const,
       render: (_value: unknown, data: Record<string, unknown>) => {
         if (field.type === 'formula') {
-          // formula はサーバー側で flatCustom に注入済み
-          const val = data[`customData_${field.key}`];
+          const val = data[colKey(field.key, o)];
           return formatDynamicValue(val, 'formula') as React.ReactNode;
         }
-        const customData = data.projectCustomData as Record<string, unknown> | null;
+        const customData = data[o.dataKey] as Record<string, unknown> | null;
         const val = customData?.[field.key];
         return formatDynamicValue(val, field.type) as React.ReactNode;
       },
@@ -245,7 +303,7 @@ export type CsvTemplateColumn = {
  * フィールド定義からCSVのテンプレート列を生成する。
  */
 export function buildDynamicCsvColumns(
-  fields: ProjectFieldDefinition[]
+  fields: EntityFieldDefinition[]
 ): CsvTemplateColumn[] {
   return fields
     .filter((f) => f.type !== 'formula') // formula型はCSVインポート対象外
@@ -262,7 +320,7 @@ export function buildDynamicCsvColumns(
  * CSVの日本語ヘッダーからフィールドキーへのマッピングを生成する。
  */
 export function buildCsvLabelToKeyMap(
-  fields: ProjectFieldDefinition[]
+  fields: EntityFieldDefinition[]
 ): Record<string, string> {
   const map: Record<string, string> = {};
   for (const field of fields) {
@@ -276,16 +334,17 @@ export function buildCsvLabelToKeyMap(
 // ============================================
 
 /**
- * フォームデータから projectCustomData を構築する。
+ * フォームデータからカスタムデータを構築する。
  */
 export function extractCustomData(
   formData: Record<string, unknown>,
-  fields: ProjectFieldDefinition[]
+  fields: EntityFieldDefinition[],
+  dataKey = 'projectCustomData',
 ): Record<string, unknown> {
   const customData: Record<string, unknown> = {};
   for (const field of fields) {
     if (field.type === 'formula') continue; // formula型はスキップ
-    const formKey = `projectCustomData.${field.key}`;
+    const formKey = `${dataKey}.${field.key}`;
     if (formKey in formData) {
       customData[field.key] = formData[formKey];
     }
@@ -294,15 +353,16 @@ export function extractCustomData(
 }
 
 /**
- * projectCustomData をフォームデータに展開する。
+ * カスタムデータをフォームデータに展開する。
  */
 export function expandCustomData(
   customData: Record<string, unknown>,
-  fields: ProjectFieldDefinition[]
+  fields: EntityFieldDefinition[],
+  dataKey = 'projectCustomData',
 ): Record<string, unknown> {
   const expanded: Record<string, unknown> = {};
   for (const field of fields) {
-    expanded[`projectCustomData.${field.key}`] = customData[field.key] ?? null;
+    expanded[`${dataKey}.${field.key}`] = customData[field.key] ?? null;
   }
   return expanded;
 }
