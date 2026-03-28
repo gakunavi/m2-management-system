@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useStatusDefinitions, type StatusDefinition } from '@/hooks/use-status-definitions';
 import { SortableItemList, type SortableItemColumn, type SortableItemFormField } from '@/components/shared/sortable-item-list';
+import { AiCodeGenerateButton } from '@/components/shared/ai-code-generate-button';
 import { TabCsvImport } from '@/components/shared/tab-csv-import';
 import { STATUS_DEFINITION_TEMPLATE_COLUMNS } from '@/lib/csv-helpers';
 
@@ -59,19 +60,29 @@ const STATUS_COLUMNS: SortableItemColumn<StatusDefinition>[] = [
 
 const STATUS_FORM_FIELDS: SortableItemFormField[] = [
   {
+    key: 'statusLabel',
+    label: '表示ラベル',
+    type: 'text',
+    required: true,
+    placeholder: '例：2.入金確定',
+  },
+  {
     key: 'statusCode',
     label: 'ステータスコード',
     type: 'text',
     required: true,
     placeholder: '例：payment_confirmed',
     description: '英数字・アンダースコアのみ。作成後は変更不可。',
-  },
-  {
-    key: 'statusLabel',
-    label: '表示ラベル',
-    type: 'text',
-    required: true,
-    placeholder: '例：2.入金確定',
+    renderAfterLabel: ({ formData, setField, isEditing }) => {
+      if (isEditing) return null;
+      return (
+        <AiCodeGenerateButton
+          label={String(formData.statusLabel ?? '')}
+          context="step_code"
+          onGenerated={(code) => setField('statusCode', code)}
+        />
+      );
+    },
   },
   {
     key: 'statusPriority',

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEntityFieldDefinitions } from '@/hooks/use-entity-field-definitions';
 import type { EntityFieldDefinition } from '@/types/dynamic-fields';
 import { SortableItemList, type SortableItemColumn, type SortableItemFormField } from '@/components/shared/sortable-item-list';
+import { AiCodeGenerateButton } from '@/components/shared/ai-code-generate-button';
 import { TabCsvImport } from '@/components/shared/tab-csv-import';
 
 const FIELD_TYPE_OPTIONS = [
@@ -104,19 +105,29 @@ function buildFormFields(entityType: EntityType): SortableItemFormField[] {
   const label = ENTITY_LABEL[entityType];
   const formFields: SortableItemFormField[] = [
     {
+      key: 'label',
+      label: '表示ラベル',
+      type: 'text',
+      required: true,
+      placeholder: entityType === 'project' ? '例：案件金額' : `例：${label}カテゴリ`,
+    },
+    {
       key: 'key',
       label: 'フィールドキー',
       type: 'text',
       required: true,
       placeholder: entityType === 'project' ? '例：project_amount' : `例：${entityType}_category`,
       description: `英数字・アンダースコアのみ。${label}カスタムデータのJSONキー。作成後は変更不可。`,
-    },
-    {
-      key: 'label',
-      label: '表示ラベル',
-      type: 'text',
-      required: true,
-      placeholder: entityType === 'project' ? '例：案件金額' : `例：${label}カテゴリ`,
+      renderAfterLabel: ({ formData, setField, isEditing }) => {
+        if (isEditing) return null;
+        return (
+          <AiCodeGenerateButton
+            label={String(formData.label ?? '')}
+            context="field_key"
+            onGenerated={(code) => setField('key', code)}
+          />
+        );
+      },
     },
     {
       key: 'type',

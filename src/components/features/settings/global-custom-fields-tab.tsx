@@ -3,6 +3,7 @@
 import { useGlobalFieldDefinitions } from '@/hooks/use-global-field-definitions';
 import type { EntityFieldDefinition } from '@/types/dynamic-fields';
 import { SortableItemList, type SortableItemColumn, type SortableItemFormField } from '@/components/shared/sortable-item-list';
+import { AiCodeGenerateButton } from '@/components/shared/ai-code-generate-button';
 
 const FIELD_TYPE_OPTIONS = [
   { label: 'テキスト', value: 'text' },
@@ -45,19 +46,29 @@ const COLUMNS: SortableItemColumn<FieldWithId>[] = [
 
 const FORM_FIELDS: SortableItemFormField[] = [
   {
+    key: 'label',
+    label: '表示ラベル',
+    type: 'text',
+    required: true,
+    placeholder: '例：業種規模',
+  },
+  {
     key: 'key',
     label: 'フィールドキー',
     type: 'text',
     required: true,
     placeholder: '例：industry_scale',
     description: '英数字・アンダースコアのみ。作成後は変更不可。',
-  },
-  {
-    key: 'label',
-    label: '表示ラベル',
-    type: 'text',
-    required: true,
-    placeholder: '例：業種規模',
+    renderAfterLabel: ({ formData, setField, isEditing }) => {
+      if (isEditing) return null;
+      return (
+        <AiCodeGenerateButton
+          label={String(formData.label ?? '')}
+          context="field_key"
+          onGenerated={(code) => setField('key', code)}
+        />
+      );
+    },
   },
   {
     key: 'type',

@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useFileCategories } from '@/hooks/use-file-categories';
 import { SortableItemList, type SortableItemColumn, type SortableItemFormField } from '@/components/shared/sortable-item-list';
+import { AiCodeGenerateButton } from '@/components/shared/ai-code-generate-button';
 import { TabCsvImport } from '@/components/shared/tab-csv-import';
 import { FILE_CATEGORY_TEMPLATE_COLUMNS } from '@/lib/csv-helpers';
 
@@ -28,19 +29,29 @@ const COLUMNS: SortableItemColumn<FileCategoryItem>[] = [
 
 const FORM_FIELDS: SortableItemFormField[] = [
   {
+    key: 'label',
+    label: '表示名',
+    type: 'text',
+    required: true,
+    placeholder: '例：チェックリスト',
+  },
+  {
     key: 'key',
     label: 'カテゴリキー',
     type: 'text',
     required: true,
     placeholder: '例：checklist',
     description: '英数字・アンダースコアのみ。作成後は変更不可。',
-  },
-  {
-    key: 'label',
-    label: '表示名',
-    type: 'text',
-    required: true,
-    placeholder: '例：チェックリスト',
+    renderAfterLabel: ({ formData, setField, isEditing }) => {
+      if (isEditing) return null;
+      return (
+        <AiCodeGenerateButton
+          label={String(formData.label ?? '')}
+          context="field_key"
+          onGenerated={(code) => setField('key', code)}
+        />
+      );
+    },
   },
 ];
 

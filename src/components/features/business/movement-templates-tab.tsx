@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useMovementTemplates, type MovementTemplate } from '@/hooks/use-movement-templates';
 import { useProjectFieldDefinitions } from '@/hooks/use-project-field-definitions';
 import { SortableItemList, type SortableItemColumn, type SortableItemFormField } from '@/components/shared/sortable-item-list';
+import { AiCodeGenerateButton } from '@/components/shared/ai-code-generate-button';
 import { TabCsvImport } from '@/components/shared/tab-csv-import';
 import { Button } from '@/components/ui/button';
 import { MOVEMENT_TEMPLATE_COLUMNS as MOVEMENT_CSV_COLUMNS } from '@/lib/csv-helpers';
@@ -70,19 +71,29 @@ export function MovementTemplatesTab({ entityId }: Props) {
 
   const MOVEMENT_FORM_FIELDS: SortableItemFormField[] = [
     {
+      key: 'stepName',
+      label: 'ステップ名',
+      type: 'text',
+      required: true,
+      placeholder: '例：納品準備',
+    },
+    {
       key: 'stepCode',
       label: 'ステップコード',
       type: 'text',
       required: true,
       placeholder: '例：delivery_prep',
       description: '英数字・アンダースコアのみ。作成後は変更不可。',
-    },
-    {
-      key: 'stepName',
-      label: 'ステップ名',
-      type: 'text',
-      required: true,
-      placeholder: '例：納品準備',
+      renderAfterLabel: ({ formData, setField, isEditing }) => {
+        if (isEditing) return null;
+        return (
+          <AiCodeGenerateButton
+            label={String(formData.stepName ?? '')}
+            context="step_code"
+            onGenerated={(code) => setField('stepCode', code)}
+          />
+        );
+      },
     },
     {
       key: 'stepDescription',

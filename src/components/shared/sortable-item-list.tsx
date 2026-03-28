@@ -66,6 +66,13 @@ export interface SortableItemFormField {
     items: unknown[];
     editItemId: string | number | null;
   }) => React.ReactNode;
+  /** ラベルとインプットの間に追加UIを描画（例: AI自動生成ボタン） */
+  renderAfterLabel?: (params: {
+    value: unknown;
+    formData: Record<string, unknown>;
+    setField: (key: string, value: unknown) => void;
+    isEditing: boolean;
+  }) => React.ReactNode;
 }
 
 interface SortableItemListProps<T extends { id: string | number }> {
@@ -259,10 +266,18 @@ export function SortableItemList<T extends { id: string | number }>({
 
               return (
                 <div key={field.key} className="space-y-1.5">
-                  <Label htmlFor={field.key}>
-                    {field.label}
-                    {field.required && <span className="ml-1 text-destructive">*</span>}
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor={field.key}>
+                      {field.label}
+                      {field.required && <span className="ml-1 text-destructive">*</span>}
+                    </Label>
+                    {field.renderAfterLabel && field.renderAfterLabel({
+                      value,
+                      formData,
+                      setField,
+                      isEditing: editItem !== null,
+                    })}
+                  </div>
 
                   {field.type === 'checkbox' ? (
                     <div className="flex items-center gap-2">
