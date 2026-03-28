@@ -298,7 +298,10 @@ export async function PATCH(
       return result;
     });
 
-    return NextResponse.json({ success: true, data: formatPartner(updated, linkBusinessId) });
+    // レスポンス用の businessId: body または クエリパラメータから取得（通常PATCH時もフラット展開に必要）
+    const { searchParams } = request.nextUrl;
+    const responseBizId = linkBusinessId ?? (searchParams.get('businessId') ? parseInt(searchParams.get('businessId')!, 10) : undefined);
+    return NextResponse.json({ success: true, data: formatPartner(updated, responseBizId) });
   } catch (error) {
     return handleApiError(error);
   }

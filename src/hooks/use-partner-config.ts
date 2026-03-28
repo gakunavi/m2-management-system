@@ -93,6 +93,7 @@ export function usePartnerConfig(businessId: number | null): UsePartnerConfigRes
 
     return {
       ...partnerListConfig,
+      ...(businessId ? { patchEndpoint: (id: number) => `/partners/${id}?businessId=${businessId}` } : {}),
       columns: mergedColumns,
       columnGroupOrder: ['基本情報', '担当者情報', '連絡先', '企業情報', 'その他', 'グループ共通情報', '事業カスタム情報', 'システム'],
       filters: [

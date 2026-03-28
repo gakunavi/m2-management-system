@@ -96,6 +96,8 @@ export function useCustomerConfig(businessId: number | null): UseCustomerConfigR
 
     return {
       ...customerListConfig,
+      // 通常PATCHレスポンスにもカスタムデータを含めるため、patchEndpointにbusinessIdを付与
+      ...(businessId ? { patchEndpoint: (id: number) => `/customers/${id}?businessId=${businessId}` } : {}),
       columns: mergedColumns,
       columnGroupOrder: ['基本情報', '担当者情報', '連絡先', '企業情報', 'その他', 'グループ共通情報', '事業カスタム情報', 'システム'],
       filters: [
