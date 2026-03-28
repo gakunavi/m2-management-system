@@ -70,13 +70,13 @@ export function AiCodeGenerateButton({
             <span>
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-6 px-2 text-xs text-muted-foreground"
+                className="h-7 px-2.5 text-xs text-muted-foreground border-dashed"
                 disabled
               >
-                <Sparkles className="h-3 w-3 mr-1" />
-                AI自動生成
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                AIで自動生成
               </Button>
             </span>
           </TooltipTrigger>
@@ -91,18 +91,18 @@ export function AiCodeGenerateButton({
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant="outline"
       size="sm"
-      className="h-6 px-2 text-xs"
+      className="h-7 px-2.5 text-xs border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
       onClick={handleGenerate}
       disabled={generating || !label.trim()}
     >
       {generating ? (
-        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
       ) : (
-        <Sparkles className="h-3 w-3 mr-1" />
+        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
       )}
-      {generating ? '生成中...' : 'AI自動生成'}
+      {generating ? '生成中...' : 'AIで自動生成'}
     </Button>
   );
 }
