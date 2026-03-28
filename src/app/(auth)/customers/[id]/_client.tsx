@@ -1,7 +1,8 @@
 'use client';
 
 import { EntityDetailTemplate } from '@/components/templates/entity-detail-template';
-import { customerDetailConfig } from '@/config/entities/customer';
+import { useCustomerConfig } from '@/hooks/use-customer-config';
+import { useBusiness } from '@/hooks/use-business';
 import { useBreadcrumbFrom } from '@/hooks/use-breadcrumb-from';
 import { CustomerContactsTab } from '@/components/features/customer/customer-contacts-tab';
 import { CustomerBankAccountsTab } from '@/components/features/customer/customer-bank-accounts-tab';
@@ -21,10 +22,12 @@ const CUSTOM_TABS = {
 
 export function CustomerDetailClient({ id }: Props) {
   const fromCrumb = useBreadcrumbFrom();
+  const { selectedBusinessId } = useBusiness();
+  const { detailConfig } = useCustomerConfig(selectedBusinessId);
 
   return (
     <EntityDetailTemplate
-      config={customerDetailConfig}
+      config={detailConfig}
       id={id}
       breadcrumbs={[
         ...(fromCrumb
