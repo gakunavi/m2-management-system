@@ -74,7 +74,7 @@ export function usePartnerConfig(businessId: number | null): UsePartnerConfigRes
 
     const globalColumns = buildDynamicColumns(globalFields, {
       dataKey: 'partnerCustomData',
-      patchEndpoint: (row) => `/partners/${row.id}`,
+      patchEndpoint: (row) => `/partners/${row.id}${businessId ? `?businessId=${businessId}` : ''}`,
       patchFieldPrefix: 'partnerCustomData',
       columnGroup: 'グループ共通情報',
       columnKeyPrefix: 'partnerGlobal',

@@ -74,10 +74,10 @@ export function useCustomerConfig(businessId: number | null): UseCustomerConfigR
       patchExtraBody: businessId ? { businessId } : undefined,
     });
 
-    // グローバル列
+    // グローバル列（businessId付きでPATCHレスポンスに事業別データも含める）
     const globalColumns = buildDynamicColumns(globalFields, {
       dataKey: 'customerCustomData',
-      patchEndpoint: (row) => `/customers/${row.id}`,
+      patchEndpoint: (row) => `/customers/${row.id}${businessId ? `?businessId=${businessId}` : ''}`,
       patchFieldPrefix: 'customerCustomData',
       columnGroup: 'グループ共通情報',
       columnKeyPrefix: 'customerGlobal',

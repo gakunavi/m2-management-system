@@ -59,18 +59,24 @@ export function useInlineCellEdit(config: EntityListConfig) {
             body = { ...body, ...customPatch.extraBody };
           }
           const updated = await apiClient.patch<Record<string, unknown>>(endpoint, body);
-          // サーバーレスポンスで該当行を完全置換（新 version 取得）
-          queryClient.setQueryData(queryKey, (old: unknown) => {
-            if (!old || typeof old !== 'object') return old;
-            const cached = old as Record<string, unknown>;
-            if (!Array.isArray(cached.data)) return old;
-            return {
-              ...cached,
-              data: (cached.data as Record<string, unknown>[]).map((r) =>
-                r.id === (row.id as number) ? updated : r,
-              ),
-            };
-          });
+          // レスポンスが親エンティティの場合のみ行置換（連絡先等の子エンティティは別スキーマ）
+          const isSameEntity = updated.id === (row.id as number) && 'version' in updated;
+          if (isSameEntity) {
+            queryClient.setQueryData(queryKey, (old: unknown) => {
+              if (!old || typeof old !== 'object') return old;
+              const cached = old as Record<string, unknown>;
+              if (!Array.isArray(cached.data)) return old;
+              return {
+                ...cached,
+                data: (cached.data as Record<string, unknown>[]).map((r) =>
+                  r.id === (row.id as number) ? updated : r,
+                ),
+              };
+            });
+          } else {
+            // 子エンティティの場合は楽観的更新のまま、一覧を再取得して最新化
+            await queryClient.invalidateQueries({ queryKey });
+          }
           // 詳細・編集画面のキャッシュも無効化
           queryClient.invalidateQueries({
             queryKey: [config.entityType, String(row.id)],
