@@ -92,17 +92,26 @@ const PROJECT_INCLUDE = {
     select: {
       id: true, customerCode: true, customerName: true, customerFolderUrl: true,
       customerSalutation: true, customerType: true, customerWebsite: true, customerFiscalMonth: true,
+      customerCustomData: true,
       contacts: {
         where: { contactIsRepresentative: true },
         select: { contactName: true },
         take: 1,
+      },
+      businessLinks: {
+        where: { linkStatus: 'active' },
+        select: { businessId: true, linkCustomData: true },
       },
     },
   },
   partner: {
     select: {
       id: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
-      partnerSalutation: true,
+      partnerSalutation: true, partnerCustomData: true,
+      businessLinks: {
+        where: { linkStatus: 'active' },
+        select: { businessId: true, linkCustomData: true },
+      },
     },
   },
   business: { select: { id: true, businessName: true } },
@@ -370,9 +379,41 @@ export async function GET(request: NextRequest) {
             flatCustom[`customData_${k}`] = v;
           }
         }
+        // 顧客の事業別カスタムデータを展開
+        const customer = p.customer as Record<string, unknown> | null;
+        const customerLinks = (customer?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+        const customerLink = customerLinks.find((l) => l.businessId === p.businessId);
+        const customerLinkData = (customerLink?.linkCustomData ?? {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(customerLinkData)) {
+          flatCustom[`customerLink_${k}`] = v;
+        }
+        // 顧客のグローバルカスタムデータを展開
+        const customerGlobalData = (customer?.customerCustomData ?? {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(customerGlobalData)) {
+          flatCustom[`customerGlobal_${k}`] = v;
+        }
+        // 代理店の事業別カスタムデータを展開
+        const partner = p.partner as Record<string, unknown> | null;
+        const partnerLinks = (partner?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+        const partnerLink = partnerLinks.find((l) => l.businessId === p.businessId);
+        const partnerLinkData = (partnerLink?.linkCustomData ?? {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(partnerLinkData)) {
+          flatCustom[`partnerLink_${k}`] = v;
+        }
+        // 代理店のグローバルカスタムデータを展開
+        const partnerGlobalData = (partner?.partnerCustomData ?? {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(partnerGlobalData)) {
+          flatCustom[`partnerGlobal_${k}`] = v;
+        }
+
         return {
           ...formatted,
           ...flatCustom,
+          // 列のrenderで直接アクセスするためのオブジェクトも保持
+          customerLinkCustomData: customerLinkData,
+          customerCustomData: customerGlobalData,
+          partnerLinkCustomData: partnerLinkData,
+          partnerCustomData: partnerGlobalData,
           projectSalesStatusLabel: status?.label ?? null,
           projectSalesStatusColor: status?.color ?? null,
         };

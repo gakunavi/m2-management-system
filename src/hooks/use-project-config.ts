@@ -190,6 +190,16 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
   // 7. 動的 detailConfig
   const detailConfig = useMemo<EntityDetailConfig>(() => {
     const dynamicDisplayFields = buildDynamicDisplayFields(projectFields);
+    const customerDisplayFields = buildDynamicDisplayFields(customerShowFields, {
+      dataKey: 'customerLinkCustomData',
+      patchEndpoint: null,
+      patchFieldPrefix: 'customerLinkCustomData',
+    });
+    const partnerDisplayFields = buildDynamicDisplayFields(partnerShowFields, {
+      dataKey: 'partnerLinkCustomData',
+      patchEndpoint: null,
+      patchFieldPrefix: 'partnerLinkCustomData',
+    });
     const infoTab = projectDetailConfig.tabs[0];
 
     return {
@@ -208,13 +218,27 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
                     fields: dynamicDisplayFields,
                   }]
                 : []),
+              ...(customerDisplayFields.length > 0
+                ? [{
+                    title: '顧客カスタム情報',
+                    columns: 2,
+                    fields: customerDisplayFields,
+                  }]
+                : []),
+              ...(partnerDisplayFields.length > 0
+                ? [{
+                    title: '代理店カスタム情報',
+                    columns: 2,
+                    fields: partnerDisplayFields,
+                  }]
+                : []),
             ],
           },
         },
         ...projectDetailConfig.tabs.slice(1),
       ],
     };
-  }, [projectFields]);
+  }, [projectFields, customerShowFields, partnerShowFields]);
 
   return {
     listConfig,

@@ -34,17 +34,26 @@ const PROJECT_INCLUDE = {
     select: {
       id: true, customerCode: true, customerName: true, customerFolderUrl: true,
       customerSalutation: true, customerType: true, customerWebsite: true, customerFiscalMonth: true,
+      customerCustomData: true,
       contacts: {
         where: { contactIsRepresentative: true },
         select: { contactName: true },
         take: 1,
+      },
+      businessLinks: {
+        where: { linkStatus: 'active' },
+        select: { businessId: true, linkCustomData: true },
       },
     },
   },
   partner: {
     select: {
       id: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
-      partnerSalutation: true,
+      partnerSalutation: true, partnerCustomData: true,
+      businessLinks: {
+        where: { linkStatus: 'active' },
+        select: { businessId: true, linkCustomData: true },
+      },
     },
   },
   business: { select: { id: true, businessName: true } },
@@ -119,11 +128,32 @@ export async function GET(
       }
     }
 
+    // 顧客・代理店カスタムデータを展開
+    const customerObj = project.customer as Record<string, unknown> | null;
+    const custLinks = (customerObj?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+    const custLink = custLinks.find((l) => l.businessId === project.businessId);
+    const custLinkData = (custLink?.linkCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(custLinkData)) flatCustom[`customerLink_${k}`] = v;
+    const custGlobalData = (customerObj?.customerCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(custGlobalData)) flatCustom[`customerGlobal_${k}`] = v;
+
+    const partnerObj = project.partner as Record<string, unknown> | null;
+    const partLinks = (partnerObj?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+    const partLink = partLinks.find((l) => l.businessId === project.businessId);
+    const partLinkData = (partLink?.linkCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(partLinkData)) flatCustom[`partnerLink_${k}`] = v;
+    const partGlobalData = (partnerObj?.partnerCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(partGlobalData)) flatCustom[`partnerGlobal_${k}`] = v;
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(project),
         ...flatCustom,
+        customerLinkCustomData: custLinkData,
+        customerCustomData: custGlobalData,
+        partnerLinkCustomData: partLinkData,
+        partnerCustomData: partGlobalData,
         projectSalesStatusLabel: statusDef?.statusLabel ?? null,
         projectSalesStatusColor: statusDef?.statusColor ?? null,
       },
