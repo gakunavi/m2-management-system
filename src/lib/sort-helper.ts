@@ -17,15 +17,17 @@
 export type SortDirection = 'asc' | 'desc';
 export type SortItem = { field: string; direction: SortDirection };
 
-/** customData_ プレフィックス */
-const CUSTOM_DATA_PREFIX = 'customData_';
+/** customData_ プレフィックス（案件カスタム + 顧客/代理店クロスエンティティカスタム） */
+const CUSTOM_DATA_PREFIXES = ['customData_', 'customerLink_', 'customerGlobal_', 'partnerLink_', 'partnerGlobal_'] as const;
 
 export function isCustomDataSort(field: string): boolean {
-  return field.startsWith(CUSTOM_DATA_PREFIX);
+  return CUSTOM_DATA_PREFIXES.some((p) => field.startsWith(p));
 }
 
 function extractCustomDataKey(field: string): string {
-  return field.slice(CUSTOM_DATA_PREFIX.length);
+  // フラット展開キーからフィールドキーを抽出（prefix を除去）
+  // ソートはフラット展開済みの行データで行うため、キー全体を返す
+  return field;
 }
 
 /** SortItems にカスタムフィールドソートが含まれるか判定 */
@@ -115,10 +117,21 @@ function sortByCustomData<T>(
   return [...records].sort((a, b) => {
     for (const item of customSortItems) {
       const key = extractCustomDataKey(item.field);
-      const aData = getCustomData(a);
-      const bData = getCustomData(b);
-      const aVal = aData?.[key] ?? null;
-      const bVal = bData?.[key] ?? null;
+      // customData_ プレフィックスのみ getCustomData を使用、他はフラット展開済みの行データから直接取得
+      const isProjectCustom = item.field.startsWith('customData_');
+      let aVal: unknown;
+      let bVal: unknown;
+      if (isProjectCustom) {
+        const origKey = item.field.slice('customData_'.length);
+        const aData = getCustomData(a);
+        const bData = getCustomData(b);
+        aVal = aData?.[origKey] ?? null;
+        bVal = bData?.[origKey] ?? null;
+      } else {
+        // customerLink_xxx, partnerLink_xxx 等 — フラット展開済みの行データから取得
+        aVal = (a as Record<string, unknown>)[key] ?? null;
+        bVal = (b as Record<string, unknown>)[key] ?? null;
+      }
 
       // select型: オプション定義順で比較
       const optionOrder = selectOrderMap?.get(key);

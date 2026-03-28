@@ -190,6 +190,15 @@ export function useEntityForm(config: EntityFormConfig, id?: string) {
           return key.startsWith(config.apiEndpoint) || key === config.entityType;
         },
       });
+      // 顧客・代理店更新時は案件一覧キャッシュも無効化（カスタムフィールドが案件に表示されるため）
+      if (config.entityType === 'customer' || config.entityType === 'partner') {
+        await queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey[0];
+            return typeof key === 'string' && key.startsWith('/projects');
+          },
+        });
+      }
 
       // 保存成功後は isDirty をリセットして離脱警告を抑止
       setIsDirty(false);

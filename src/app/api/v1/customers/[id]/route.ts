@@ -210,6 +210,12 @@ export async function PATCH(
             linkCustomData: { ...existingData, ...linkCustomDataPatch } as unknown as import('@prisma/client').Prisma.InputJsonValue,
           },
         });
+        // 更新後の linkCustomData を反映するため businessLinks を再取得
+        const freshLinks = await prisma.customerBusinessLink.findMany({
+          where: { customerId, linkStatus: 'active' },
+          select: { businessId: true, linkCustomData: true },
+        });
+        (updated as Record<string, unknown>).businessLinks = freshLinks;
       }
     }
 

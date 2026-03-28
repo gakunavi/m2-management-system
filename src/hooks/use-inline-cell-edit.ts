@@ -75,6 +75,13 @@ export function useInlineCellEdit(config: EntityListConfig) {
           queryClient.invalidateQueries({
             queryKey: [config.entityType, String(row.id)],
           });
+          // 顧客・代理店カスタムフィールド更新時は案件一覧キャッシュも無効化
+          if (config.entityType === 'customer' || config.entityType === 'partner') {
+            queryClient.invalidateQueries({ predicate: (q) => {
+              const key = q.queryKey[0];
+              return typeof key === 'string' && key.startsWith('/projects');
+            }});
+          }
         } else {
           // 通常 PATCH: 顧客テーブルへの更新
           if (!config.patchEndpoint) {
@@ -101,6 +108,13 @@ export function useInlineCellEdit(config: EntityListConfig) {
           queryClient.invalidateQueries({
             queryKey: [config.entityType, String(rowId)],
           });
+          // 顧客・代理店更新時は案件一覧キャッシュも無効化
+          if (config.entityType === 'customer' || config.entityType === 'partner') {
+            queryClient.invalidateQueries({ predicate: (q) => {
+              const key = q.queryKey[0];
+              return typeof key === 'string' && key.startsWith('/projects');
+            }});
+          }
         }
       } catch (error) {
         // エラー時はキャッシュをロールバック

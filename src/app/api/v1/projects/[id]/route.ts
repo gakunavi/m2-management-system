@@ -308,11 +308,32 @@ export async function PATCH(
       }
     }
 
+    // 顧客・代理店カスタムデータを展開（PATCHレスポンスでも一覧と同じキーを返す）
+    const patchCustomerObj = updated.customer as Record<string, unknown> | null;
+    const patchCustLinks = (patchCustomerObj?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+    const patchCustLink = patchCustLinks.find((l) => l.businessId === updated.businessId);
+    const patchCustLinkData = (patchCustLink?.linkCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(patchCustLinkData)) flatCustom[`customerLink_${k}`] = v;
+    const patchCustGlobalData = (patchCustomerObj?.customerCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(patchCustGlobalData)) flatCustom[`customerGlobal_${k}`] = v;
+
+    const patchPartnerObj = updated.partner as Record<string, unknown> | null;
+    const patchPartLinks = (patchPartnerObj?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+    const patchPartLink = patchPartLinks.find((l) => l.businessId === updated.businessId);
+    const patchPartLinkData = (patchPartLink?.linkCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(patchPartLinkData)) flatCustom[`partnerLink_${k}`] = v;
+    const patchPartGlobalData = (patchPartnerObj?.partnerCustomData ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(patchPartGlobalData)) flatCustom[`partnerGlobal_${k}`] = v;
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(updated),
         ...flatCustom,
+        customerLinkCustomData: patchCustLinkData,
+        customerCustomData: patchCustGlobalData,
+        partnerLinkCustomData: patchPartLinkData,
+        partnerCustomData: patchPartGlobalData,
         projectSalesStatusLabel: statusDef?.statusLabel ?? null,
         projectSalesStatusColor: statusDef?.statusColor ?? null,
       },

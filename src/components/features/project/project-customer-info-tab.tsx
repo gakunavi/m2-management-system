@@ -7,7 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { InfoTabContent } from '@/components/templates/entity-detail-template';
-import { customerDetailConfig } from '@/config/entities/customer';
+import { useCustomerConfig } from '@/hooks/use-customer-config';
 import type { InfoTabConfig } from '@/types/config';
 
 interface Props {
@@ -27,11 +27,18 @@ export function ProjectCustomerInfoTab({ entityId }: Props) {
   });
 
   const customerId = project?.customerId as number | undefined;
+  const businessId = project?.businessId as number | undefined;
 
-  // 顧客詳細データ
+  // 動的config（カスタムフィールドセクション含む）
+  const { detailConfig } = useCustomerConfig(businessId ?? null);
+
+  // 顧客詳細データ（businessId付きで事業別カスタムデータも取得）
   const { data: customer, isLoading, error } = useQuery<Record<string, unknown>>({
-    queryKey: ['customer', String(customerId)],
-    queryFn: () => apiClient.get<Record<string, unknown>>(`/customers/${customerId}`),
+    queryKey: ['customer', String(customerId), businessId],
+    queryFn: () => {
+      const qs = businessId ? `?businessId=${businessId}` : '';
+      return apiClient.get<Record<string, unknown>>(`/customers/${customerId}${qs}`);
+    },
     enabled: !!customerId,
   });
 
@@ -39,7 +46,7 @@ export function ProjectCustomerInfoTab({ entityId }: Props) {
   if (error) return <ErrorDisplay message="顧客情報の取得に失敗しました" />;
   if (!customer) return <LoadingSpinner />;
 
-  const infoConfig = customerDetailConfig.tabs[0].config as InfoTabConfig;
+  const infoConfig = detailConfig.tabs[0].config as InfoTabConfig;
   const customerName = customer.customerName as string;
 
   return (

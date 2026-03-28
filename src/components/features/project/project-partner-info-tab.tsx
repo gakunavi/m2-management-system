@@ -8,7 +8,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { ErrorDisplay } from '@/components/ui/error-display';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InfoTabContent } from '@/components/templates/entity-detail-template';
-import { partnerDetailConfig } from '@/config/entities/partner';
+import { usePartnerConfig } from '@/hooks/use-partner-config';
 import type { InfoTabConfig } from '@/types/config';
 
 interface Props {
@@ -28,11 +28,18 @@ export function ProjectPartnerInfoTab({ entityId }: Props) {
   });
 
   const partnerId = project?.partnerId as number | null | undefined;
+  const businessId = project?.businessId as number | undefined;
 
-  // 代理店詳細データ
+  // 動的config（カスタムフィールドセクション含む）
+  const { detailConfig } = usePartnerConfig(businessId ?? null);
+
+  // 代理店詳細データ（businessId付きで事業別カスタムデータも取得）
   const { data: partner, isLoading, error } = useQuery<Record<string, unknown>>({
-    queryKey: ['partner', String(partnerId)],
-    queryFn: () => apiClient.get<Record<string, unknown>>(`/partners/${partnerId}`),
+    queryKey: ['partner', String(partnerId), businessId],
+    queryFn: () => {
+      const qs = businessId ? `?businessId=${businessId}` : '';
+      return apiClient.get<Record<string, unknown>>(`/partners/${partnerId}${qs}`);
+    },
     enabled: !!partnerId,
   });
 
@@ -47,7 +54,7 @@ export function ProjectPartnerInfoTab({ entityId }: Props) {
   if (error) return <ErrorDisplay message="代理店情報の取得に失敗しました" />;
   if (!partner) return <LoadingSpinner />;
 
-  const infoConfig = partnerDetailConfig.tabs[0].config as InfoTabConfig;
+  const infoConfig = detailConfig.tabs[0].config as InfoTabConfig;
   const partnerName = partner.partnerName as string;
 
   return (
