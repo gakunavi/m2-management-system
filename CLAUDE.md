@@ -62,11 +62,14 @@ grep -r "customerDetailConfig" src/app/ src/components/
 
 ### 主要パターン
 
-- **インラインPATCH**: `customPatch.extraBody` で付帯情報（businessId等）を送信
+- **インラインPATCH**: `customPatch.extraBody` で付帯情報（businessId等）を送信。関数型も可（`(row) => ({ version, businessId })`）
+- **クロスエンティティPATCH**: 案件一覧から顧客/代理店フィールドを直接編集。`customPatch.endpoint` で別エンティティのAPIを指定し、`extraBody` 関数で対象エンティティの `version` を動的に渡す
+- **ダブルクリック編集**: `ColumnDef.doubleClickToEdit` + `singleClickHref` でリンク列（顧客名・代理店名）をシングルクリック→遷移 / ダブルクリック→編集に対応。250ms遅延タイマーでダブルクリック検出時にナビゲーションをキャンセル
 - **通常PATCH**: `patchEndpoint` に `?businessId=X` クエリパラメータを付与（レスポンスで事業別データも展開するため）
 - **フォームPATCH**: `config.extraSubmitData` で付帯情報を自動マージ
 - **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）
 - **子エンティティPATCH**: 連絡先等の子テーブルPATCHレスポンスは親行と別スキーマ。行置換せず一覧invalidate（`isSameEntity`判定）
+- **クロスエンティティキャッシュ**: 案件一覧から顧客/代理店を編集時、顧客/代理店の詳細・一覧キャッシュも無効化
 - **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新
 - **楽観的ロック**: `version: { increment: 1 }` + 409 Conflict
 - **ドット記法**: `unflattenDotKeys` / `flattenNestedToFormKeys` で変換
