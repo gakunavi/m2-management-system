@@ -19,7 +19,7 @@ interface DataTableProps {
   data: Record<string, unknown>[];
   onRowClick?: (row: Record<string, unknown>) => void;
   sortItems?: SortItem[];
-  onSort?: (field: string) => void;
+  onSort?: (field: string, multiSort?: boolean) => void;
   loading?: boolean;
   /** 選択中の行 ID セット（一括操作用） */
   selectedIds?: Set<number>;
