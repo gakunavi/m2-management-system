@@ -7,6 +7,7 @@ import {
   closestCorners,
   closestCenter,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragStartEvent,
@@ -510,7 +511,7 @@ function SortableColumn({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex flex-col min-w-[calc(100vw-2rem)] sm:min-w-[260px] sm:max-w-[300px] flex-shrink-0 sm:flex-1 snap-start sm:snap-align-none"
+      className="flex flex-col min-w-[75vw] max-w-[80vw] sm:min-w-[260px] sm:max-w-[300px] flex-shrink-0 sm:flex-1 snap-start sm:snap-align-none"
     >
       {/* カラムヘッダー（列のドラッグハンドルを含む） */}
       <div
@@ -599,6 +600,7 @@ export function TaskKanbanView({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   // カスタム衝突検知: 列ドラッグ中は列のみ検出、カードドラッグ中は全て検出
@@ -795,6 +797,47 @@ export function TaskKanbanView({
     setColumnItems(buildColumnItems(tasks, sorted));
   }, [columns, tasks, subtaskDrop]);
 
+  // ドラッグ中かどうか（モバイルでsnap無効化に使用）
+  const isDragging = activeId !== null;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // ドラッグ中にタッチ位置が端に近い場合、コンテナを自動スクロール
+  useEffect(() => {
+    if (!isDragging) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let animId: number;
+    let lastTouchX = 0;
+
+    const handleTouchMove = (e: TouchEvent) => {
+      lastTouchX = e.touches[0].clientX;
+    };
+
+    const EDGE_ZONE = 60; // 端から60px以内でスクロール開始
+    const SCROLL_SPEED = 8;
+
+    const autoScroll = () => {
+      const rect = container.getBoundingClientRect();
+      if (lastTouchX > 0) {
+        if (lastTouchX < rect.left + EDGE_ZONE) {
+          container.scrollLeft -= SCROLL_SPEED;
+        } else if (lastTouchX > rect.right - EDGE_ZONE) {
+          container.scrollLeft += SCROLL_SPEED;
+        }
+      }
+      animId = requestAnimationFrame(autoScroll);
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    animId = requestAnimationFrame(autoScroll);
+
+    return () => {
+      document.removeEventListener('touchmove', handleTouchMove);
+      cancelAnimationFrame(animId);
+    };
+  }, [isDragging]);
+
   // ======== 単一レイアウト（scroll-snap でモバイル横スワイプ対応） ========
   return (
     <DndContext
@@ -806,7 +849,11 @@ export function TaskKanbanView({
       onDragCancel={handleDragCancel}
     >
       <div
-        className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 min-h-[400px] snap-x snap-mandatory sm:snap-none"
+        ref={scrollContainerRef}
+        className={cn(
+          'flex gap-3 sm:gap-4 overflow-x-auto pb-4 min-h-[400px] px-2 sm:px-0',
+          isDragging ? '' : 'snap-x snap-mandatory sm:snap-none',
+        )}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <SortableContext items={columnDndIds} strategy={horizontalListSortingStrategy}>
@@ -828,7 +875,7 @@ export function TaskKanbanView({
         </SortableContext>
 
         {/* 列追加ボタン */}
-        <div className="min-w-[calc(100vw-2rem)] sm:min-w-[260px] sm:max-w-[300px] sm:flex-1 flex-shrink-0 snap-start sm:snap-align-none">
+        <div className="min-w-[75vw] max-w-[80vw] sm:min-w-[260px] sm:max-w-[300px] sm:flex-1 flex-shrink-0 snap-start sm:snap-align-none">
           <button
             onClick={onAddColumn}
             className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 py-8 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/60 transition-colors min-h-[44px]"
