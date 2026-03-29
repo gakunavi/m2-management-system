@@ -399,6 +399,7 @@ export function SpreadsheetTable({
             render={col.render}
             row={rowData}
             align={col.align}
+            doubleClickToEdit={!!col.customPatch}
             onCommit={async (newValue) => {
               await updateCell({
                 rowId,

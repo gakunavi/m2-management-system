@@ -13,6 +13,8 @@ interface EditableCellProps {
   row: Record<string, unknown>;
   onCommit: (value: unknown) => Promise<void>;
   align?: 'left' | 'center' | 'right';
+  /** true の場合、ダブルクリックで編集開始（クロスエンティティ編集用） */
+  doubleClickToEdit?: boolean;
 }
 
 type CellState = 'display' | 'editing' | 'saving' | 'error';
@@ -24,6 +26,7 @@ export function EditableCell({
   row,
   onCommit,
   align,
+  doubleClickToEdit,
 }: EditableCellProps) {
   const [state, setState] = useState<CellState>('display');
   const [localValue, setLocalValue] = useState<unknown>(value);
@@ -144,14 +147,17 @@ export function EditableCell({
       }
       return;
     }
+    // ダブルクリック編集モード: シングルクリックでは編集開始しない
+    if (doubleClickToEdit) return;
     startEditing();
-  }, [editConfig, state, localValue, isUrlType, hasUrlValue, startEditing]);
+  }, [editConfig, state, localValue, isUrlType, hasUrlValue, doubleClickToEdit, startEditing]);
 
-  // URL 型: ダブルクリックで編集モードに入る
+  // URL 型 または ダブルクリック編集モード: ダブルクリックで編集モードに入る
   const handleDoubleClick = useCallback(() => {
-    if (!isUrlType || state !== 'display') return;
+    if (state !== 'display' || !editConfig) return;
+    if (!isUrlType && !doubleClickToEdit) return;
     startEditing();
-  }, [isUrlType, state, startEditing]);
+  }, [isUrlType, doubleClickToEdit, state, editConfig, startEditing]);
 
   const displayContent = render
     ? render(localValue, row)
@@ -175,12 +181,14 @@ export function EditableCell({
         state === 'error' && 'ring-2 ring-destructive ring-inset',
       )}
       onClick={state === 'display' ? handleClick : undefined}
-      onDoubleClick={isUrlType ? handleDoubleClick : undefined}
+      onDoubleClick={(isUrlType || doubleClickToEdit) ? handleDoubleClick : undefined}
       title={
         state === 'error' && errorMessage
           ? errorMessage
           : hasUrlValue
           ? `${localValue}\n（ダブルクリックで編集）`
+          : doubleClickToEdit && isEditable
+          ? 'ダブルクリックで編集'
           : undefined
       }
     >
