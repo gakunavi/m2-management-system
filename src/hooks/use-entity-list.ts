@@ -155,31 +155,40 @@ export function useEntityList(config: EntityListConfig) {
   }, []);
 
   // ソート（複数列対応）
-  // 1. 未ソート列をクリック → 昇順で末尾に追加
-  // 2. 昇順の列をクリック → 降順に切り替え
-  // 3. 降順の列をクリック → その列のソートを解除
+  // 通常クリック: その列を唯一のソートキーにする（asc → desc → 解除）
+  // Shift+クリック: 既存ソートを維持しつつ末尾に追加（マルチカラムソート）
   const handleSetSort = useCallback(
-    (field: string) => {
+    (field: string, multiSort?: boolean) => {
       setSortItems((prev) => {
         const existingIndex = prev.findIndex((s) => s.field === field);
 
-        if (existingIndex < 0) {
-          // 未ソート → 昇順で追加
-          return [...prev, { field, direction: 'asc' as const }];
+        if (multiSort) {
+          // Shift+クリック: マルチカラムソート（従来動作）
+          if (existingIndex < 0) {
+            return [...prev, { field, direction: 'asc' as const }];
+          }
+          const current = prev[existingIndex];
+          if (current.direction === 'asc') {
+            return prev.map((s, i) =>
+              i === existingIndex ? { ...s, direction: 'desc' as const } : s,
+            );
+          }
+          const next = prev.filter((_, i) => i !== existingIndex);
+          return next.length > 0 ? next : defaultSortItems;
         }
 
+        // 通常クリック: その列を唯一のソートキーにする
+        if (existingIndex < 0) {
+          // 未ソート → この列の昇順のみ
+          return [{ field, direction: 'asc' as const }];
+        }
         const current = prev[existingIndex];
         if (current.direction === 'asc') {
-          // 昇順 → 降順
-          return prev.map((s, i) =>
-            i === existingIndex ? { ...s, direction: 'desc' as const } : s,
-          );
+          // 昇順 → 降順（この列のみ）
+          return [{ field, direction: 'desc' as const }];
         }
-
-        // 降順 → 解除（リストから削除）
-        const next = prev.filter((_, i) => i !== existingIndex);
-        // 全て解除された場合はデフォルトに戻す
-        return next.length > 0 ? next : defaultSortItems;
+        // 降順 → 解除（デフォルトに戻す）
+        return defaultSortItems;
       });
       setPage(1);
     },

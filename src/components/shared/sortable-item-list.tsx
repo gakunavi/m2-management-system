@@ -167,6 +167,17 @@ export function SortableItemList<T extends { id: string | number }>({
   };
 
   const handleSave = async () => {
+    // required フィールドのバリデーション
+    const visibleFields = formFields.filter((f) => !f.visibleWhen || f.visibleWhen(formData));
+    for (const field of visibleFields) {
+      if (field.required) {
+        const val = formData[field.key];
+        if (val === undefined || val === null || val === '') {
+          return; // HTML required 属性でブラウザが警告を表示
+        }
+      }
+    }
+
     setSaving(true);
     try {
       if (editItem) {

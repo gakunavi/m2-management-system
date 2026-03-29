@@ -30,6 +30,16 @@ function extractCustomDataKey(field: string): string {
   return field;
 }
 
+/** selectOrderMap ルックアップ用: customData_ 等のプレフィックスを除去して元のフィールドキーを返す */
+function stripCustomDataPrefix(field: string): string {
+  for (const prefix of CUSTOM_DATA_PREFIXES) {
+    if (field.startsWith(prefix)) {
+      return field.slice(prefix.length);
+    }
+  }
+  return field;
+}
+
 /** SortItems にカスタムフィールドソートが含まれるか判定 */
 function hasCustomDataSort(sortItems: SortItem[]): boolean {
   return sortItems.some((item) => isCustomDataSort(item.field));
@@ -134,7 +144,10 @@ function sortByCustomData<T>(
       }
 
       // select型: オプション定義順で比較
-      const optionOrder = selectOrderMap?.get(key);
+      // selectOrderMap のキーはフィールド定義の key（プレフィックスなし）なので、
+      // customData_ 等のプレフィックスを除去してルックアップする
+      const lookupKey = stripCustomDataPrefix(item.field);
+      const optionOrder = selectOrderMap?.get(lookupKey);
       const cmp = optionOrder
         ? compareByOptionOrder(aVal, bVal, optionOrder)
         : compareValues(aVal, bVal);

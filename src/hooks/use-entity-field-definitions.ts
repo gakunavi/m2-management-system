@@ -78,6 +78,14 @@ export function useEntityFieldDefinitions(businessId: number, configKey: ConfigK
       showOnProject: (formData.showOnProject as boolean) ?? false,
     };
 
+    if (!newField.key || !newField.key.trim()) {
+      toast({ title: 'エラー', message: 'フィールドコードは必須です', type: 'error' });
+      throw new Error('empty key');
+    }
+    if (!newField.label || !newField.label.trim()) {
+      toast({ title: 'エラー', message: '表示ラベルは必須です', type: 'error' });
+      throw new Error('empty label');
+    }
     if (fields.some((f) => f.key === newField.key)) {
       toast({ title: 'エラー', message: 'このフィールドキーはすでに使用されています', type: 'error' });
       throw new Error('duplicate key');

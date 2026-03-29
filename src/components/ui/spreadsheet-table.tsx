@@ -160,7 +160,7 @@ interface SpreadsheetTableProps {
   data: Record<string, unknown>[];
   config: EntityListConfig;
   sortItems: SortItem[];
-  onSort: (field: string) => void;
+  onSort: (field: string, multiSort?: boolean) => void;
   loading?: boolean;
   preferences: ReturnType<typeof useTablePreferences>['preferences'];
   savePreferences: ReturnType<typeof useTablePreferences>['savePreferences'];
@@ -289,14 +289,17 @@ export function SpreadsheetTable({
           : [...prev, colId];
         // ref 経由で最新の preferences を取得（stale closure 防止）
         const latest = preferencesRef.current;
-        savePreferences({
-          columnOrder: latest?.columnOrder ?? defaultColumnOrder,
-          columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
-          columnWidths: latest?.columnWidths ?? defaultColumnSizing,
-          sortState: latest?.sortState ?? [],
-          columnPinning: { left: next },
-          pageSize: latest?.pageSize,
-        });
+        // preferences 未ロード時は保存をスキップ（デフォルト値で上書きするのを防止）
+        if (latest) {
+          savePreferences({
+            columnOrder: latest.columnOrder ?? defaultColumnOrder,
+            columnVisibility: latest.columnVisibility ?? defaultColumnVisibility,
+            columnWidths: latest.columnWidths ?? defaultColumnSizing,
+            sortState: latest.sortState ?? [],
+            columnPinning: { left: next },
+            pageSize: latest.pageSize,
+          });
+        }
         return next;
       });
     },
@@ -445,39 +448,42 @@ export function SpreadsheetTable({
       const current = mergedColumnVisibility;
       const next = typeof updater === 'function' ? updater(current) : updater;
       const latest = preferencesRef.current;
+      if (!latest) return; // preferences 未ロード時は保存をスキップ
       savePreferences({
-        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
+        columnOrder: latest.columnOrder ?? defaultColumnOrder,
         columnVisibility: next,
-        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
-        sortState: latest?.sortState ?? [],
+        columnWidths: latest.columnWidths ?? defaultColumnSizing,
+        sortState: latest.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: latest?.pageSize,
+        pageSize: latest.pageSize,
       });
     },
     onColumnOrderChange: (updater) => {
       const latest = preferencesRef.current;
-      const current = latest?.columnOrder ?? defaultColumnOrder;
+      if (!latest) return; // preferences 未ロード時は保存をスキップ
+      const current = latest.columnOrder ?? defaultColumnOrder;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: next,
-        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
-        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
-        sortState: latest?.sortState ?? [],
+        columnVisibility: latest.columnVisibility ?? defaultColumnVisibility,
+        columnWidths: latest.columnWidths ?? defaultColumnSizing,
+        sortState: latest.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: latest?.pageSize,
+        pageSize: latest.pageSize,
       });
     },
     onColumnSizingChange: (updater) => {
       const latest = preferencesRef.current;
-      const current = latest?.columnWidths ?? defaultColumnSizing;
+      if (!latest) return; // preferences 未ロード時は保存をスキップ
+      const current = latest.columnWidths ?? defaultColumnSizing;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
-        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
-        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
+        columnOrder: latest.columnOrder ?? defaultColumnOrder,
+        columnVisibility: latest.columnVisibility ?? defaultColumnVisibility,
         columnWidths: next,
-        sortState: latest?.sortState ?? [],
+        sortState: latest.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: latest?.pageSize,
+        pageSize: latest.pageSize,
       });
     },
     getCoreRowModel: getCoreRowModel(),
@@ -678,7 +684,7 @@ export function SpreadsheetTable({
                               sortable={configCol?.sortable}
                               isSorted={sortItem ? sortItem.direction : false}
                               sortPriority={sortItems.length > 1 && sortIndex >= 0 ? sortIndex + 1 : null}
-                              onSort={() => onSort(colKey)}
+                              onSort={(e) => onSort(colKey, e.shiftKey)}
                               onResizeStart={(e) => {
                                 handleResizeStart(colKey, e.clientX, colWidth);
                               }}

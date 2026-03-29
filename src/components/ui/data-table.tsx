@@ -88,7 +88,7 @@ export function DataTable({
                   column.align === 'center' && 'text-center',
                   column.sortable && 'cursor-pointer select-none',
                 )}
-                onClick={() => column.sortable && onSort?.(column.key)}
+                onClick={(e) => column.sortable && onSort?.(column.key, e.shiftKey)}
               >
                 <div className="flex items-center">
                   {column.label}
