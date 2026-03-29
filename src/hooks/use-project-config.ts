@@ -84,20 +84,34 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
       columnGroup: '契約マスタ情報',
     });
 
-    // 顧客/代理店の showOnProject フィールド（読み取り専用）
+    // 顧客/代理店の showOnProject フィールド（インライン編集可）
     const customerShowColumns = buildDynamicColumns(customerShowFields, {
       dataKey: 'customerLinkCustomData',
-      patchEndpoint: null,
-      patchFieldPrefix: 'customerLinkCustomData',
+      patchEndpoint: (row) => {
+        const c = row.customer as { id?: number } | null;
+        return c?.id ? `/customers/${c.id}` : '';
+      },
+      patchFieldPrefix: 'linkCustomData',
       columnGroup: '顧客マスタ情報',
       columnKeyPrefix: 'customerLink',
+      patchExtraBody: (row) => ({
+        businessId: row.businessId as number,
+        version: row.customerVersion as number,
+      }),
     });
     const partnerShowColumns = buildDynamicColumns(partnerShowFields, {
       dataKey: 'partnerLinkCustomData',
-      patchEndpoint: null,
-      patchFieldPrefix: 'partnerLinkCustomData',
+      patchEndpoint: (row) => {
+        const p = row.partner as { id?: number } | null;
+        return p?.id ? `/partners/${p.id}` : '';
+      },
+      patchFieldPrefix: 'linkCustomData',
       columnGroup: '代理店マスタ情報',
       columnKeyPrefix: 'partnerLink',
+      patchExtraBody: (row) => ({
+        businessId: row.businessId as number,
+        version: row.partnerVersion as number,
+      }),
     });
 
     // 固定列の後、システム列（updatedAt/createdAt）の前にカスタムフィールドを挿入する

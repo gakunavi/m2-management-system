@@ -34,8 +34,8 @@ export type CustomPatchConfig = {
   endpoint: (row: Record<string, unknown>) => string;
   /** API に送信するフィールド名（列の key と異なる場合に指定） */
   field: string;
-  /** PATCH ボディに追加するフィールド（例: { businessId: 1 }） */
-  extraBody?: Record<string, unknown>;
+  /** PATCH ボディに追加するフィールド。関数の場合は行データから動的に生成（例: version の差し替え） */
+  extraBody?: Record<string, unknown> | ((row: Record<string, unknown>) => Record<string, unknown>);
   /** PATCH 後にリスト全体を再取得する（デフォルト: true） */
   refetchOnSuccess?: boolean;
 };

@@ -52,11 +52,14 @@ export function useInlineCellEdit(config: EntityListConfig) {
           if (fieldParts.length === 2) {
             body = { [fieldParts[0]]: { [fieldParts[1]]: value }, version };
           } else {
-            body = { [customPatch.field]: value };
+            body = { [customPatch.field]: value, version };
           }
-          // extraBody があればマージ（例: businessId）
+          // extraBody があればマージ（例: businessId, version の上書き）
           if (customPatch.extraBody) {
-            body = { ...body, ...customPatch.extraBody };
+            const extra = typeof customPatch.extraBody === 'function'
+              ? customPatch.extraBody(row)
+              : customPatch.extraBody;
+            body = { ...body, ...extra };
           }
           const updated = await apiClient.patch<Record<string, unknown>>(endpoint, body);
           // レスポンスが親エンティティの場合のみ行置換（連絡先等の子エンティティは別スキーマ）
@@ -81,6 +84,30 @@ export function useInlineCellEdit(config: EntityListConfig) {
           queryClient.invalidateQueries({
             queryKey: [config.entityType, String(row.id)],
           });
+          // クロスエンティティ編集時: 更新先エンティティのキャッシュも無効化
+          if (updated.id !== (row.id as number)) {
+            // PATCH先のエンティティタイプを endpoint から推定
+            const ep = endpoint.toLowerCase();
+            if (ep.includes('/customers/')) {
+              queryClient.invalidateQueries({
+                queryKey: ['customer', String(updated.id)],
+              });
+              // 顧客一覧キャッシュも無効化
+              queryClient.invalidateQueries({ predicate: (q) => {
+                const key = q.queryKey[0];
+                return typeof key === 'string' && key.startsWith('/customers');
+              }});
+            }
+            if (ep.includes('/partners/')) {
+              queryClient.invalidateQueries({
+                queryKey: ['partner', String(updated.id)],
+              });
+              queryClient.invalidateQueries({ predicate: (q) => {
+                const key = q.queryKey[0];
+                return typeof key === 'string' && key.startsWith('/partners');
+              }});
+            }
+          }
           // 顧客・代理店カスタムフィールド更新時は案件一覧キャッシュも無効化
           if (config.entityType === 'customer' || config.entityType === 'partner') {
             queryClient.invalidateQueries({ predicate: (q) => {

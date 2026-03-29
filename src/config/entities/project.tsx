@@ -138,7 +138,7 @@ export const projectListConfig: EntityListConfig = {
         return '表示';
       },
     },
-    // ── 顧客基本情報 ──
+    // ── 顧客基本情報（インライン編集可） ──
     {
       key: 'customerSalutation',
       label: '顧客呼称',
@@ -146,9 +146,14 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      render: (_value, row) => {
-        const c = row.customer as { customerSalutation?: string | null } | null;
-        return c?.customerSalutation || '-';
+      edit: { type: 'text' },
+      customPatch: {
+        endpoint: (row) => {
+          const c = row.customer as { id?: number } | null;
+          return c?.id ? `/customers/${c.id}` : '';
+        },
+        field: 'customerSalutation',
+        extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
     {
@@ -158,9 +163,23 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      render: (_value, row) => {
-        const c = row.customer as { customerType?: string | null } | null;
-        return c?.customerType || '-';
+      edit: {
+        type: 'select',
+        options: [
+          { value: '法人', label: '法人' },
+          { value: '個人事業主', label: '個人事業主' },
+          { value: '個人', label: '個人' },
+          { value: '確認中', label: '確認中' },
+          { value: '未設定', label: '未設定' },
+        ],
+      },
+      customPatch: {
+        endpoint: (row) => {
+          const c = row.customer as { id?: number } | null;
+          return c?.id ? `/customers/${c.id}` : '';
+        },
+        field: 'customerType',
+        extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
     {
@@ -182,20 +201,14 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      render: (_value, row) => {
-        const c = row.customer as { customerWebsite?: string | null } | null;
-        if (!c?.customerWebsite) return '-';
-        return (
-          <a
-            href={c.customerWebsite}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm truncate block"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {c.customerWebsite}
-          </a>
-        );
+      edit: { type: 'url' },
+      customPatch: {
+        endpoint: (row) => {
+          const c = row.customer as { id?: number } | null;
+          return c?.id ? `/customers/${c.id}` : '';
+        },
+        field: 'customerWebsite',
+        extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
     {
@@ -205,9 +218,14 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      render: (_value, row) => {
-        const c = row.customer as { customerFiscalMonth?: number | null } | null;
-        return c?.customerFiscalMonth ? `${c.customerFiscalMonth}月` : '-';
+      edit: { type: 'number' },
+      customPatch: {
+        endpoint: (row) => {
+          const c = row.customer as { id?: number } | null;
+          return c?.id ? `/customers/${c.id}` : '';
+        },
+        field: 'customerFiscalMonth',
+        extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
     {
@@ -217,24 +235,17 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      render: (_value, row) => {
-        const c = row.customer as { customerFolderUrl?: string | null } | null;
-        if (!c?.customerFolderUrl) return '-';
-        return (
-          <a
-            href={c.customerFolderUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm truncate block max-w-full"
-            onClick={(e) => e.stopPropagation()}
-            title={c.customerFolderUrl}
-          >
-            {c.customerFolderUrl}
-          </a>
-        );
+      edit: { type: 'url' },
+      customPatch: {
+        endpoint: (row) => {
+          const c = row.customer as { id?: number } | null;
+          return c?.id ? `/customers/${c.id}` : '';
+        },
+        field: 'customerFolderUrl',
+        extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
-    // ── 代理店基本情報 ──
+    // ── 代理店基本情報（インライン編集可） ──
     {
       key: 'partnerCode',
       label: '代理店コード',
@@ -242,9 +253,14 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
-      render: (_value, row) => {
-        const p = row.partner as { partnerCode?: string } | null;
-        return p?.partnerCode || '-';
+      edit: { type: 'text' },
+      customPatch: {
+        endpoint: (row) => {
+          const p = row.partner as { id?: number } | null;
+          return p?.id ? `/partners/${p.id}` : '';
+        },
+        field: 'partnerCode',
+        extraBody: (row) => ({ version: row.partnerVersion as number }),
       },
     },
     {
@@ -254,9 +270,14 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
-      render: (_value, row) => {
-        const p = row.partner as { partnerSalutation?: string | null } | null;
-        return p?.partnerSalutation || '-';
+      edit: { type: 'text' },
+      customPatch: {
+        endpoint: (row) => {
+          const p = row.partner as { id?: number } | null;
+          return p?.id ? `/partners/${p.id}` : '';
+        },
+        field: 'partnerSalutation',
+        extraBody: (row) => ({ version: row.partnerVersion as number }),
       },
     },
     {
@@ -266,21 +287,14 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
-      render: (_value, row) => {
-        const p = row.partner as { partnerFolderUrl?: string | null } | null;
-        if (!p?.partnerFolderUrl) return '-';
-        return (
-          <a
-            href={p.partnerFolderUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-sm truncate block max-w-full"
-            onClick={(e) => e.stopPropagation()}
-            title={p.partnerFolderUrl}
-          >
-            {p.partnerFolderUrl}
-          </a>
-        );
+      edit: { type: 'url' },
+      customPatch: {
+        endpoint: (row) => {
+          const p = row.partner as { id?: number } | null;
+          return p?.id ? `/partners/${p.id}` : '';
+        },
+        field: 'partnerFolderUrl',
+        extraBody: (row) => ({ version: row.partnerVersion as number }),
       },
     },
     // ── システム ──

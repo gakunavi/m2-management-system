@@ -16,8 +16,8 @@ export interface DynamicFieldOptions {
   columnGroup?: string;
   /** 列キーのプレフィックス（名前空間衝突回避。例: 'customerLink'） */
   columnKeyPrefix?: string;
-  /** インラインPATCH時にボディに追加するフィールド（例: { businessId: 1 }） */
-  patchExtraBody?: Record<string, unknown>;
+  /** インラインPATCH時にボディに追加するフィールド。関数の場合は行データから動的に生成 */
+  patchExtraBody?: Record<string, unknown> | ((row: Record<string, unknown>) => Record<string, unknown>);
 }
 
 /** 契約マスタ（既存互換）のデフォルトオプション */

@@ -90,7 +90,7 @@ const createProjectSchema = z.object({
 const PROJECT_INCLUDE = {
   customer: {
     select: {
-      id: true, customerCode: true, customerName: true, customerFolderUrl: true,
+      id: true, version: true, customerCode: true, customerName: true, customerFolderUrl: true,
       customerSalutation: true, customerType: true, customerWebsite: true, customerFiscalMonth: true,
       customerCustomData: true,
       contacts: {
@@ -106,7 +106,7 @@ const PROJECT_INCLUDE = {
   },
   partner: {
     select: {
-      id: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
+      id: true, version: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
       partnerSalutation: true, partnerCustomData: true,
       businessLinks: {
         where: { linkStatus: 'active' },
@@ -406,9 +406,29 @@ export async function GET(request: NextRequest) {
           flatCustom[`partnerGlobal_${k}`] = v;
         }
 
+        // 顧客/代理店の基本フィールドとversionをフラット展開（インライン編集用）
+        const customerFlat: Record<string, unknown> = {};
+        if (customer) {
+          customerFlat.customerSalutation = customer.customerSalutation ?? null;
+          customerFlat.customerType = customer.customerType ?? null;
+          customerFlat.customerWebsite = customer.customerWebsite ?? null;
+          customerFlat.customerFiscalMonth = customer.customerFiscalMonth ?? null;
+          customerFlat.customerFolderUrl = customer.customerFolderUrl ?? null;
+          customerFlat.customerVersion = customer.version ?? null;
+        }
+        const partnerFlat: Record<string, unknown> = {};
+        if (partner) {
+          partnerFlat.partnerCode = partner.partnerCode ?? null;
+          partnerFlat.partnerSalutation = partner.partnerSalutation ?? null;
+          partnerFlat.partnerFolderUrl = partner.partnerFolderUrl ?? null;
+          partnerFlat.partnerVersion = partner.version ?? null;
+        }
+
         return {
           ...formatted,
           ...flatCustom,
+          ...customerFlat,
+          ...partnerFlat,
           // 列のrenderで直接アクセスするためのオブジェクトも保持
           customerLinkCustomData: customerLinkData,
           customerCustomData: customerGlobalData,
