@@ -21,6 +21,17 @@
 - 操作に必要な外部キーは何か？
 - その外部キーはフロントから送信されるか？
 
+### 呼び出し元の全画面差し替え確認
+
+フックやユーティリティを作成・変更した場合、**古い静的importを使っている全画面をgrepで検出**し、全て差し替えること。
+対象画面: 一覧 / 詳細 / 編集 / 新規 / クロスエンティティタブ（例: 案件詳細→顧客情報タブ）
+
+```bash
+# 例: customerDetailConfig を useCustomerConfig に差し替えた場合
+grep -r "customerDetailConfig" src/app/ src/components/
+# → ヒットした全ファイルを更新するまでタスク未完了
+```
+
 ### 既存パターンとの対比
 
 新エンティティにフィールドを追加する際、**既に同機能が動いているエンティティ（例: Project）のコードと対比**し、漏れを検出すること。
@@ -52,7 +63,10 @@
 ### 主要パターン
 
 - **インラインPATCH**: `customPatch.extraBody` で付帯情報（businessId等）を送信
+- **通常PATCH**: `patchEndpoint` に `?businessId=X` クエリパラメータを付与（レスポンスで事業別データも展開するため）
 - **フォームPATCH**: `config.extraSubmitData` で付帯情報を自動マージ
+- **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）
+- **子エンティティPATCH**: 連絡先等の子テーブルPATCHレスポンスは親行と別スキーマ。行置換せず一覧invalidate（`isSameEntity`判定）
 - **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新
 - **楽観的ロック**: `version: { increment: 1 }` + 409 Conflict
 - **ドット記法**: `unflattenDotKeys` / `flattenNestedToFormKeys` で変換
