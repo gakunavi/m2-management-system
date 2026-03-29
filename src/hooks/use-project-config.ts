@@ -94,7 +94,6 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
       patchFieldPrefix: 'linkCustomData',
       columnGroup: '顧客マスタ情報',
       columnKeyPrefix: 'customerLink',
-      doubleClickToEdit: true,
       patchExtraBody: (row) => ({
         businessId: row.businessId as number,
         version: row.customerVersion as number,
@@ -109,7 +108,6 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
       patchFieldPrefix: 'linkCustomData',
       columnGroup: '代理店マスタ情報',
       columnKeyPrefix: 'partnerLink',
-      doubleClickToEdit: true,
       patchExtraBody: (row) => ({
         businessId: row.businessId as number,
         version: row.partnerVersion as number,

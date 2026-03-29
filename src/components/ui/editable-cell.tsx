@@ -13,11 +13,16 @@ interface EditableCellProps {
   row: Record<string, unknown>;
   onCommit: (value: unknown) => Promise<void>;
   align?: 'left' | 'center' | 'right';
-  /** true の場合、ダブルクリックで編集開始（クロスエンティティ編集用） */
+  /** true の場合、ダブルクリックで編集開始（リンク列用） */
   doubleClickToEdit?: boolean;
+  /** doubleClickToEdit 時のシングルクリックアクション（例: ページ遷移） */
+  onSingleClick?: () => void;
 }
 
 type CellState = 'display' | 'editing' | 'saving' | 'error';
+
+/** ダブルクリック検出までの待機時間（ms） */
+const DBLCLICK_DELAY = 250;
 
 export function EditableCell({
   value,
@@ -27,12 +32,14 @@ export function EditableCell({
   onCommit,
   align,
   doubleClickToEdit,
+  onSingleClick,
 }: EditableCellProps) {
   const [state, setState] = useState<CellState>('display');
   const [localValue, setLocalValue] = useState<unknown>(value);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const originalValueRef = useRef<unknown>(value);
   const cellRef = useRef<HTMLDivElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 外部からの value 変更を追跡（display 状態時のみ同期）
   const prevValueRef = useRef<unknown>(value);
@@ -45,6 +52,13 @@ export function EditableCell({
       }
     }
   }, [value, state]);
+
+  // アンマウント時にタイマーをクリア
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    };
+  }, []);
 
   // editing 状態でセル外クリック → キャンセル
   useEffect(() => {
@@ -147,15 +161,27 @@ export function EditableCell({
       }
       return;
     }
-    // ダブルクリック編集モード: シングルクリックでは編集開始しない
-    if (doubleClickToEdit) return;
+    // ダブルクリック編集モード: シングルクリックは遅延実行（ダブルクリック検出のため）
+    if (doubleClickToEdit) {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
+        onSingleClick?.();
+      }, DBLCLICK_DELAY);
+      return;
+    }
     startEditing();
-  }, [editConfig, state, localValue, isUrlType, hasUrlValue, doubleClickToEdit, startEditing]);
+  }, [editConfig, state, localValue, isUrlType, hasUrlValue, doubleClickToEdit, onSingleClick, startEditing]);
 
   // URL 型 または ダブルクリック編集モード: ダブルクリックで編集モードに入る
   const handleDoubleClick = useCallback(() => {
     if (state !== 'display' || !editConfig) return;
     if (!isUrlType && !doubleClickToEdit) return;
+    // 遅延中のシングルクリックアクションをキャンセル
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
     startEditing();
   }, [isUrlType, doubleClickToEdit, state, editConfig, startEditing]);
 
@@ -166,6 +192,7 @@ export function EditableCell({
     : '-';
 
   const isEditable = !!editConfig;
+  const isDblClickEditable = doubleClickToEdit && isEditable;
 
   return (
     <div
@@ -180,14 +207,14 @@ export function EditableCell({
         state === 'saving' && 'opacity-60',
         state === 'error' && 'ring-2 ring-destructive ring-inset',
       )}
-      onClick={state === 'display' ? handleClick : undefined}
-      onDoubleClick={(isUrlType || doubleClickToEdit) ? handleDoubleClick : undefined}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       title={
         state === 'error' && errorMessage
           ? errorMessage
           : hasUrlValue
           ? `${localValue}\n（ダブルクリックで編集）`
-          : doubleClickToEdit && isEditable
+          : isDblClickEditable
           ? 'ダブルクリックで編集'
           : undefined
       }
@@ -207,6 +234,7 @@ export function EditableCell({
             'px-2 py-1 text-sm w-full truncate',
             state === 'error' && 'text-destructive',
             hasUrlValue && 'text-blue-600 underline decoration-blue-400/50',
+            isDblClickEditable && 'text-primary hover:underline',
           )}
         >
           {hasUrlValue ? (

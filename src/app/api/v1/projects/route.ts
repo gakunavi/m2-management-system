@@ -409,6 +409,7 @@ export async function GET(request: NextRequest) {
         // 顧客/代理店の基本フィールドとversionをフラット展開（インライン編集用）
         const customerFlat: Record<string, unknown> = {};
         if (customer) {
+          customerFlat.customerName = customer.customerName ?? null;
           customerFlat.customerSalutation = customer.customerSalutation ?? null;
           customerFlat.customerType = customer.customerType ?? null;
           customerFlat.customerWebsite = customer.customerWebsite ?? null;
@@ -418,6 +419,7 @@ export async function GET(request: NextRequest) {
         }
         const partnerFlat: Record<string, unknown> = {};
         if (partner) {
+          partnerFlat.partnerName = partner.partnerName ?? null;
           partnerFlat.partnerCode = partner.partnerCode ?? null;
           partnerFlat.partnerSalutation = partner.partnerSalutation ?? null;
           partnerFlat.partnerFolderUrl = partner.partnerFolderUrl ?? null;

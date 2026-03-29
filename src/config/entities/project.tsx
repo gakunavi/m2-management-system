@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { EntityListConfig, EntityDetailConfig, EntityFormConfig } from '@/types/config';
 import { projectBaseSchema } from '@/lib/validations/project';
 
@@ -28,18 +27,20 @@ export const projectListConfig: EntityListConfig = {
       minWidth: 180,
       sortable: true,
       group: '契約マスタ情報',
-      render: (_value, row) => {
-        const customer = row.customer as { id?: number; customerName?: string } | null;
-        if (!customer?.customerName) return '-';
-        return (
-          <Link
-            href={`/customers/${customer.id}?from=/projects,案件一覧`}
-            className="text-primary hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {customer.customerName}
-          </Link>
-        );
+      doubleClickToEdit: true,
+      edit: { type: 'text' },
+      customPatch: {
+        endpoint: (row) => {
+          const c = row.customer as { id?: number } | null;
+          return c?.id ? `/customers/${c.id}` : '';
+        },
+        field: 'customerName',
+        extraBody: (row) => ({ version: row.customerVersion as number }),
+      },
+      /** シングルクリック遷移先を行データから生成 */
+      singleClickHref: (row) => {
+        const c = row.customer as { id?: number } | null;
+        return c?.id ? `/customers/${c.id}?from=/projects,案件一覧` : '';
       },
     },
     {
@@ -64,18 +65,19 @@ export const projectListConfig: EntityListConfig = {
       width: 180,
       sortable: true,
       group: '契約マスタ情報',
-      render: (_value, row) => {
-        const partner = row.partner as { id?: number; partnerName?: string } | null;
-        if (!partner?.partnerName) return '-';
-        return (
-          <Link
-            href={`/partners/${partner.id}?from=/projects,案件一覧`}
-            className="text-primary hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {partner.partnerName}
-          </Link>
-        );
+      doubleClickToEdit: true,
+      edit: { type: 'text' },
+      customPatch: {
+        endpoint: (row) => {
+          const p = row.partner as { id?: number } | null;
+          return p?.id ? `/partners/${p.id}` : '';
+        },
+        field: 'partnerName',
+        extraBody: (row) => ({ version: row.partnerVersion as number }),
+      },
+      singleClickHref: (row) => {
+        const p = row.partner as { id?: number } | null;
+        return p?.id ? `/partners/${p.id}?from=/projects,案件一覧` : '';
       },
     },
     {
@@ -138,7 +140,7 @@ export const projectListConfig: EntityListConfig = {
         return '表示';
       },
     },
-    // ── 顧客基本情報（インライン編集可・ダブルクリック） ──
+    // ── 顧客基本情報（シングルクリック編集） ──
     {
       key: 'customerSalutation',
       label: '顧客呼称',
@@ -146,7 +148,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'text' },
       customPatch: {
         endpoint: (row) => {
@@ -164,7 +165,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      doubleClickToEdit: true,
       edit: {
         type: 'select',
         options: [
@@ -203,7 +203,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'url' },
       customPatch: {
         endpoint: (row) => {
@@ -221,7 +220,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'number' },
       customPatch: {
         endpoint: (row) => {
@@ -239,7 +237,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'url' },
       customPatch: {
         endpoint: (row) => {
@@ -250,7 +247,7 @@ export const projectListConfig: EntityListConfig = {
         extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
-    // ── 代理店基本情報（インライン編集可・ダブルクリック） ──
+    // ── 代理店基本情報（シングルクリック編集） ──
     {
       key: 'partnerCode',
       label: '代理店コード',
@@ -258,7 +255,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'text' },
       customPatch: {
         endpoint: (row) => {
@@ -276,7 +272,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'text' },
       customPatch: {
         endpoint: (row) => {
@@ -294,7 +289,6 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
-      doubleClickToEdit: true,
       edit: { type: 'url' },
       customPatch: {
         endpoint: (row) => {

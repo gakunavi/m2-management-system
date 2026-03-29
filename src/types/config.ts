@@ -54,8 +54,10 @@ export type ColumnDef = {
   edit?: CellEditConfig;
   /** 通常の patchEndpoint ではなく別 API に PATCH する設定 */
   customPatch?: CustomPatchConfig;
-  /** ダブルクリックで編集開始（クロスエンティティ編集用） */
+  /** ダブルクリックで編集開始（リンク列用: シングルクリック→遷移、ダブルクリック→編集） */
   doubleClickToEdit?: boolean;
+  /** doubleClickToEdit 時のシングルクリック遷移先を行データから生成する関数 */
+  singleClickHref?: (row: Record<string, unknown>) => string;
   /** 列表示設定モーダルでのグループ分け（例: '基本情報', '事業カスタム項目'） */
   group?: string;
 };

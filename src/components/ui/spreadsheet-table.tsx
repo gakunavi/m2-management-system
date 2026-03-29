@@ -392,6 +392,14 @@ export function SpreadsheetTable({
         const canCustomEdit = col.customPatch ? !!col.customPatch.endpoint(rowData) : true;
         const effectiveEditConfig = canCustomEdit ? col.edit : undefined;
 
+        // doubleClickToEdit 列のシングルクリック遷移ハンドラ
+        const singleClickHandler = col.doubleClickToEdit && col.singleClickHref
+          ? () => {
+              const href = col.singleClickHref!(rowData);
+              if (href) router.push(href);
+            }
+          : undefined;
+
         return (
           <EditableCell
             value={cellValue}
@@ -400,6 +408,7 @@ export function SpreadsheetTable({
             row={rowData}
             align={col.align}
             doubleClickToEdit={col.doubleClickToEdit}
+            onSingleClick={singleClickHandler}
             onCommit={async (newValue) => {
               await updateCell({
                 rowId,
