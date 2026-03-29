@@ -54,6 +54,8 @@ export type ColumnDef = {
   edit?: CellEditConfig;
   /** 通常の patchEndpoint ではなく別 API に PATCH する設定 */
   customPatch?: CustomPatchConfig;
+  /** ダブルクリックで編集開始（クロスエンティティ編集用） */
+  doubleClickToEdit?: boolean;
   /** 列表示設定モーダルでのグループ分け（例: '基本情報', '事業カスタム項目'） */
   group?: string;
 };

@@ -138,7 +138,7 @@ export const projectListConfig: EntityListConfig = {
         return '表示';
       },
     },
-    // ── 顧客基本情報（インライン編集可） ──
+    // ── 顧客基本情報（インライン編集可・ダブルクリック） ──
     {
       key: 'customerSalutation',
       label: '顧客呼称',
@@ -146,6 +146,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'text' },
       customPatch: {
         endpoint: (row) => {
@@ -163,6 +164,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
+      doubleClickToEdit: true,
       edit: {
         type: 'select',
         options: [
@@ -201,6 +203,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'url' },
       customPatch: {
         endpoint: (row) => {
@@ -218,6 +221,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'number' },
       customPatch: {
         endpoint: (row) => {
@@ -235,6 +239,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '顧客マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'url' },
       customPatch: {
         endpoint: (row) => {
@@ -245,7 +250,7 @@ export const projectListConfig: EntityListConfig = {
         extraBody: (row) => ({ version: row.customerVersion as number }),
       },
     },
-    // ── 代理店基本情報（インライン編集可） ──
+    // ── 代理店基本情報（インライン編集可・ダブルクリック） ──
     {
       key: 'partnerCode',
       label: '代理店コード',
@@ -253,6 +258,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'text' },
       customPatch: {
         endpoint: (row) => {
@@ -270,6 +276,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'text' },
       customPatch: {
         endpoint: (row) => {
@@ -287,6 +294,7 @@ export const projectListConfig: EntityListConfig = {
       sortable: true,
       defaultVisible: false,
       group: '代理店マスタ情報',
+      doubleClickToEdit: true,
       edit: { type: 'url' },
       customPatch: {
         endpoint: (row) => {

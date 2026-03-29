@@ -18,6 +18,8 @@ export interface DynamicFieldOptions {
   columnKeyPrefix?: string;
   /** インラインPATCH時にボディに追加するフィールド。関数の場合は行データから動的に生成 */
   patchExtraBody?: Record<string, unknown> | ((row: Record<string, unknown>) => Record<string, unknown>);
+  /** ダブルクリックで編集開始（クロスエンティティ編集用） */
+  doubleClickToEdit?: boolean;
 }
 
 /** 契約マスタ（既存互換）のデフォルトオプション */
@@ -145,6 +147,7 @@ export function buildDynamicColumns(
         }),
         ...(readOnly ? {} : {
           edit: buildDynamicCellEdit(field),
+          ...(o.doubleClickToEdit ? { doubleClickToEdit: true } : {}),
           customPatch: {
             endpoint: o.patchEndpoint!,
             field: `${o.patchFieldPrefix}.${field.key}`,
