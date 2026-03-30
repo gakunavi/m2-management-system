@@ -64,6 +64,12 @@ model User {
   createdTaskBoards   TaskBoard[]          @relation("TaskBoardCreator")
   taskBoardMembers    TaskBoardMember[]
   taskAttachments     TaskAttachment[]    @relation("TaskAttachmentUploader")
+  createdPipelines           AccountingPipeline[] @relation("PipelineCreator")
+  updatedPipelines           AccountingPipeline[] @relation("PipelineUpdater")
+  createdPipelineEntries     PipelineEntry[]      @relation("EntryCreator")
+  updatedPipelineEntries     PipelineEntry[]      @relation("EntryUpdater")
+  createdPaymentStatements   PaymentStatement[]   @relation("StatementCreator")
+  updatedPaymentStatements   PaymentStatement[]   @relation("StatementUpdater")
 
   @@index([userRole])
   @@index([userIsActive])
@@ -92,6 +98,8 @@ model Business {
   partnerContactBusinessLinks PartnerContactBusinessLink[]
   partnerLinks                PartnerBusinessLink[]
   projects                    Project[]
+  accountingPipelines         AccountingPipeline[]
+  paymentStatements           PaymentStatement[]
   salesTargets                SalesTarget[]
   userAssignments             UserBusinessAssignment[]
   inquiries                   Inquiry[]
@@ -313,7 +321,9 @@ model PartnerBusinessLink {
   partnerId          Int      @map("partner_id")
   businessId         Int      @map("business_id")
   linkStatus         String   @default("active") @map("link_status") @db.VarChar(20)
-  commissionRate     Decimal? @map("commission_rate") @db.Decimal(5, 2)
+  commissionRate             Decimal? @map("commission_rate") @db.Decimal(5, 2)
+  directCommissionRate       Decimal? @map("direct_commission_rate") @db.Decimal(7, 4)
+  indirectCommissionRate     Decimal? @map("indirect_commission_rate") @db.Decimal(7, 4)
   contactPerson      String?  @map("contact_person") @db.VarChar(100)
   linkCustomData     Json     @default("{}") @map("link_custom_data")
   businessTier       String?  @map("business_tier") @db.VarChar(50)
@@ -373,8 +383,10 @@ model Partner {
   projects               Project[]
   users                  User[]               @relation("UserPartner")
   documents              BusinessDocument[]   @relation("PartnerDocuments")
-  businessLinks          PartnerBusinessLink[]
-  businessLinkChildren   PartnerBusinessLink[] @relation("BusinessLinkParent")
+  businessLinks              PartnerBusinessLink[]
+  businessLinkChildren       PartnerBusinessLink[] @relation("BusinessLinkParent")
+  commissionDistributions    CommissionDistribution[]
+  paymentStatements          PaymentStatement[]
 
   @@index([partnerCode, partnerIsActive], map: "idx_partners_code_active")
   @@index([partnerName], map: "idx_partners_name")
@@ -485,6 +497,8 @@ model Project {
   comments                  ProjectComment[]
   reminders                 ProjectReminder[]
   inquiries                 Inquiry[]
+  accountingPipelines       AccountingPipeline[]
+  paymentStatementLines     PaymentStatementLine[]
   business                  Business          @relation(fields: [businessId], references: [id])
   creator                   User?             @relation("ProjectCreator", fields: [createdBy], references: [id])
   customer                  Customer          @relation(fields: [customerId], references: [id])
@@ -1038,4 +1052,143 @@ model TaskBoardMember {
 
   @@id([boardId, userId])
   @@map("task_board_members")
+}
+
+// ====================================
+// 会計パイプライン
+// ====================================
+
+model AccountingPipeline {
+  id                 Int      @id @default(autoincrement())
+  projectId          Int      @map("project_id")
+  businessId         Int      @map("business_id")
+  revenueType        String   @map("revenue_type") @db.VarChar(10) // SHOT or STOCK
+  unitPrice          Decimal  @map("unit_price") @db.Decimal(12, 2)
+  quantity           Int      @default(1)
+  totalAmount        Decimal  @map("total_amount") @db.Decimal(14, 2)
+  billingCycle       String?  @map("billing_cycle") @db.VarChar(50)
+  paymentMethod      String?  @map("payment_method") @db.VarChar(100)
+  operationStartDate DateTime? @map("operation_start_date") @db.Date
+  memo               String?
+  pipelineIsActive   Boolean  @default(true) @map("pipeline_is_active")
+  version            Int      @default(1)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy          Int?     @map("created_by")
+  updatedBy          Int?     @map("updated_by")
+
+  project  Project  @relation(fields: [projectId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  creator  User?    @relation("PipelineCreator", fields: [createdBy], references: [id])
+  updater  User?    @relation("PipelineUpdater", fields: [updatedBy], references: [id])
+  entries  PipelineEntry[]
+
+  @@unique([projectId, businessId], map: "uq_accounting_pipeline_project_business")
+  @@index([businessId], map: "idx_accounting_pipelines_business")
+  @@index([revenueType], map: "idx_accounting_pipelines_revenue_type")
+  @@map("accounting_pipelines")
+}
+
+model PipelineEntry {
+  id          Int      @id @default(autoincrement())
+  pipelineId  Int      @map("pipeline_id")
+  entryDate   DateTime @map("entry_date") @db.Date
+  amount      Decimal  @map("amount") @db.Decimal(14, 2)
+  periodYear  Int      @map("period_year")
+  periodMonth Int      @map("period_month")
+  entryStatus String   @default("DRAFT") @map("entry_status") @db.VarChar(20) // DRAFT or CONFIRMED
+  entryMemo   String?  @map("entry_memo")
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy   Int?     @map("created_by")
+  updatedBy   Int?     @map("updated_by")
+
+  pipeline      AccountingPipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  creator       User?                    @relation("EntryCreator", fields: [createdBy], references: [id])
+  updater       User?                    @relation("EntryUpdater", fields: [updatedBy], references: [id])
+  distributions CommissionDistribution[]
+
+  @@index([pipelineId], map: "idx_pipeline_entries_pipeline")
+  @@index([periodYear, periodMonth], map: "idx_pipeline_entries_period")
+  @@index([entryStatus], map: "idx_pipeline_entries_status")
+  @@map("pipeline_entries")
+}
+
+model CommissionDistribution {
+  id               Int      @id @default(autoincrement())
+  entryId          Int      @map("entry_id")
+  partnerId        Int?     @map("partner_id") // null = 自社取り分
+  tier             Int
+  tierLabel        String?  @map("tier_label") @db.VarChar(100)
+  rateType         String   @map("rate_type") @db.VarChar(10) // DIRECT or INDIRECT
+  commissionRate   Decimal  @map("commission_rate") @db.Decimal(7, 4)
+  commissionAmount Decimal  @map("commission_amount") @db.Decimal(14, 2)
+  isManualOverride Boolean  @default(false) @map("is_manual_override")
+  paymentDueDate   DateTime? @map("payment_due_date") @db.Date
+  paymentStatus    String   @default("PENDING") @map("payment_status") @db.VarChar(20) // PENDING or PAID
+  distributionMemo String?  @map("distribution_memo")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  entry                PipelineEntry        @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  partner              Partner?             @relation(fields: [partnerId], references: [id])
+  paymentStatementLines PaymentStatementLine[]
+
+  @@index([entryId], map: "idx_commission_distributions_entry")
+  @@index([partnerId], map: "idx_commission_distributions_partner")
+  @@index([paymentStatus], map: "idx_commission_distributions_payment_status")
+  @@map("commission_distributions")
+}
+
+model PaymentStatement {
+  id                 Int      @id @default(autoincrement())
+  partnerId          Int      @map("partner_id")
+  businessId         Int      @map("business_id")
+  periodYear         Int      @map("period_year")
+  periodMonth        Int      @map("period_month")
+  totalAmount        Decimal  @map("total_amount") @db.Decimal(14, 2)
+  statementStatus    String   @default("DRAFT") @map("statement_status") @db.VarChar(20) // DRAFT, CONFIRMED, ISSUED
+  scheduledIssueDate DateTime? @map("scheduled_issue_date") @db.Date
+  issuedAt           DateTime? @map("issued_at") @db.Timestamptz(6)
+  pdfUrl             String?  @map("pdf_url") @db.VarChar(500)
+  statementMemo      String?  @map("statement_memo")
+  version            Int      @default(1)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy          Int?     @map("created_by")
+  updatedBy          Int?     @map("updated_by")
+
+  partner  Partner  @relation(fields: [partnerId], references: [id])
+  business Business @relation(fields: [businessId], references: [id])
+  creator  User?    @relation("StatementCreator", fields: [createdBy], references: [id])
+  updater  User?    @relation("StatementUpdater", fields: [updatedBy], references: [id])
+  lines    PaymentStatementLine[]
+
+  @@unique([partnerId, businessId, periodYear, periodMonth], map: "uq_payment_statement_partner_business_period")
+  @@index([businessId], map: "idx_payment_statements_business")
+  @@index([statementStatus], map: "idx_payment_statements_status")
+  @@index([periodYear, periodMonth], map: "idx_payment_statements_period")
+  @@map("payment_statements")
+}
+
+model PaymentStatementLine {
+  id             Int      @id @default(autoincrement())
+  statementId    Int      @map("statement_id")
+  distributionId Int?     @map("distribution_id") // null = 手動追加行
+  projectId      Int      @map("project_id")
+  amount         Decimal  @map("amount") @db.Decimal(14, 2)
+  commissionRate Decimal? @map("commission_rate") @db.Decimal(7, 4)
+  lineDescription String? @map("line_description")
+  isManualEntry  Boolean  @default(false) @map("is_manual_entry")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  statement    PaymentStatement        @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  distribution CommissionDistribution? @relation(fields: [distributionId], references: [id])
+  project      Project                 @relation(fields: [projectId], references: [id])
+
+  @@index([statementId], map: "idx_payment_statement_lines_statement")
+  @@index([projectId], map: "idx_payment_statement_lines_project")
+  @@map("payment_statement_lines")
 }
