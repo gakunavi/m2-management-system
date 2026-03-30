@@ -67,7 +67,7 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **ダブルクリック編集**: `ColumnDef.doubleClickToEdit` + `singleClickHref` でリンク列（顧客名・代理店名）をシングルクリック→遷移 / ダブルクリック→編集に対応。250ms遅延タイマーでダブルクリック検出時にナビゲーションをキャンセル
 - **通常PATCH**: `patchEndpoint` に `?businessId=X` クエリパラメータを付与（レスポンスで事業別データも展開するため）
 - **フォームPATCH**: `config.extraSubmitData` で付帯情報を自動マージ
-- **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）
+- **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）。特に案件PATCHではクロスエンティティのフラット展開フィールド（`customerName`, `customerVersion`, `partnerName`, `partnerVersion`等）を明示的に返す必要がある（`formatProject`だけではネスト構造のみで不足）
 - **子エンティティPATCH**: 連絡先等の子テーブルPATCHレスポンスは親行と別スキーマ。行置換せず一覧invalidate（`isSameEntity`判定）
 - **クロスエンティティキャッシュ**: 案件一覧から顧客/代理店を編集時、顧客/代理店の詳細・一覧キャッシュも無効化
 - **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新

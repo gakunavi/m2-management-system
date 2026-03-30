@@ -32,7 +32,7 @@ const updateProjectSchema = z.object({
 const PROJECT_INCLUDE = {
   customer: {
     select: {
-      id: true, customerCode: true, customerName: true, customerFolderUrl: true,
+      id: true, version: true, customerCode: true, customerName: true, customerFolderUrl: true,
       customerSalutation: true, customerType: true, customerWebsite: true, customerFiscalMonth: true,
       customerCustomData: true,
       contacts: {
@@ -48,7 +48,7 @@ const PROJECT_INCLUDE = {
   },
   partner: {
     select: {
-      id: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
+      id: true, version: true, partnerCode: true, partnerName: true, partnerFolderUrl: true,
       partnerSalutation: true, partnerCustomData: true,
       businessLinks: {
         where: { linkStatus: 'active' },
@@ -325,11 +325,35 @@ export async function PATCH(
     const patchPartGlobalData = (patchPartnerObj?.partnerCustomData ?? {}) as Record<string, unknown>;
     for (const [k, v] of Object.entries(patchPartGlobalData)) flatCustom[`partnerGlobal_${k}`] = v;
 
+    // 顧客/代理店の基本フィールドとversionをフラット展開（GETと同じ構造を返す）
+    const patchCustomerFlat: Record<string, unknown> = {};
+    const customer = updated.customer as Record<string, unknown> | null;
+    if (customer) {
+      patchCustomerFlat.customerName = (customer.customerName as string) ?? null;
+      patchCustomerFlat.customerSalutation = (customer.customerSalutation as string) ?? null;
+      patchCustomerFlat.customerType = (customer.customerType as string) ?? null;
+      patchCustomerFlat.customerWebsite = (customer.customerWebsite as string) ?? null;
+      patchCustomerFlat.customerFiscalMonth = (customer.customerFiscalMonth as number) ?? null;
+      patchCustomerFlat.customerFolderUrl = (customer.customerFolderUrl as string) ?? null;
+      patchCustomerFlat.customerVersion = (customer.version as number) ?? null;
+    }
+    const patchPartnerFlat: Record<string, unknown> = {};
+    const partner = updated.partner as Record<string, unknown> | null;
+    if (partner) {
+      patchPartnerFlat.partnerName = (partner.partnerName as string) ?? null;
+      patchPartnerFlat.partnerCode = (partner.partnerCode as string) ?? null;
+      patchPartnerFlat.partnerSalutation = (partner.partnerSalutation as string) ?? null;
+      patchPartnerFlat.partnerFolderUrl = (partner.partnerFolderUrl as string) ?? null;
+      patchPartnerFlat.partnerVersion = (partner.version as number) ?? null;
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(updated),
         ...flatCustom,
+        ...patchCustomerFlat,
+        ...patchPartnerFlat,
         customerLinkCustomData: patchCustLinkData,
         customerCustomData: patchCustGlobalData,
         partnerLinkCustomData: patchPartLinkData,
