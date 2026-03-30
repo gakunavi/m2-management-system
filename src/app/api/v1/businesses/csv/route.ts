@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
             ],
           }
         : {}),
-      ...(isActive !== '' ? { businessIsActive: isActive === 'true' } : { businessIsActive: true }),
+      ...(isActive !== '' ? { businessIsActive: isActive === 'true' } : {}),
     };
 
     const orderBy = buildOrderBy(sortItems, BUSINESS_SORT_FIELDS, [{ field: 'businessSortOrder', direction: 'asc' }]);

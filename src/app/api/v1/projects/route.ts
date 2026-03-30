@@ -145,7 +145,9 @@ export async function GET(request: NextRequest) {
     const partnerIdParam = searchParams.get('filter[partnerId]') || searchParams.get('partnerId');
 
     const where: Record<string, unknown> = {
-      projectIsActive: isActiveParam === 'false' ? false : true,
+      ...(isActiveParam === 'true' ? { projectIsActive: true }
+        : isActiveParam === 'false' ? { projectIsActive: false }
+        : {}),
     };
 
     // ポータル表示フィルター

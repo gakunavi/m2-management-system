@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         : {}),
       ...(customerType ? { customerType } : {}),
       ...(industryIdStr ? { industryId: parseInt(industryIdStr, 10) } : {}),
-      ...(isActive !== '' ? { customerIsActive: isActive === 'true' } : { customerIsActive: true }),
+      ...(isActive !== '' ? { customerIsActive: isActive === 'true' } : {}),
     };
 
     const orderBy = buildOrderBy(sortItems, CUSTOMER_SORT_FIELDS, [{ field: 'customerCode', direction: 'asc' }]);

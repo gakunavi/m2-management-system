@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         : {}),
       ...(partnerType ? { partnerType } : {}),
       ...(industryIdStr ? { industryId: parseInt(industryIdStr, 10) } : {}),
-      ...(isActive !== '' ? { partnerIsActive: isActive === 'true' } : { partnerIsActive: true }),
+      ...(isActive !== '' ? { partnerIsActive: isActive === 'true' } : {}),
     };
 
     const orderBy = buildOrderBy(sortItems, PARTNER_SORT_FIELDS, [{ field: 'partnerCode', direction: 'asc' }]);

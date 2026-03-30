@@ -57,7 +57,9 @@ export async function GET(request: NextRequest) {
     const columnsParam = searchParams.get('columns');
 
     const where: Record<string, unknown> = {
-      projectIsActive: isActiveParam === 'false' ? false : true,
+      ...(isActiveParam === 'true' ? { projectIsActive: true }
+        : isActiveParam === 'false' ? { projectIsActive: false }
+        : {}),
     };
 
     if (businessIdParam) {

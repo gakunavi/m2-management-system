@@ -324,7 +324,7 @@ export const projectListConfig: EntityListConfig = {
     },
     {
       key: 'isActive',
-      label: '状態',
+      label: '有効ステータス',
       type: 'boolean',
       trueLabel: '有効',
       falseLabel: '削除済み',

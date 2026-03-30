@@ -58,7 +58,7 @@ export const businessListConfig: EntityListConfig = {
     },
     {
       key: 'businessIsActive',
-      label: 'ステータス',
+      label: '有効ステータス',
       width: 90,
       align: 'center',
       sortable: false,
@@ -76,7 +76,7 @@ export const businessListConfig: EntityListConfig = {
   filters: [
     {
       key: 'isActive',
-      label: '状態',
+      label: '有効ステータス',
       type: 'boolean',
       trueLabel: '有効',
       falseLabel: '無効',
@@ -154,7 +154,7 @@ export const businessDetailConfig: EntityDetailConfig = {
             columns: 2,
             fields: [
               { key: 'businessSortOrder', label: '表示順', type: 'number' },
-              { key: 'businessIsActive', label: '有効', type: 'boolean' },
+              { key: 'businessIsActive', label: '有効ステータス', type: 'boolean' },
             ],
           },
         ],

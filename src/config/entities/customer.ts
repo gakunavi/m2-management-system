@@ -164,7 +164,7 @@ export const customerListConfig: EntityListConfig = {
     { key: 'customerNotes', label: 'メモ', width: 200, sortable: true, defaultVisible: false, group: 'その他', edit: { type: 'textarea' } },
     {
       key: 'customerIsActive',
-      label: 'ステータス',
+      label: '有効ステータス',
       width: 90,
       align: 'center',
       sortable: true,
@@ -196,7 +196,7 @@ export const customerListConfig: EntityListConfig = {
     },
     {
       key: 'isActive',
-      label: '状態',
+      label: '有効ステータス',
       type: 'boolean',
       trueLabel: '有効',
       falseLabel: '無効',

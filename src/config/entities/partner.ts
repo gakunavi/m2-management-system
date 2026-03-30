@@ -160,7 +160,7 @@ export const partnerListConfig: EntityListConfig = {
     { key: 'partnerNotes', label: '備考', width: 200, sortable: true, defaultVisible: false, group: 'その他', edit: { type: 'textarea' } },
     {
       key: 'partnerIsActive',
-      label: 'ステータス',
+      label: '有効ステータス',
       width: 90,
       align: 'center',
       sortable: true,
@@ -198,7 +198,7 @@ export const partnerListConfig: EntityListConfig = {
     },
     {
       key: 'isActive',
-      label: '状態',
+      label: '有効ステータス',
       type: 'boolean',
       trueLabel: '有効',
       falseLabel: '無効',
