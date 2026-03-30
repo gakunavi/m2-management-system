@@ -410,6 +410,11 @@ export type FormFieldDef = {
   entitySelect?: EntitySelectConfig;
   /** フォームデータに応じて表示/非表示を切り替える条件 */
   visibleWhen?: (formData: Record<string, unknown>) => boolean;
+  /** 郵便番号から住所自動入力。住所フィールドのキーを指定 */
+  addressAutoFill?: {
+    /** 住所を自動入力するフィールドのキー */
+    targetKey: string;
+  };
 };
 
 // ============================================

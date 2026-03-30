@@ -447,7 +447,7 @@ export const customerFormConfig: EntityFormConfig = {
       title: '連絡先',
       columns: 2,
       fields: [
-        { key: 'customerPostalCode', label: '郵便番号', type: 'text', placeholder: '000-0000' },
+        { key: 'customerPostalCode', label: '郵便番号', type: 'text', placeholder: '000-0000', addressAutoFill: { targetKey: 'customerAddress' } },
         { key: 'customerPhone', label: '電話番号', type: 'phone', placeholder: '03-0000-0000' },
         { key: 'customerAddress', label: '住所', type: 'text', placeholder: '都道府県・市区町村・番地', colSpan: 2 },
         { key: 'customerFax', label: 'FAX', type: 'phone', placeholder: '03-0000-0000' },

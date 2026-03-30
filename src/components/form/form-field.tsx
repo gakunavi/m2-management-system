@@ -1,7 +1,9 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -11,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Search, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DuplicateWarning } from './duplicate-warning';
 import { MasterSelectField } from './master-select-field';
@@ -77,6 +80,19 @@ function renderInput(
     case 'email':
     case 'phone':
     case 'url':
+      if (field.addressAutoFill && onSetField) {
+        return (
+          <PostalCodeField
+            id={id}
+            value={strValue}
+            onChange={onChange}
+            placeholder={field.placeholder}
+            disabled={field.disabled === true}
+            targetKey={field.addressAutoFill.targetKey}
+            onSetField={onSetField}
+          />
+        );
+      }
       return (
         <Input
           id={id}
@@ -299,6 +315,96 @@ function MonthPicker({
           })}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+/** 郵便番号から住所を自動検索するフィールド */
+function PostalCodeField({
+  id,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  targetKey,
+  onSetField,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: unknown) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  targetKey: string;
+  onSetField: (key: string, value: unknown) => void;
+}) {
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  const handleSearch = useCallback(async () => {
+    const cleaned = value.replace(/[-\s\u3000]/g, '');
+    if (!/^\d{7}$/.test(cleaned)) {
+      setSearchError('7桁の郵便番号を入力してください');
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    try {
+      const res = await fetch(
+        `https://zipcloud.ibsnet.co.jp/api/search?zipcode=${cleaned}`,
+      );
+      const data = await res.json();
+
+      if (data.status !== 200 || !data.results || data.results.length === 0) {
+        setSearchError('該当する住所が見つかりません');
+        return;
+      }
+
+      const result = data.results[0];
+      const address = `${result.address1}${result.address2}${result.address3}`;
+      onSetField(targetKey, address);
+    } catch {
+      setSearchError('住所検索に失敗しました');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [value, targetKey, onSetField]);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setSearchError(null);
+          }}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleSearch}
+          disabled={disabled || isSearching || !value}
+          className="shrink-0 h-9"
+        >
+          {isSearching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Search className="h-4 w-4" />
+          )}
+          <span className="ml-1.5">住所検索</span>
+        </Button>
+      </div>
+      {searchError && (
+        <p className="text-xs text-destructive">{searchError}</p>
+      )}
     </div>
   );
 }
