@@ -40,6 +40,8 @@ interface PartnerBusinessLink {
   businessCode: string;
   linkStatus: string;
   commissionRate: number | null;
+  directCommissionRate: number | null;
+  indirectCommissionRate: number | null;
   contactPerson: string | null;
   linkCustomData: Record<string, unknown>;
   businessTier: string | null;
@@ -72,7 +74,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<{
     linkId: number;
-    field: 'commissionRate' | 'contactPerson';
+    field: 'commissionRate' | 'directCommissionRate' | 'indirectCommissionRate' | 'contactPerson';
   } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
 
@@ -172,7 +174,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
   const startEditing = (
     linkId: number,
-    field: 'commissionRate' | 'contactPerson',
+    field: 'commissionRate' | 'directCommissionRate' | 'indirectCommissionRate' | 'contactPerson',
     currentValue: string | number | null,
   ) => {
     setEditingField({ linkId, field });
@@ -182,9 +184,9 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const commitEdit = () => {
     if (!editingField) return;
     const { linkId, field } = editingField;
-    if (field === 'commissionRate') {
+    if (field === 'commissionRate' || field === 'directCommissionRate' || field === 'indirectCommissionRate') {
       const num = editValue !== '' ? Number(editValue) : null;
-      updateMutation.mutate({ linkId, data: { commissionRate: num } });
+      updateMutation.mutate({ linkId, data: { [field]: num } });
     } else {
       updateMutation.mutate({ linkId, data: { contactPerson: editValue || null } });
     }
@@ -259,6 +261,8 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                 <TableHead>事業コード</TableHead>
                 <TableHead>ステータス</TableHead>
                 <TableHead>紹介手数料率</TableHead>
+                <TableHead>直案件料率</TableHead>
+                <TableHead>間接案件料率</TableHead>
                 <TableHead>担当者/窓口</TableHead>
                 <TableHead>事業別親代理店</TableHead>
                 <TableHead>事業別階層</TableHead>
@@ -322,6 +326,68 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                         onClick={() => startEditing(link.id, 'commissionRate', link.commissionRate)}
                       >
                         {link.commissionRate != null ? `${link.commissionRate}%` : '-'}
+                      </button>
+                    )}
+                  </TableCell>
+
+                  {/* 直案件料率 */}
+                  <TableCell>
+                    {editingField?.linkId === link.id && editingField.field === 'directCommissionRate' ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitEdit();
+                            if (e.key === 'Escape') setEditingField(null);
+                          }}
+                          className="h-7 w-[80px] text-sm"
+                          autoFocus
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                      </div>
+                    ) : (
+                      <button
+                        className="text-sm hover:underline cursor-pointer text-left"
+                        onClick={() => startEditing(link.id, 'directCommissionRate', link.directCommissionRate)}
+                      >
+                        {link.directCommissionRate != null ? `${link.directCommissionRate}%` : '-'}
+                      </button>
+                    )}
+                  </TableCell>
+
+                  {/* 間接案件料率 */}
+                  <TableCell>
+                    {editingField?.linkId === link.id && editingField.field === 'indirectCommissionRate' ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={commitEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitEdit();
+                            if (e.key === 'Escape') setEditingField(null);
+                          }}
+                          className="h-7 w-[80px] text-sm"
+                          autoFocus
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                      </div>
+                    ) : (
+                      <button
+                        className="text-sm hover:underline cursor-pointer text-left"
+                        onClick={() => startEditing(link.id, 'indirectCommissionRate', link.indirectCommissionRate)}
+                      >
+                        {link.indirectCommissionRate != null ? `${link.indirectCommissionRate}%` : '-'}
                       </button>
                     )}
                   </TableCell>

@@ -20,6 +20,8 @@ import {
 const updateLinkSchema = z.object({
   linkStatus: z.string().max(20).optional(),
   commissionRate: z.number().min(0).max(100).nullable().optional(),
+  directCommissionRate: z.number().min(0).max(100).nullable().optional(),
+  indirectCommissionRate: z.number().min(0).max(100).nullable().optional(),
   contactPerson: z.string().max(100).nullable().optional(),
   linkCustomData: z.record(z.unknown()).optional(),
   businessTier: z.string().max(50).nullable().optional(),
@@ -126,6 +128,8 @@ export async function PATCH(
           data: {
             ...(data.linkStatus !== undefined ? { linkStatus: data.linkStatus } : {}),
             ...(data.commissionRate !== undefined ? { commissionRate: data.commissionRate } : {}),
+            ...(data.directCommissionRate !== undefined ? { directCommissionRate: data.directCommissionRate } : {}),
+            ...(data.indirectCommissionRate !== undefined ? { indirectCommissionRate: data.indirectCommissionRate } : {}),
             ...(data.contactPerson !== undefined ? { contactPerson: data.contactPerson } : {}),
             ...(data.linkCustomData !== undefined ? { linkCustomData: data.linkCustomData as Prisma.InputJsonValue } : {}),
             businessTier: newTier,
@@ -144,6 +148,8 @@ export async function PATCH(
         data: {
           ...(data.linkStatus !== undefined ? { linkStatus: data.linkStatus } : {}),
           ...(data.commissionRate !== undefined ? { commissionRate: data.commissionRate } : {}),
+          ...(data.directCommissionRate !== undefined ? { directCommissionRate: data.directCommissionRate } : {}),
+          ...(data.indirectCommissionRate !== undefined ? { indirectCommissionRate: data.indirectCommissionRate } : {}),
           ...(data.contactPerson !== undefined ? { contactPerson: data.contactPerson } : {}),
           ...(data.linkCustomData !== undefined ? { linkCustomData: data.linkCustomData as Prisma.InputJsonValue } : {}),
         },
@@ -168,6 +174,8 @@ export async function PATCH(
         businessCode: updated!.business.businessCode,
         linkStatus: updated!.linkStatus,
         commissionRate: updated!.commissionRate != null ? Number(updated!.commissionRate) : null,
+        directCommissionRate: updated!.directCommissionRate != null ? Number(updated!.directCommissionRate) : null,
+        indirectCommissionRate: updated!.indirectCommissionRate != null ? Number(updated!.indirectCommissionRate) : null,
         contactPerson: updated!.contactPerson,
         linkCustomData: updated!.linkCustomData,
         businessTier: updated!.businessTier,
