@@ -393,7 +393,7 @@ function SortableTaskCard({
       {...attributes}
       {...listeners}
       className={cn(
-        'rounded-lg border bg-background shadow-sm p-3 cursor-grab active:cursor-grabbing select-none',
+        'rounded-lg border bg-background shadow-sm p-3 cursor-grab active:cursor-grabbing select-none touch-none',
         isDragging && 'opacity-40',
         isSubtaskTarget && 'ring-2 ring-blue-400 bg-blue-50/80',
       )}
@@ -600,7 +600,7 @@ export function TaskKanbanView({
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 10 } }),
   );
 
   // カスタム衝突検知: 列ドラッグ中は列のみ検出、カードドラッグ中は全て検出
