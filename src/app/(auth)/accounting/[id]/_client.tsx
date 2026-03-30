@@ -149,6 +149,28 @@ export function AccountingPipelineDetailClient({ id }: { id: number }) {
     },
   });
 
+  const updateEntryStatusMutation = useMutation({
+    mutationFn: async ({ entryId, entryStatus, version }: { entryId: number; entryStatus: string; version: number }) => {
+      const res = await fetch(`/api/v1/accounting-pipelines/${id}/entries/${entryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryStatus, version }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || 'ステータス変更に失敗しました');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounting-pipeline', id] });
+      toast({ message: 'ステータスを変更しました', type: 'success' });
+    },
+    onError: (error: Error) => {
+      toast({ message: error.message, type: 'error' });
+    },
+  });
+
   if (isLoading || !pipeline) return <LoadingSpinner />;
 
   return (
@@ -261,20 +283,55 @@ export function AccountingPipelineDetailClient({ id }: { id: number }) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {entry.entryStatus === 'DRAFT' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm('このエントリを削除しますか？')) {
-                                deleteEntryMutation.mutate(entry.id);
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {entry.entryStatus === 'DRAFT' ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-7"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateEntryStatusMutation.mutate({
+                                    entryId: entry.id,
+                                    entryStatus: 'CONFIRMED',
+                                    version: entry.version,
+                                  });
+                                }}
+                              >
+                                確定
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm('このエントリを削除しますか？')) {
+                                    deleteEntryMutation.mutate(entry.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateEntryStatusMutation.mutate({
+                                  entryId: entry.id,
+                                  entryStatus: 'DRAFT',
+                                  version: entry.version,
+                                });
+                              }}
+                            >
+                              差し戻し
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
 

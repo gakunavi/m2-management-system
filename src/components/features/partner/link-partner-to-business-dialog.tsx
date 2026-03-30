@@ -65,6 +65,8 @@ export function LinkPartnerToBusinessDialog({
 
   // --- 追加情報 ---
   const [commissionRate, setCommissionRate] = useState('');
+  const [directCommissionRate, setDirectCommissionRate] = useState('');
+  const [indirectCommissionRate, setIndirectCommissionRate] = useState('');
   const [contactPerson, setContactPerson] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +84,8 @@ export function LinkPartnerToBusinessDialog({
       setSelectedParent(null);
       setAsPrimary(false);
       setCommissionRate('');
+      setDirectCommissionRate('');
+      setIndirectCommissionRate('');
       setContactPerson('');
     }
   }, [open]);
@@ -159,6 +163,8 @@ export function LinkPartnerToBusinessDialog({
           businessId,
           linkStatus: 'active',
           commissionRate: commissionRate ? parseFloat(commissionRate) : null,
+          directCommissionRate: directCommissionRate ? parseFloat(directCommissionRate) : null,
+          indirectCommissionRate: indirectCommissionRate ? parseFloat(indirectCommissionRate) : null,
           contactPerson: contactPerson || null,
         }),
       });
@@ -392,28 +398,58 @@ export function LinkPartnerToBusinessDialog({
 
           {/* ===== 追加情報 ===== */}
           {selectedPartner && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">手数料率（%）</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={commissionRate}
-                  onChange={(e) => setCommissionRate(e.target.value)}
-                  placeholder="例: 10.00"
-                  className="h-8 text-sm"
-                />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">紹介手数料率（%）</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={commissionRate}
+                    onChange={(e) => setCommissionRate(e.target.value)}
+                    placeholder="例: 10.00"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">担当者</Label>
+                  <Input
+                    value={contactPerson}
+                    onChange={(e) => setContactPerson(e.target.value)}
+                    placeholder="担当者名"
+                    className="h-8 text-sm"
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">担当者</Label>
-                <Input
-                  value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)}
-                  placeholder="担当者名"
-                  className="h-8 text-sm"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">直案件料率（%）</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={directCommissionRate}
+                    onChange={(e) => setDirectCommissionRate(e.target.value)}
+                    placeholder="例: 10.00"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">間接案件料率（%）</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={indirectCommissionRate}
+                    onChange={(e) => setIndirectCommissionRate(e.target.value)}
+                    placeholder="例: 5.00"
+                    className="h-8 text-sm"
+                  />
+                </div>
               </div>
             </div>
           )}
