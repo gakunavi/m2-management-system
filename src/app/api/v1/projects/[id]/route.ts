@@ -23,7 +23,6 @@ const updateProjectSchema = z.object({
   projectAssignedUserId: z.number().int().positive().optional().nullable(),
   projectAssignedUserName: z.string().max(100).optional().nullable().or(z.literal('')),
   projectNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
-  projectRenovationNumber: z.string().max(100).optional().nullable().or(z.literal('')),
   projectCustomData: z.record(z.unknown()).optional(),
   portalVisible: z.boolean().optional(),
   version: z.number().int().min(1),

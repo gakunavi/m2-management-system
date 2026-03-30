@@ -24,7 +24,6 @@ export function formatProject(project: ProjectWithRelations) {
     projectAssignedUserId: project.projectAssignedUserId,
     projectAssignedUserName: project.projectAssignedUserName,
     projectNotes: project.projectNotes,
-    projectRenovationNumber: project.projectRenovationNumber,
     projectCustomData: project.projectCustomData,
     projectStatusChangedAt: project.projectStatusChangedAt?.toISOString() ?? null,
     projectIsActive: project.projectIsActive,

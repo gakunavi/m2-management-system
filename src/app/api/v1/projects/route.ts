@@ -33,7 +33,6 @@ const SORT_FIELD_MAP: Record<string, (dir: SortDirection) => Record<string, unkn
   // projectSalesStatus はアプリ側ソート（statusSortOrder 使用）
   projectExpectedCloseMonth: (dir) => ({ projectExpectedCloseMonth: dir }),
   projectAssignedUserName: (dir) => ({ projectAssignedUserName: dir }),
-  projectRenovationNumber: (dir) => ({ projectRenovationNumber: dir }),
   projectNotes: (dir) => ({ projectNotes: dir }),
   updatedAt: (dir) => ({ updatedAt: dir }),
   createdAt: (dir) => ({ createdAt: dir }),
@@ -82,7 +81,6 @@ const createProjectSchema = z.object({
   projectAssignedUserId: z.number().int().positive().optional().nullable(),
   projectAssignedUserName: z.string().max(100).optional().nullable().or(z.literal('')),
   projectNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
-  projectRenovationNumber: z.string().max(100).optional().nullable().or(z.literal('')),
   projectCustomData: z.record(z.unknown()).optional().default({}),
   portalVisible: z.boolean().optional().default(true),
 });
@@ -520,7 +518,6 @@ export async function POST(request: NextRequest) {
           projectAssignedUserId: data.projectAssignedUserId ?? null,
           projectAssignedUserName: data.projectAssignedUserName || null,
           projectNotes: data.projectNotes || null,
-          projectRenovationNumber: data.projectRenovationNumber || null,
           projectCustomData: customDataForCreate as object,
           createdBy: user.id,
           updatedBy: user.id,

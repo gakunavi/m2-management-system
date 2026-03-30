@@ -97,14 +97,6 @@ export const projectListConfig: EntityListConfig = {
       edit: { type: 'text' },
     },
     {
-      key: 'projectRenovationNumber',
-      label: '階層番号',
-      width: 140,
-      sortable: true,
-      group: '契約マスタ情報',
-      edit: { type: 'text' },
-    },
-    {
       key: 'projectNotes',
       label: '備考',
       width: 200,
@@ -440,7 +432,6 @@ export const projectDetailConfig: EntityDetailConfig = {
                   return b?.businessName ?? '-';
                 },
               },
-              { key: 'projectRenovationNumber', label: '階層番号', type: 'text' },
               {
                 key: 'customerSalutation',
                 label: '顧客呼称',
@@ -688,12 +679,6 @@ export const projectFormConfig: EntityFormConfig = {
           options: [], // API から動的取得
           placeholder: '紐付けるユーザーを選択',
           optionsEndpoint: '/users',
-        },
-        {
-          key: 'projectRenovationNumber',
-          label: '階層番号',
-          type: 'text',
-          placeholder: '階層番号を入力',
         },
         {
           key: 'portalVisible',
