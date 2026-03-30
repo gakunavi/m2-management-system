@@ -1,4 +1,4 @@
-import { LayoutDashboard, Briefcase, Users, Building2, UserCog, FolderKanban, BarChart3, BookOpen, MessageSquare, FileBarChart, Megaphone, Bot, Settings, CheckSquare } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, Building2, UserCog, FolderKanban, BarChart3, BookOpen, MessageSquare, FileBarChart, Megaphone, Bot, Settings, CheckSquare, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -33,6 +33,7 @@ export const mainNavSections: NavSection[] = [
     items: [
       { label: '契約マスタ', href: '/projects', icon: FolderKanban, requiresBusiness: true },
       { label: '案件ムーブメント', href: '/movements', icon: BarChart3, requiresBusiness: true },
+      { label: '会計パイプライン', href: '/accounting', icon: Wallet },
     ],
   },
   {
