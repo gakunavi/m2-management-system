@@ -165,6 +165,11 @@ export async function POST(request: NextRequest) {
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const body = await request.json();
+
+    // linkCustomData / businessId をスキーマ外で先に取り出す
+    const linkCustomData = body.linkCustomData as Record<string, unknown> | undefined;
+    const linkBusinessId = body.businessId as number | undefined;
+
     const data = createPartnerSchema.parse(body);
 
     // 名前+電話番号の完全一致 重複チェック
@@ -236,11 +241,54 @@ export async function POST(request: NextRequest) {
         include: {
           industry: { select: { id: true, industryName: true } },
           parent: { select: { id: true, partnerCode: true, partnerName: true } },
+          businessLinks: {
+            where: { linkStatus: 'active' },
+            select: { businessId: true, linkCustomData: true },
+          },
         },
       });
     });
 
-    return NextResponse.json({ success: true, data: formatPartner(partner) }, { status: 201 });
+    // 事業別カスタムデータがある場合は PartnerBusinessLink を作成
+    if (linkBusinessId && linkCustomData && Object.keys(linkCustomData).length > 0) {
+      const business = await prisma.business.findUnique({
+        where: { id: linkBusinessId },
+        select: { id: true, businessIsActive: true },
+      });
+      if (!business || !business.businessIsActive) {
+        throw ApiError.notFound('指定された事業が見つかりません');
+      }
+
+      const existingLink = await prisma.partnerBusinessLink.findUnique({
+        where: { partnerId_businessId: { partnerId: partner.id, businessId: linkBusinessId } },
+      });
+      if (existingLink) {
+        const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
+        await prisma.partnerBusinessLink.update({
+          where: { id: existingLink.id },
+          data: {
+            linkCustomData: { ...existingData, ...linkCustomData } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+          },
+        });
+      } else {
+        await prisma.partnerBusinessLink.create({
+          data: {
+            partnerId: partner.id,
+            businessId: linkBusinessId,
+            linkStatus: 'active',
+            linkCustomData: linkCustomData as unknown as import('@prisma/client').Prisma.InputJsonValue,
+          },
+        });
+      }
+      // businessLinks を再取得して反映
+      const freshLinks = await prisma.partnerBusinessLink.findMany({
+        where: { partnerId: partner.id, linkStatus: 'active' },
+        select: { businessId: true, linkCustomData: true },
+      });
+      (partner as Record<string, unknown>).businessLinks = freshLinks;
+    }
+
+    return NextResponse.json({ success: true, data: formatPartner(partner, linkBusinessId) }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

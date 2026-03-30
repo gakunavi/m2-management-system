@@ -158,6 +158,11 @@ export async function POST(request: NextRequest) {
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const body = await request.json();
+
+    // linkCustomData / businessId をスキーマ外で先に取り出す
+    const linkCustomData = body.linkCustomData as Record<string, unknown> | undefined;
+    const linkBusinessId = body.businessId as number | undefined;
+
     const data = createCustomerSchema.parse(body);
 
     // 名前+電話番号の完全一致 重複チェック
@@ -178,6 +183,17 @@ export async function POST(request: NextRequest) {
     }
 
     const customerCode = await generateCustomerCode();
+
+    // 事業別カスタムデータがある場合は事業の存在確認
+    if (linkBusinessId && linkCustomData && Object.keys(linkCustomData).length > 0) {
+      const business = await prisma.business.findUnique({
+        where: { id: linkBusinessId },
+        select: { id: true, businessIsActive: true },
+      });
+      if (!business || !business.businessIsActive) {
+        throw ApiError.notFound('指定された事業が見つかりません');
+      }
+    }
 
     const customer = await prisma.customer.create({
       data: {
@@ -203,10 +219,48 @@ export async function POST(request: NextRequest) {
         createdBy: user.id,
         updatedBy: user.id,
       },
-      include: { industry: { select: { id: true, industryName: true } } },
+      include: {
+        industry: { select: { id: true, industryName: true } },
+        businessLinks: {
+          where: { linkStatus: 'active' },
+          select: { businessId: true, linkCustomData: true },
+        },
+      },
     });
 
-    return NextResponse.json({ success: true, data: formatCustomer(customer) }, { status: 201 });
+    // 事業別カスタムデータがある場合は CustomerBusinessLink を作成
+    if (linkBusinessId && linkCustomData && Object.keys(linkCustomData).length > 0) {
+      // 既存リンクがあればカスタムデータを更新、なければ新規作成
+      const existingLink = await prisma.customerBusinessLink.findUnique({
+        where: { customerId_businessId: { customerId: customer.id, businessId: linkBusinessId } },
+      });
+      if (existingLink) {
+        const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
+        await prisma.customerBusinessLink.update({
+          where: { id: existingLink.id },
+          data: {
+            linkCustomData: { ...existingData, ...linkCustomData } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+          },
+        });
+      } else {
+        await prisma.customerBusinessLink.create({
+          data: {
+            customerId: customer.id,
+            businessId: linkBusinessId,
+            linkStatus: 'active',
+            linkCustomData: linkCustomData as unknown as import('@prisma/client').Prisma.InputJsonValue,
+          },
+        });
+      }
+      // businessLinks を再取得して反映
+      const freshLinks = await prisma.customerBusinessLink.findMany({
+        where: { customerId: customer.id, linkStatus: 'active' },
+        select: { businessId: true, linkCustomData: true },
+      });
+      (customer as Record<string, unknown>).businessLinks = freshLinks;
+    }
+
+    return NextResponse.json({ success: true, data: formatCustomer(customer, linkBusinessId) }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }
