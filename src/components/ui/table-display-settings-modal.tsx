@@ -423,6 +423,28 @@ export function TableDisplaySettingsModal({
     setBulkSelectedIds(new Set());
   }, [bulkSelectedIds, columnMap]);
 
+  const handleShowAllColumns = useCallback(() => {
+    setLocalColumnVisibility((prev) => {
+      const next = { ...prev };
+      columnMap.forEach((col, id) => {
+        if (!col.locked) next[id] = true;
+      });
+      return next;
+    });
+    setBulkSelectedIds(new Set());
+  }, [columnMap]);
+
+  const handleHideAllColumns = useCallback(() => {
+    setLocalColumnVisibility((prev) => {
+      const next = { ...prev };
+      columnMap.forEach((col, id) => {
+        if (!col.locked) next[id] = false;
+      });
+      return next;
+    });
+    setBulkSelectedIds(new Set());
+  }, [columnMap]);
+
   // D&D — MouseSensor + TouchSensor を使用
   // （PointerSensor は setPointerCapture を使い、Radix Dialog のポータル内で競合するため）
   const sensors = useSensors(
@@ -619,29 +641,53 @@ export function TableDisplaySettingsModal({
               </div>
 
               {/* 一括操作 */}
-              {filteredVisibleIds.length > 0 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={
-                      filteredVisibleIds.length > 0 &&
-                      filteredVisibleIds.every((id) => bulkSelectedIds.has(id))
-                    }
-                    onCheckedChange={() => handleBulkSelectAll()}
-                  />
-                  <span className="text-muted-foreground">全選択</span>
-                  {bulkSelectedIds.size > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                {filteredVisibleIds.length > 0 && (
+                  <>
+                    <Checkbox
+                      checked={
+                        filteredVisibleIds.length > 0 &&
+                        filteredVisibleIds.every((id) => bulkSelectedIds.has(id))
+                      }
+                      onCheckedChange={() => handleBulkSelectAll()}
+                    />
+                    <span className="text-muted-foreground">全選択</span>
+                  </>
+                )}
+                {bulkSelectedIds.size > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs ml-auto"
+                    onClick={handleBulkHide}
+                  >
+                    <EyeOff className="h-3 w-3 mr-1" />
+                    選択した列を非表示 ({bulkSelectedIds.size})
+                  </Button>
+                )}
+                {bulkSelectedIds.size === 0 && (
+                  <div className="flex gap-1 ml-auto">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-6 text-xs ml-auto"
-                      onClick={handleBulkHide}
+                      className="h-6 text-xs"
+                      onClick={handleShowAllColumns}
+                    >
+                      <Eye className="h-3 w-3 mr-1" />
+                      全て表示
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={handleHideAllColumns}
                     >
                       <EyeOff className="h-3 w-3 mr-1" />
-                      選択した列を非表示 ({bulkSelectedIds.size})
+                      全て非表示
                     </Button>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
 
               {/* 2カラムレイアウト */}
               <div className="grid grid-cols-2 gap-4">

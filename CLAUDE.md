@@ -6,7 +6,7 @@
 
 ### データフロー全経路チェック（CRUD）
 
-1. **CREATE（POST）**: スキーマに新フィールドがあるか → create処理で値を渡しているか
+1. **CREATE（POST）**: スキーマに新フィールドがあるか → create処理で値を渡しているか → スキーマ外データ（linkCustomData, businessId等）は`.parse()`前に取り出しているか → 事業選択時にBusinessLinkが自動作成されるか
 2. **READ（GET一覧）**: 新フィールドがselectに含まれるか → フォーマッターで正しく返るか
 3. **READ（GET詳細）**: 同上 → 詳細画面に表示されるか
 4. **UPDATE（PATCH）**: スキーマ外のフィールドは明示的に取り出しているか → マージ更新で既存値が消えないか
@@ -70,7 +70,8 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）。特に案件PATCHではクロスエンティティのフラット展開フィールド（`customerName`, `customerVersion`, `partnerName`, `partnerVersion`等）を明示的に返す必要がある（`formatProject`だけではネスト構造のみで不足）
 - **子エンティティPATCH**: 連絡先等の子テーブルPATCHレスポンスは親行と別スキーマ。行置換せず一覧invalidate（`isSameEntity`判定）
 - **クロスエンティティキャッシュ**: 案件一覧から顧客/代理店を編集時、顧客/代理店の詳細・一覧キャッシュも無効化
-- **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新
+- **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新（POST/PATCH共通パターン）
+- **新規作成時の事業リンク**: 顧客・代理店POST APIで `businessId` がある場合、自動的に `CustomerBusinessLink` / `PartnerBusinessLink` を作成。`linkCustomData` がある場合はカスタムデータも同時保存
 - **楽観的ロック**: `version: { increment: 1 }` + 409 Conflict
 - **ドット記法**: `unflattenDotKeys` / `flattenNestedToFormKeys` で変換
 
