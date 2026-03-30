@@ -103,14 +103,25 @@ export async function POST(
     const body = await request.json();
     const data = createLinkSchema.parse(body);
 
+    // 事業のデフォルト手数料率を取得（未指定フィールドに適用）
+    const business = await prisma.business.findUnique({
+      where: { id: data.businessId },
+      select: { businessConfig: true },
+    });
+    const accountingDefaults = (business?.businessConfig as Record<string, unknown> | null)?.accountingDefaults as {
+      defaultCommissionBaseRate?: number | null;
+      defaultDirectRate?: number | null;
+      defaultIndirectRate?: number | null;
+    } | undefined;
+
     const created = await prisma.partnerBusinessLink.create({
       data: {
         partnerId,
         businessId: data.businessId,
         linkStatus: data.linkStatus,
-        commissionRate: data.commissionRate ?? undefined,
-        directCommissionRate: data.directCommissionRate ?? undefined,
-        indirectCommissionRate: data.indirectCommissionRate ?? undefined,
+        commissionRate: data.commissionRate ?? accountingDefaults?.defaultCommissionBaseRate ?? undefined,
+        directCommissionRate: data.directCommissionRate ?? accountingDefaults?.defaultDirectRate ?? undefined,
+        indirectCommissionRate: data.indirectCommissionRate ?? accountingDefaults?.defaultIndirectRate ?? undefined,
         contactPerson: data.contactPerson ?? undefined,
         linkCustomData: data.linkCustomData as Prisma.InputJsonValue,
       },

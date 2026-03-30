@@ -9,6 +9,7 @@ import { EntityFieldsTab } from '@/components/features/business/entity-fields-ta
 import { RevenueRecognitionSettings } from '@/components/features/business/revenue-recognition-settings';
 import { FileCategoriesTab } from '@/components/features/business/file-categories-tab';
 import { SalesTargetsTab } from '@/components/features/business/sales-targets-tab';
+import { AccountingSettingsTab } from '@/components/features/business/accounting-settings-tab';
 
 function CustomerFieldsTab({ entityId }: { entityId: number }) {
   return <EntityFieldsTab entityId={entityId} entityType="customer" />;
@@ -36,6 +37,7 @@ export function BusinessDetailClient({ id }: Props) {
         revenueRecognition: RevenueRecognitionSettings,
         fileCategories: FileCategoriesTab,
         salesTargets: SalesTargetsTab,
+        accountingSettings: AccountingSettingsTab,
       }}
       breadcrumbs={[
         { label: '事業マスタ一覧', href: '/businesses' },

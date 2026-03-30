@@ -401,7 +401,7 @@ export function LinkPartnerToBusinessDialog({
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">紹介手数料率（%）</Label>
+                  <Label className="text-xs">元請手数料率（%）</Label>
                   <Input
                     type="number"
                     min="0"

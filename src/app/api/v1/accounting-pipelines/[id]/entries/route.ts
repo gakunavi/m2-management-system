@@ -75,29 +75,41 @@ export async function POST(
       }));
     } else {
       // 自動計算: 事業内の代理店階層を取得してマップ構築
-      const partners = await prisma.partner.findMany({
-        where: { partnerIsActive: true },
-        select: {
-          id: true,
-          partnerName: true,
-          partnerCode: true,
-          businessLinks: {
-            where: { businessId: pipeline.businessId },
-            select: {
-              businessId: true,
-              directCommissionRate: true,
-              indirectCommissionRate: true,
-              businessParentId: true,
+      const [partners, business] = await Promise.all([
+        prisma.partner.findMany({
+          where: { partnerIsActive: true },
+          select: {
+            id: true,
+            partnerName: true,
+            partnerCode: true,
+            businessLinks: {
+              where: { businessId: pipeline.businessId },
+              select: {
+                businessId: true,
+                commissionRate: true,
+                directCommissionRate: true,
+                indirectCommissionRate: true,
+                businessParentId: true,
+              },
             },
           },
-        },
-      });
+        }),
+        prisma.business.findUnique({
+          where: { id: pipeline.businessId },
+          select: { businessConfig: true },
+        }),
+      ]);
+
+      const accountingDefaults = (business?.businessConfig as Record<string, unknown> | null)?.accountingDefaults as {
+        defaultCommissionBaseRate?: number | null;
+      } | undefined;
 
       const partnerMap = buildPartnerMap(partners, pipeline.businessId);
       const calculated = calculateCommissionDistributions(
         data.amount,
         pipeline.project.partnerId,
-        partnerMap
+        partnerMap,
+        accountingDefaults?.defaultCommissionBaseRate,
       );
 
       distributionsToCreate = calculated.map((d) => ({

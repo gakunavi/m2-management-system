@@ -208,6 +208,12 @@ export const businessDetailConfig: EntityDetailConfig = {
       component: 'custom',
       config: {},
     },
+    {
+      key: 'accountingSettings',
+      label: '会計設定',
+      component: 'custom',
+      config: {},
+    },
   ],
   actions: {
     edit: true,

@@ -260,7 +260,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                 <TableHead>事業名</TableHead>
                 <TableHead>事業コード</TableHead>
                 <TableHead>ステータス</TableHead>
-                <TableHead>紹介手数料率</TableHead>
+                <TableHead>元請手数料率</TableHead>
                 <TableHead>直案件料率</TableHead>
                 <TableHead>間接案件料率</TableHead>
                 <TableHead>担当者/窓口</TableHead>
