@@ -184,8 +184,8 @@ export async function POST(request: NextRequest) {
 
     const customerCode = await generateCustomerCode();
 
-    // 事業別カスタムデータがある場合は事業の存在確認
-    if (linkBusinessId && linkCustomData && Object.keys(linkCustomData).length > 0) {
+    // 事業IDが指定されている場合は事業の存在確認
+    if (linkBusinessId) {
       const business = await prisma.business.findUnique({
         where: { id: linkBusinessId },
         select: { id: true, businessIsActive: true },
@@ -228,27 +228,28 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 事業別カスタムデータがある場合は CustomerBusinessLink を作成
-    if (linkBusinessId && linkCustomData && Object.keys(linkCustomData).length > 0) {
-      // 既存リンクがあればカスタムデータを更新、なければ新規作成
+    // 事業IDが指定されている場合は CustomerBusinessLink を作成/更新
+    if (linkBusinessId) {
       const existingLink = await prisma.customerBusinessLink.findUnique({
         where: { customerId_businessId: { customerId: customer.id, businessId: linkBusinessId } },
       });
       if (existingLink) {
-        const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
-        await prisma.customerBusinessLink.update({
-          where: { id: existingLink.id },
-          data: {
-            linkCustomData: { ...existingData, ...linkCustomData } as unknown as import('@prisma/client').Prisma.InputJsonValue,
-          },
-        });
+        if (linkCustomData && Object.keys(linkCustomData).length > 0) {
+          const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
+          await prisma.customerBusinessLink.update({
+            where: { id: existingLink.id },
+            data: {
+              linkCustomData: { ...existingData, ...linkCustomData } as unknown as import('@prisma/client').Prisma.InputJsonValue,
+            },
+          });
+        }
       } else {
         await prisma.customerBusinessLink.create({
           data: {
             customerId: customer.id,
             businessId: linkBusinessId,
             linkStatus: 'active',
-            linkCustomData: linkCustomData as unknown as import('@prisma/client').Prisma.InputJsonValue,
+            linkCustomData: (linkCustomData ?? {}) as unknown as import('@prisma/client').Prisma.InputJsonValue,
           },
         });
       }
