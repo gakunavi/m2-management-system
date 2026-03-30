@@ -33,6 +33,11 @@ export const mainNavSections: NavSection[] = [
     items: [
       { label: '契約マスタ', href: '/projects', icon: FolderKanban, requiresBusiness: true },
       { label: '案件ムーブメント', href: '/movements', icon: BarChart3, requiresBusiness: true },
+    ],
+  },
+  {
+    label: '会計',
+    items: [
       { label: '会計パイプライン', href: '/accounting', icon: Wallet },
     ],
   },
