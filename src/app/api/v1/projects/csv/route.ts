@@ -24,14 +24,23 @@ const FIXED_HEADERS = [
   { key: 'projectNo', label: '案件番号' },
   { key: 'customerCode', label: '顧客コード' },
   { key: 'customerName', label: '顧客名' },
+  { key: 'customerSalutation', label: '顧客呼称' },
+  { key: 'customerType', label: '顧客種別' },
+  { key: 'customerRepresentativeName', label: '顧客代表者' },
+  { key: 'customerWebsite', label: '顧客WEBサイト' },
+  { key: 'customerFiscalMonth', label: '顧客決算月' },
+  { key: 'customerFolderUrl', label: '顧客フォルダURL' },
   { key: 'partnerCode', label: '代理店コード' },
   { key: 'partnerName', label: '代理店名' },
+  { key: 'partnerSalutation', label: '代理店呼称' },
+  { key: 'partnerFolderUrl', label: '代理店フォルダURL' },
   { key: 'businessName', label: '事業名' },
   { key: 'projectSalesStatus', label: '営業ステータスコード' },
   { key: 'projectSalesStatusLabel', label: '営業ステータス' },
   { key: 'projectExpectedCloseMonth', label: '受注予定月' },
   { key: 'projectAssignedUserName', label: '担当者名' },
   { key: 'projectNotes', label: '備考' },
+  { key: 'portalVisible', label: 'ポータル表示' },
   { key: 'projectIsActive', label: '有効フラグ' },
   { key: 'createdAt', label: '作成日時' },
   { key: 'updatedAt', label: '更新日時' },
@@ -96,18 +105,28 @@ export async function GET(request: NextRequest) {
     // businessId が確定している場合のみ動的フィールドを取得
     const businessId = businessIdParam ? parseInt(businessIdParam, 10) : null;
     let projectFields: ProjectFieldDefinition[] = [];
+    let customerShowFields: ProjectFieldDefinition[] = [];
+    let partnerShowFields: ProjectFieldDefinition[] = [];
     if (businessId) {
       const business = await prisma.business.findUnique({
         where: { id: businessId },
         select: { businessConfig: true },
       });
-      const config = business?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null;
+      const config = business?.businessConfig as {
+        projectFields?: ProjectFieldDefinition[];
+        customerFields?: ProjectFieldDefinition[];
+        partnerFields?: ProjectFieldDefinition[];
+      } | null;
       projectFields = (config?.projectFields ?? []).sort((a, b) => a.sortOrder - b.sortOrder);
+      customerShowFields = (config?.customerFields ?? []).filter((f) => f.showOnProject).sort((a, b) => a.sortOrder - b.sortOrder);
+      partnerShowFields = (config?.partnerFields ?? []).filter((f) => f.showOnProject).sort((a, b) => a.sortOrder - b.sortOrder);
     }
 
-    // 動的ヘッダーを結合
+    // 動的ヘッダーを結合（案件カスタム → 顧客showOnProject → 代理店showOnProject）
     const dynamicHeaders = projectFields.map((f) => ({ key: f.key, label: f.label, isDynamic: true }));
-    const allHeaders = [...FIXED_HEADERS.map((h) => ({ ...h, isDynamic: false })), ...dynamicHeaders];
+    const customerLinkHeaders = customerShowFields.map((f) => ({ key: `customerLink_${f.key}`, label: `顧客_${f.label}`, isDynamic: true }));
+    const partnerLinkHeaders = partnerShowFields.map((f) => ({ key: `partnerLink_${f.key}`, label: `代理店_${f.label}`, isDynamic: true }));
+    const allHeaders = [...FIXED_HEADERS.map((h) => ({ ...h, isDynamic: false })), ...dynamicHeaders, ...customerLinkHeaders, ...partnerLinkHeaders];
 
     // 列フィルタリング
     const exportHeaders = columnsParam
@@ -124,8 +143,38 @@ export async function GET(request: NextRequest) {
       where,
       orderBy,
       include: {
-        customer: { select: { id: true, customerCode: true, customerName: true } },
-        partner: { select: { id: true, partnerCode: true, partnerName: true } },
+        customer: {
+          select: {
+            id: true,
+            customerCode: true,
+            customerName: true,
+            customerSalutation: true,
+            customerType: true,
+            customerWebsite: true,
+            customerFiscalMonth: true,
+            customerFolderUrl: true,
+            contacts: {
+              where: { contactIsRepresentative: true },
+              select: { contactName: true },
+              take: 1,
+            },
+            businessLinks: {
+              select: { businessId: true, linkCustomData: true },
+            },
+          },
+        },
+        partner: {
+          select: {
+            id: true,
+            partnerCode: true,
+            partnerName: true,
+            partnerSalutation: true,
+            partnerFolderUrl: true,
+            businessLinks: {
+              select: { businessId: true, linkCustomData: true },
+            },
+          },
+        },
         business: { select: { id: true, businessName: true } },
       },
     });
@@ -152,22 +201,31 @@ export async function GET(request: NextRequest) {
         projectNo: p.projectNo,
         customerCode: p.customer?.customerCode ?? '',
         customerName: p.customer?.customerName ?? '',
+        customerSalutation: p.customer?.customerSalutation ?? '',
+        customerType: p.customer?.customerType ?? '',
+        customerRepresentativeName: p.customer?.contacts?.[0]?.contactName ?? '',
+        customerWebsite: p.customer?.customerWebsite ?? '',
+        customerFiscalMonth: p.customer?.customerFiscalMonth ?? '',
+        customerFolderUrl: p.customer?.customerFolderUrl ?? '',
         partnerCode: p.partner?.partnerCode ?? '',
         partnerName: p.partner?.partnerName ?? '',
+        partnerSalutation: p.partner?.partnerSalutation ?? '',
+        partnerFolderUrl: p.partner?.partnerFolderUrl ?? '',
         businessName: p.business?.businessName ?? '',
         projectSalesStatus: p.projectSalesStatus,
         projectSalesStatusLabel: statusLabel,
         projectExpectedCloseMonth: p.projectExpectedCloseMonth ?? '',
         projectAssignedUserName: p.projectAssignedUserName ?? '',
         projectNotes: p.projectNotes ?? '',
+        portalVisible: p.portalVisible === false ? '非表示' : '表示',
         projectIsActive: p.projectIsActive ? '1' : '0',
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
       };
 
-      // 動的フィールドを追加
+      // 動的フィールドを追加（案件カスタム）
       for (const field of projectFields) {
-        if (field.type === 'formula') continue; // formula は後で計算値を設定
+        if (field.type === 'formula') continue;
         rowData[field.key] = customData?.[field.key] ?? '';
       }
       // formula フィールドの計算値を追加
@@ -176,6 +234,22 @@ export async function GET(request: NextRequest) {
         for (const [k, v] of Object.entries(formulaResults)) {
           rowData[k] = v ?? '';
         }
+      }
+
+      // 顧客 showOnProject カスタムフィールドを追加
+      const customerLinks = (p.customer?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+      const customerLink = customerLinks.find((l) => l.businessId === p.businessId);
+      const customerLinkData = (customerLink?.linkCustomData ?? {}) as Record<string, unknown>;
+      for (const field of customerShowFields) {
+        rowData[`customerLink_${field.key}`] = customerLinkData[field.key] ?? '';
+      }
+
+      // 代理店 showOnProject カスタムフィールドを追加
+      const partnerLinks = (p.partner?.businessLinks ?? []) as Array<{ businessId: number; linkCustomData: unknown }>;
+      const partnerLink = partnerLinks.find((l) => l.businessId === p.businessId);
+      const partnerLinkData = (partnerLink?.linkCustomData ?? {}) as Record<string, unknown>;
+      for (const field of partnerShowFields) {
+        rowData[`partnerLink_${field.key}`] = partnerLinkData[field.key] ?? '';
       }
 
       return exportHeaders.map((h) => escapeCSV(rowData[h.key])).join(',');
@@ -279,13 +353,22 @@ export async function POST(request: NextRequest) {
       '案件番号': 'projectNo',
       '顧客コード': 'customerCode',
       '顧客名': 'customerName',
+      '顧客呼称': 'customerSalutation',
+      '顧客種別': 'customerType',
+      '顧客代表者': 'customerRepresentativeName',
+      '顧客WEBサイト': 'customerWebsite',
+      '顧客決算月': 'customerFiscalMonth',
+      '顧客フォルダURL': 'customerFolderUrl',
       '代理店コード': 'partnerCode',
       '代理店名': 'partnerName',
+      '代理店呼称': 'partnerSalutation',
+      '代理店フォルダURL': 'partnerFolderUrl',
       '営業ステータス': 'projectSalesStatus',
       '営業ステータスコード': 'projectSalesStatus',
       '受注予定月': 'projectExpectedCloseMonth',
       '担当者名': 'projectAssignedUserName',
       '備考': 'projectNotes',
+      'ポータル表示': 'portalVisible',
       '有効フラグ': 'projectIsActive',
     };
     // 動的フィールドのラベル → キーマッピングを追加

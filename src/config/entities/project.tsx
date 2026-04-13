@@ -373,10 +373,23 @@ export const projectListConfig: EntityListConfig = {
       { key: 'projectNotes', label: '備考', required: false, description: '備考テキスト', example: '初回提案予定' },
     ],
     columnKeyMap: {
-      customerName: 'customerCode',
-      partnerName: 'partnerCode',
+      // 案件基本
+      projectSalesStatus: 'projectSalesStatusLabel',
       projectAssignedUserName: 'projectAssignedUserName',
-      projectSalesStatus: 'projectSalesStatus',
+      portalVisible: 'portalVisible',
+      // 顧客関連（クロスエンティティ）
+      customerName: 'customerName',
+      customerSalutation: 'customerSalutation',
+      customerType: 'customerType',
+      customerRepresentativeName: 'customerRepresentativeName',
+      customerWebsite: 'customerWebsite',
+      customerFiscalMonth: 'customerFiscalMonth',
+      customerFolderUrl: 'customerFolderUrl',
+      // 代理店関連（クロスエンティティ）
+      partnerName: 'partnerName',
+      partnerCode: 'partnerCode',
+      partnerSalutation: 'partnerSalutation',
+      partnerFolderUrl: 'partnerFolderUrl',
     },
   },
 };

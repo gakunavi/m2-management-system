@@ -161,6 +161,12 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
             ...Object.fromEntries(
               projectFields.map((f) => [`customData_${f.key}`, f.key])
             ),
+            ...Object.fromEntries(
+              customerShowFields.map((f) => [`customerLink_${f.key}`, `customerLink_${f.key}`])
+            ),
+            ...Object.fromEntries(
+              partnerShowFields.map((f) => [`partnerLink_${f.key}`, `partnerLink_${f.key}`])
+            ),
           },
         },
       }),
