@@ -10,16 +10,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { Plus, Trash2 } from 'lucide-react';
+
+interface AccountingDefaults {
+  defaultCommissionBaseRate: number | null;
+  defaultDirectRate: number | null;
+  defaultIndirectRate: number | null;
+  billingCycleOptions: string[];
+  paymentMethodOptions: string[];
+}
 
 interface BusinessData {
   id: number;
   version: number;
   businessConfig: {
-    accountingDefaults?: {
-      defaultCommissionBaseRate: number | null;
-      defaultDirectRate: number | null;
-      defaultIndirectRate: number | null;
-    };
+    accountingDefaults?: AccountingDefaults;
     [key: string]: unknown;
   } | null;
 }
@@ -37,6 +42,10 @@ export function AccountingSettingsTab({ entityId }: Props) {
   const [commissionBaseRate, setCommissionBaseRate] = useState('');
   const [directRate, setDirectRate] = useState('');
   const [indirectRate, setIndirectRate] = useState('');
+  const [billingCycleOptions, setBillingCycleOptions] = useState<string[]>([]);
+  const [paymentMethodOptions, setPaymentMethodOptions] = useState<string[]>([]);
+  const [newBillingCycle, setNewBillingCycle] = useState('');
+  const [newPaymentMethod, setNewPaymentMethod] = useState('');
 
   const { data: businessData, isLoading } = useQuery({
     queryKey: ['business', entityId],
@@ -51,6 +60,8 @@ export function AccountingSettingsTab({ entityId }: Props) {
       setCommissionBaseRate(defaults.defaultCommissionBaseRate != null ? String(defaults.defaultCommissionBaseRate) : '');
       setDirectRate(defaults.defaultDirectRate != null ? String(defaults.defaultDirectRate) : '');
       setIndirectRate(defaults.defaultIndirectRate != null ? String(defaults.defaultIndirectRate) : '');
+      setBillingCycleOptions(defaults.billingCycleOptions ?? []);
+      setPaymentMethodOptions(defaults.paymentMethodOptions ?? []);
     }
   }, [businessData]);
 
@@ -66,6 +77,8 @@ export function AccountingSettingsTab({ entityId }: Props) {
             defaultCommissionBaseRate: commissionBaseRate ? parseFloat(commissionBaseRate) : null,
             defaultDirectRate: directRate ? parseFloat(directRate) : null,
             defaultIndirectRate: indirectRate ? parseFloat(indirectRate) : null,
+            billingCycleOptions,
+            paymentMethodOptions,
           },
         },
         version: businessData.version,
@@ -79,15 +92,27 @@ export function AccountingSettingsTab({ entityId }: Props) {
     }
   };
 
+  const addOption = (list: string[], setList: (v: string[]) => void, value: string, setValue: (v: string) => void) => {
+    const trimmed = value.trim();
+    if (!trimmed || list.includes(trimmed)) return;
+    setList([...list, trimmed]);
+    setValue('');
+  };
+
+  const removeOption = (list: string[], setList: (v: string[]) => void, index: number) => {
+    setList(list.filter((_, i) => i !== index));
+  };
+
   if (isLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
+      {/* デフォルト手数料率 */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">デフォルト手数料率設定</CardTitle>
+          <CardTitle className="text-base">デフォルト手数料率</CardTitle>
           <p className="text-sm text-muted-foreground">
-            代理店を事業にリンクする際に自動セットされるデフォルト値です。代理店ごとに個別変更も可能です。
+            代理店を事業にリンクする際に自動セットされるデフォルト値です。
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -95,61 +120,152 @@ export function AccountingSettingsTab({ entityId }: Props) {
             <div className="space-y-2">
               <Label>元請手数料率（%）</Label>
               <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
+                type="number" min="0" max="100" step="0.01"
                 value={commissionBaseRate}
                 onChange={(e) => setCommissionBaseRate(e.target.value)}
                 placeholder="例: 20.00"
                 disabled={!isAdmin}
               />
               <p className="text-xs text-muted-foreground">
-                メーカーから受け取る全体の手数料率。メーカーモデルの場合は100。
+                メーカーモデルの場合は100。
               </p>
             </div>
             <div className="space-y-2">
               <Label>直案件料率（%）</Label>
               <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
+                type="number" min="0" max="100" step="0.01"
                 value={directRate}
                 onChange={(e) => setDirectRate(e.target.value)}
                 placeholder="例: 10.00"
                 disabled={!isAdmin}
               />
-              <p className="text-xs text-muted-foreground">
-                代理店が直接紹介した案件に適用される手数料率。
-              </p>
             </div>
             <div className="space-y-2">
               <Label>間接案件料率（%）</Label>
               <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
+                type="number" min="0" max="100" step="0.01"
                 value={indirectRate}
                 onChange={(e) => setIndirectRate(e.target.value)}
                 placeholder="例: 5.00"
                 disabled={!isAdmin}
               />
-              <p className="text-xs text-muted-foreground">
-                下位代理店が紹介した案件に適用される間接手数料率。
-              </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 着金サイクル選択肢 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">着金サイクル選択肢</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            パイプライン作成時にプルダウンで選択できる着金サイクルの選択肢を管理します。
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {billingCycleOptions.map((opt, i) => (
+              <div key={i} className="flex items-center gap-1 bg-muted px-3 py-1 rounded-md text-sm">
+                <span>{opt}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => removeOption(billingCycleOptions, setBillingCycleOptions, i)}
+                    className="text-muted-foreground hover:text-destructive ml-1"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {billingCycleOptions.length === 0 && (
+              <p className="text-sm text-muted-foreground">選択肢が未設定です</p>
+            )}
+          </div>
           {isAdmin && (
-            <div className="flex justify-end">
-              <Button onClick={handleSave} disabled={saving}>
-                {saving ? '保存中...' : '保存'}
+            <div className="flex gap-2">
+              <Input
+                value={newBillingCycle}
+                onChange={(e) => setNewBillingCycle(e.target.value)}
+                placeholder="例: 毎月"
+                className="max-w-[200px]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addOption(billingCycleOptions, setBillingCycleOptions, newBillingCycle, setNewBillingCycle);
+                  }
+                }}
+              />
+              <Button
+                variant="outline" size="sm"
+                onClick={() => addOption(billingCycleOptions, setBillingCycleOptions, newBillingCycle, setNewBillingCycle)}
+              >
+                <Plus className="h-4 w-4 mr-1" />追加
               </Button>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* 支払い方法選択肢 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">支払い方法選択肢</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            パイプライン作成時にプルダウンで選択できる支払い方法の選択肢を管理します。
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {paymentMethodOptions.map((opt, i) => (
+              <div key={i} className="flex items-center gap-1 bg-muted px-3 py-1 rounded-md text-sm">
+                <span>{opt}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => removeOption(paymentMethodOptions, setPaymentMethodOptions, i)}
+                    className="text-muted-foreground hover:text-destructive ml-1"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {paymentMethodOptions.length === 0 && (
+              <p className="text-sm text-muted-foreground">選択肢が未設定です</p>
+            )}
+          </div>
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Input
+                value={newPaymentMethod}
+                onChange={(e) => setNewPaymentMethod(e.target.value)}
+                placeholder="例: 全額納品日"
+                className="max-w-[200px]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addOption(paymentMethodOptions, setPaymentMethodOptions, newPaymentMethod, setNewPaymentMethod);
+                  }
+                }}
+              />
+              <Button
+                variant="outline" size="sm"
+                onClick={() => addOption(paymentMethodOptions, setPaymentMethodOptions, newPaymentMethod, setNewPaymentMethod)}
+              >
+                <Plus className="h-4 w-4 mr-1" />追加
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 保存ボタン */}
+      {isAdmin && (
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? '保存中...' : '保存'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

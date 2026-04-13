@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,27 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
+
+interface ProjectOption {
+  id: number;
+  projectNo: string;
+  customerName: string;
+  partnerName: string;
+  projectCustomData: Record<string, unknown>;
+}
+
+interface BusinessData {
+  id: number;
+  businessConfig: {
+    accountingDefaults?: {
+      billingCycleOptions?: string[];
+      paymentMethodOptions?: string[];
+    };
+    projectFields?: { key: string; label: string; type: string }[];
+    [key: string]: unknown;
+  } | null;
+}
 
 export function AccountingPipelineNewClient() {
   const router = useRouter();
@@ -36,10 +57,24 @@ export function AccountingPipelineNewClient() {
     memo: '',
   });
 
-  // 成約済み案件一覧取得
-  const { data: projects = [], isLoading: projectsLoading } = useQuery<
-    { id: number; projectNo: string; customerName: string; partnerName: string }[]
-  >({
+  // 事業設定取得（着金サイクル・支払い方法の選択肢）
+  const { data: businessData } = useQuery<BusinessData>({
+    queryKey: ['business', selectedBusinessId],
+    queryFn: () => apiClient.get<BusinessData>(`/businesses/${selectedBusinessId}`),
+    enabled: !!selectedBusinessId,
+  });
+
+  const billingCycleOptions = useMemo(
+    () => businessData?.businessConfig?.accountingDefaults?.billingCycleOptions ?? [],
+    [businessData]
+  );
+  const paymentMethodOptions = useMemo(
+    () => businessData?.businessConfig?.accountingDefaults?.paymentMethodOptions ?? [],
+    [businessData]
+  );
+
+  // 案件一覧取得（カスタムデータ含む）
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<ProjectOption[]>({
     queryKey: ['projects-for-pipeline', selectedBusinessId],
     queryFn: async () => {
       const params = new URLSearchParams({ pageSize: '500' });
@@ -52,9 +87,41 @@ export function AccountingPipelineNewClient() {
         projectNo: p.projectNo,
         customerName: (p.customer as Record<string, unknown> | null)?.customerName ?? '-',
         partnerName: (p.partner as Record<string, unknown> | null)?.partnerName ?? '-',
+        projectCustomData: (p.projectCustomData as Record<string, unknown>) ?? {},
       }));
     },
   });
+
+  // 案件選択時にカスタムデータから単価・個数を自動セット
+  useEffect(() => {
+    if (!form.projectId) return;
+    const project = projects.find((p) => p.id === parseInt(form.projectId, 10));
+    if (!project) return;
+
+    const customData = project.projectCustomData;
+    // カスタムフィールドから単価・個数を探す（キー名の部分一致）
+    let unitPrice = '';
+    let quantity = '1';
+    for (const [key, value] of Object.entries(customData)) {
+      const lowerKey = key.toLowerCase();
+      if ((lowerKey.includes('単価') || lowerKey.includes('unitprice') || lowerKey.includes('unit_price')) && value != null) {
+        const num = Number(value);
+        if (!isNaN(num) && num > 0) unitPrice = String(num);
+      }
+      if ((lowerKey.includes('個数') || lowerKey.includes('数量') || lowerKey.includes('quantity')) && value != null) {
+        const num = Number(value);
+        if (!isNaN(num) && num > 0) quantity = String(num);
+      }
+    }
+
+    if (unitPrice || quantity !== '1') {
+      setForm((prev) => ({
+        ...prev,
+        unitPrice: unitPrice || prev.unitPrice,
+        quantity: quantity || prev.quantity,
+      }));
+    }
+  }, [form.projectId, projects]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -150,6 +217,9 @@ export function AccountingPipelineNewClient() {
                 value={form.unitPrice}
                 onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
               />
+              {form.projectId && form.unitPrice && (
+                <p className="text-xs text-muted-foreground mt-1">契約マスタから取得</p>
+              )}
             </div>
             <div>
               <Label>個数 *</Label>
@@ -168,26 +238,58 @@ export function AccountingPipelineNewClient() {
             </div>
           </div>
 
-          {/* ストック用: 着金サイクル */}
+          {/* 着金サイクル（プルダウン） */}
           {form.revenueType === 'STOCK' && (
             <div>
               <Label>着金サイクル</Label>
-              <Input
-                placeholder="例: 毎月、隔月、月2回"
-                value={form.billingCycle}
-                onChange={(e) => setForm({ ...form, billingCycle: e.target.value })}
-              />
+              {billingCycleOptions.length > 0 ? (
+                <Select
+                  value={form.billingCycle || undefined}
+                  onValueChange={(v) => setForm({ ...form, billingCycle: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="着金サイクルを選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {billingCycleOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder="例: 毎月、隔月、月2回（事業マスタで選択肢を設定できます）"
+                  value={form.billingCycle}
+                  onChange={(e) => setForm({ ...form, billingCycle: e.target.value })}
+                />
+              )}
             </div>
           )}
 
-          {/* 支払い方法 */}
+          {/* 支払い方法（プルダウン） */}
           <div>
             <Label>支払い方法</Label>
-            <Input
-              placeholder="例: 全額納品日"
-              value={form.paymentMethod}
-              onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}
-            />
+            {paymentMethodOptions.length > 0 ? (
+              <Select
+                value={form.paymentMethod || undefined}
+                onValueChange={(v) => setForm({ ...form, paymentMethod: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="支払い方法を選択" />
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentMethodOptions.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                placeholder="例: 全額納品日（事業マスタで選択肢を設定できます）"
+                value={form.paymentMethod}
+                onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}
+              />
+            )}
           </div>
 
           {/* 運用開始日 */}
