@@ -77,6 +77,12 @@ function buildColumns(entityType: EntityType): SortableItemColumn<EntityFieldDef
 
   if (entityType === 'project') {
     cols.push({
+      key: 'showOnMovement',
+      label: 'ムーブメント表示',
+      width: 110,
+      render: (value) => (value ? '✓' : '-'),
+    });
+    cols.push({
       key: 'visibleToPartner',
       label: '代理店表示',
       width: 90,
@@ -209,6 +215,13 @@ function buildFormFields(entityType: EntityType): SortableItemFormField[] {
       label: '契約マスタにも表示する',
       type: 'checkbox',
       description: '契約マスタ一覧・詳細に読み取り専用で表示されます',
+    });
+  } else {
+    formFields.push({
+      key: 'showOnMovement',
+      label: '案件ムーブメントに表示する',
+      type: 'checkbox',
+      description: 'ムーブメント画面の案件情報欄に読み取り専用で表示されます',
     });
   }
 

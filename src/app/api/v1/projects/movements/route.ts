@@ -150,10 +150,11 @@ export async function GET(request: NextRequest) {
       select: { businessConfig: true },
     });
     const businessConfig = (business?.businessConfig ?? {}) as Record<string, unknown>;
-    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string; type: string; options?: string[]; filterable?: boolean; visibleToPartner?: boolean; sortOrder: number }>;
-    // 「ニーズ」フィールドのキーを特定
-    const needsField = projectFields.find((f) => f.label === 'ニーズ');
-    const needsKey = needsField?.key ?? null;
+    const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string; type: string; options?: string[]; filterable?: boolean; visibleToPartner?: boolean; showOnMovement?: boolean; sortOrder: number }>;
+    // ムーブメントに表示するカスタムフィールド定義（sortOrder順）
+    const movementShowFields = projectFields
+      .filter((f) => f.showOnMovement)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
     // filterable フィールド定義
     const filterableFieldDefs = projectFields
       .filter((f) => f.filterable)
@@ -195,6 +196,14 @@ export async function GET(request: NextRequest) {
     // レスポンス整形
     const data = filteredProjects.map((p) => {
       const status = statusMap.get(p.projectSalesStatus);
+      const customData = (p.projectCustomData ?? {}) as Record<string, unknown>;
+      const movementCustomFields = movementShowFields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        type: f.type,
+        options: f.options,
+        value: customData[f.key] ?? null,
+      })) as Array<{ key: string; label: string; type: string; options?: string[]; value: unknown }>;
       return {
         id: p.id,
         projectNo: p.projectNo,
@@ -204,7 +213,7 @@ export async function GET(request: NextRequest) {
         projectExpectedCloseMonth: p.projectExpectedCloseMonth,
         projectAssignedUserName: p.projectAssignedUserName,
         projectNotes: p.projectNotes,
-        projectNeeds: needsKey ? String((p.projectCustomData as Record<string, unknown>)?.[needsKey] ?? '') || null : null,
+        movementCustomFields,
         version: p.version,
         customerName: p.customer?.customerName ?? null,
         partnerName: p.partner?.partnerName ?? null,

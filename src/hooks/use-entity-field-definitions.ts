@@ -76,6 +76,7 @@ export function useEntityFieldDefinitions(businessId: number, configKey: ConfigK
       visibleToPartner: (formData.visibleToPartner as boolean) ?? false,
       filterable: (formData.filterable as boolean) ?? false,
       showOnProject: (formData.showOnProject as boolean) ?? false,
+      showOnMovement: (formData.showOnMovement as boolean) ?? false,
     };
 
     if (!newField.key || !newField.key.trim()) {
@@ -113,6 +114,7 @@ export function useEntityFieldDefinitions(businessId: number, configKey: ConfigK
           visibleToPartner: (formData.visibleToPartner as boolean) ?? f.visibleToPartner,
           filterable: (formData.filterable as boolean) ?? f.filterable,
           showOnProject: (formData.showOnProject as boolean) ?? f.showOnProject,
+          showOnMovement: (formData.showOnMovement as boolean) ?? f.showOnMovement,
         };
       }
       return f;

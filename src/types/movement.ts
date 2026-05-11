@@ -16,6 +16,14 @@ export interface MovementItem {
   linkedFieldValue?: string | number | boolean | null;
 }
 
+export interface MovementCustomField {
+  key: string;
+  label: string;
+  type: string;
+  options?: string[];
+  value: string | number | boolean | null;
+}
+
 export interface ProjectRow {
   id: number;
   projectNo: string;
@@ -25,7 +33,10 @@ export interface ProjectRow {
   projectExpectedCloseMonth: string | null;
   projectAssignedUserName: string | null;
   projectNotes: string | null;
-  projectNeeds: string | null;
+  /** @deprecated 旧ハードコード版。後方互換のため partner ポータルAPIのみ使用 */
+  projectNeeds?: string | null;
+  /** ムーブメント画面に表示する案件カスタムフィールド（内部APIのみ） */
+  movementCustomFields?: MovementCustomField[];
   version: number;
   customerName: string | null;
   partnerName: string | null;

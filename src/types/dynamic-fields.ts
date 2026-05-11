@@ -26,6 +26,8 @@ export interface EntityFieldDefinition {
   filterable?: boolean;
   /** 契約マスタ一覧にも表示するか（顧客/代理店フィールドのみ） */
   showOnProject?: boolean;
+  /** 案件ムーブメントの案件情報欄に表示するか（案件フィールドのみ） */
+  showOnMovement?: boolean;
 }
 
 /**

@@ -369,11 +369,19 @@ export function MovementsClient() {
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">
                         代理店：{project.partnerName ?? 'なし'}
                       </div>
-                      {project.projectNeeds && (
-                        <div className="text-xs text-muted-foreground mt-0.5 truncate" title={project.projectNeeds}>
-                          ニーズ：{project.projectNeeds}
-                        </div>
-                      )}
+                      {project.movementCustomFields?.map((field) => {
+                        const display = formatLinkedFieldValue(field.value);
+                        if (!display) return null;
+                        return (
+                          <div
+                            key={field.key}
+                            className="text-xs text-muted-foreground mt-0.5 truncate"
+                            title={`${field.label}：${display}`}
+                          >
+                            {field.label}：{display}
+                          </div>
+                        );
+                      })}
                       {project.projectExpectedCloseMonth && (
                         <div className="text-xs text-muted-foreground mt-0.5">
                           受注予定月：{project.projectExpectedCloseMonth}
