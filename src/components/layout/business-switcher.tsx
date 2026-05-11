@@ -28,7 +28,7 @@ export function BusinessSwitcher({ variant = 'default' }: BusinessSwitcherProps)
     return null;
   }
 
-  const allLabel = isPartner ? 'すべて' : 'グループ全体';
+  const allLabel = isPartner ? 'すべて' : '全事業';
   const isSidebar = variant === 'sidebar';
 
   return (

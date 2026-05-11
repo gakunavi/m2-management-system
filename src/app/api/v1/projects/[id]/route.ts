@@ -12,6 +12,7 @@ import { computeAllFormulas } from '@/lib/formula-evaluator';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 const updateProjectSchema = z.object({
+  customerId: z.number().int().positive().optional(),
   partnerId: z.number().int().positive().optional().nullable(),
   projectSalesStatus: z.string().min(1).optional(),
   projectExpectedCloseMonth: z
