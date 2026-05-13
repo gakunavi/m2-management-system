@@ -61,6 +61,12 @@ const FIELD_COLUMNS: SortableItemColumn<ProjectFieldDefinitionWithId>[] = [
     render: (value) => (value ? '✓' : '-'),
   },
   {
+    key: 'showOnMovement',
+    label: 'ムーブメント表示',
+    width: 110,
+    render: (value) => (value ? '✓' : '-'),
+  },
+  {
     key: 'visibleToPartner',
     label: '代理店表示',
     width: 90,
@@ -166,6 +172,12 @@ const FIELD_FORM_FIELDS: SortableItemFormField[] = [
     label: '絞り込みフィルターに表示する',
     type: 'checkbox',
     description: '一覧画面のフィルターに追加されます（select型・チェックボックス型推奨）',
+  },
+  {
+    key: 'showOnMovement',
+    label: '案件ムーブメントに表示する',
+    type: 'checkbox',
+    description: 'ムーブメント画面の案件情報欄に読み取り専用で表示されます',
   },
   {
     key: 'visibleToPartner',
