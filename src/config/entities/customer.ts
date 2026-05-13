@@ -510,8 +510,8 @@ export const customerFormConfig: EntityFormConfig = {
       .optional()
       .nullable()
       .or(z.literal('')),
-    customerCapital: z.number().int().min(0).optional().nullable(),
-    customerFiscalMonth: z.number().int().min(1).max(12).optional().nullable(),
+    customerCapital: z.coerce.number().int().min(0).optional().nullable(),
+    customerFiscalMonth: z.coerce.number().int().min(1).max(12).optional().nullable(),
     customerEstablishedDate: z.string().optional().nullable(),
     customerFolderUrl: z.string().url('有効なURLを入力してください').optional().nullable().or(z.literal('')),
     customerNotes: z.string().optional().nullable(),
