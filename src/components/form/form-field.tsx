@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -129,6 +129,19 @@ function renderInput(
       );
 
     case 'select':
+      if (field.optionsEndpoint) {
+        return (
+          <RemoteSelectField
+            id={id}
+            value={value}
+            onChange={onChange}
+            endpoint={field.optionsEndpoint}
+            labelField={field.optionsLabelField ?? 'name'}
+            placeholder={field.placeholder}
+            disabled={field.disabled === true}
+          />
+        );
+      }
       return (
         <Select
           value={strValue || undefined}
@@ -247,6 +260,79 @@ function renderInput(
         />
       );
   }
+}
+
+/** optionsEndpoint で動的に選択肢を取得する select */
+function RemoteSelectField({
+  id,
+  value,
+  onChange,
+  endpoint,
+  labelField,
+  placeholder,
+  disabled,
+}: {
+  id: string;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  endpoint: string;
+  labelField: string;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const params = endpoint.includes('?') ? '&pageSize=200' : '?pageSize=200';
+    fetch(`/api/v1${endpoint}${params}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return;
+        const rows = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+        const mapped = rows
+          .map((r: Record<string, unknown>) => {
+            const idVal = r.id;
+            const label = r[labelField];
+            if (idVal == null || label == null) return null;
+            return { value: String(idVal), label: String(label) };
+          })
+          .filter((o: unknown): o is { value: string; label: string } => o !== null);
+        setOptions(mapped);
+      })
+      .catch(() => {
+        if (!cancelled) setOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [endpoint, labelField]);
+
+  const strValue = value != null ? String(value) : undefined;
+
+  return (
+    <Select
+      value={strValue}
+      onValueChange={(v) => onChange(v ? Number(v) : null)}
+      disabled={disabled || loading}
+    >
+      <SelectTrigger id={id}>
+        <SelectValue placeholder={loading ? '読み込み中...' : (placeholder ?? '選択してください')} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 /** Safari 対応の年月選択コンポーネント（YYYY-MM 形式） */

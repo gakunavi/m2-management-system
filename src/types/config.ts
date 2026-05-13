@@ -397,6 +397,8 @@ export type FormFieldDef = {
   disabledOnEdit?: boolean;
   options?: { value: string; label: string }[];
   optionsEndpoint?: string;
+  /** optionsEndpoint 使用時にレスポンス各行から label を取り出すキー（既定: 'name'）。値は常に `id` を number で扱う */
+  optionsLabelField?: string;
   colSpan?: 1 | 2 | 3;
   /** 類似データの重複チェック設定。設定があるフィールドは入力中に自動チェック */
   duplicateCheck?: DuplicateCheckConfig;

@@ -689,9 +689,9 @@ export const projectFormConfig: EntityFormConfig = {
           key: 'projectAssignedUserId',
           label: '担当ユーザー（アクセス制御用）',
           type: 'select',
-          options: [], // API から動的取得
           placeholder: '紐付けるユーザーを選択',
           optionsEndpoint: '/users',
+          optionsLabelField: 'userName',
         },
         {
           key: 'portalVisible',
