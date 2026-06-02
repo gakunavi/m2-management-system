@@ -67,6 +67,12 @@ export function useEntityList(config: EntityListConfig) {
     return defaultSortItems;
   });
 
+  // ユーザーが列ヘッダのクリックでソートを操作したか。
+  // false の間（初期デフォルト or 保存ビュー由来のシード状態）の最初のクリックは、
+  // シードを破棄してその列から並べ替えを開始する。これをしないと、一意なシード列
+  // （customerCode / projectNo 等）が常に第1キーになり、後続列のソートが効かない。
+  const userHasSortedRef = useRef(false);
+
   const debouncedSearch = useDebounce(searchQuery, config.search.debounceMs ?? 300);
 
   // State → URL 同期（useEffect で state 変更後に自動反映）
@@ -157,55 +163,49 @@ export function useEntityList(config: EntityListConfig) {
   // ソート（複数列対応）
   // - 列クリック: その列を昇順で追加。順番にクリックすれば複数列ソートが積み上がる
   // - 同じ列を再クリック: 昇順 → 降順 → そのキーを解除（リストから削除）
-  // - デフォルトソートのまま（未操作）の状態で最初の列をクリックした場合は、
-  //   デフォルトを置き換える。これをしないと一意なデフォルト列が常に第1キーになり、
-  //   後からクリックした列の昇順降順が並びに反映されない。
+  // - シード状態（未操作）での最初のクリックはシードを破棄してその列から開始する
   const handleSetSort = useCallback(
     (field: string) => {
-      setSortItems((prev) => {
-        // 現在の並びがデフォルトソートと一致する（=ユーザー未操作）か判定
-        const isDefault =
-          prev.length === defaultSortItems.length &&
-          prev.every(
-            (s, i) =>
-              s.field === defaultSortItems[i]?.field &&
-              s.direction === defaultSortItems[i]?.direction,
-          );
-        const base = isDefault ? [] : prev;
+      // 初回クリックはシード（デフォルト/保存ビュー）を破棄して空から開始
+      const base = userHasSortedRef.current ? sortItems : [];
 
-        const existingIndex = base.findIndex((s) => s.field === field);
+      const existingIndex = base.findIndex((s) => s.field === field);
+      let nextItems: SortItem[];
 
-        if (existingIndex < 0) {
-          // 未ソート → 昇順で末尾に追加（順番にクリックで複数列ソート）
-          return [...base, { field, direction: 'asc' as const }];
-        }
+      if (existingIndex < 0) {
+        // 未ソート → 昇順で末尾に追加（順番にクリックで複数列ソート）
+        nextItems = [...base, { field, direction: 'asc' }];
+      } else if (base[existingIndex].direction === 'asc') {
+        // 昇順 → 降順
+        nextItems = base.map((s, i) =>
+          i === existingIndex ? { ...s, direction: 'desc' as const } : s,
+        );
+      } else {
+        // 降順 → そのキーを解除。全て解除されたらデフォルト（シード）に戻す
+        const removed = base.filter((_, i) => i !== existingIndex);
+        nextItems = removed.length > 0 ? removed : defaultSortItems;
+      }
 
-        const current = base[existingIndex];
-        if (current.direction === 'asc') {
-          // 昇順 → 降順
-          return base.map((s, i) =>
-            i === existingIndex ? { ...s, direction: 'desc' as const } : s,
-          );
-        }
-
-        // 降順 → そのキーを解除（リストから削除）。全て解除されたらデフォルトに戻す
-        const next = base.filter((_, i) => i !== existingIndex);
-        return next.length > 0 ? next : defaultSortItems;
-      });
+      // デフォルト（シード）に戻った場合は未操作状態に戻す
+      userHasSortedRef.current = nextItems !== defaultSortItems;
+      setSortItems(nextItems);
       setPage(1);
     },
-    [defaultSortItems],
+    [sortItems, defaultSortItems],
   );
 
   // ソートクリア
   const handleClearSort = useCallback(() => {
+    userHasSortedRef.current = false;
     setSortItems(defaultSortItems);
     setPage(1);
   }, [defaultSortItems]);
 
-  // ソート一括置換（ビュー適用時に使用）
+  // ソート一括置換（ビュー適用時に使用）。適用直後はシード扱いとし、
+  // 次の列クリックでそのビューのソートを置き換えられるようにする。
   const handleSetSortItems = useCallback(
     (items: SortItem[]) => {
+      userHasSortedRef.current = false;
       setSortItems(items.length > 0 ? items : defaultSortItems);
       setPage(1);
     },
