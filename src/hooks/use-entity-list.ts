@@ -45,8 +45,6 @@ export function useEntityList(config: EntityListConfig) {
   const [sortItems, setSortItems] = useState<SortItem[]>(() => {
     // URL の sort パラメータを解析
     const sortParam = searchParams.get('sort');
-    // 明示的なソート解除（デフォルトソート列も解除した状態）を復元
-    if (sortParam === 'none') return [];
     if (sortParam) {
       const parsed = sortParam.split(',').map((s) => {
         const [field, dir] = s.split(':');
@@ -87,12 +85,7 @@ export function useEntityList(config: EntityListConfig) {
     if (page > 1) params.set('page', String(page));
     if (pageSize !== defaultPageSize) params.set('pageSize', String(pageSize));
     if (debouncedSearch) params.set('search', debouncedSearch);
-    // ソート解除（空）かつデフォルトソートが存在する場合は sentinel を保存
-    if (sortItems.length === 0) {
-      if (defaultSortItems.length > 0) params.set('sort', 'none');
-    } else if (sortStr !== defaultSortStr) {
-      params.set('sort', sortStr);
-    }
+    if (sortStr !== defaultSortStr) params.set('sort', sortStr);
 
     // フィルターを URL に追加
     for (const [key, value] of Object.entries(filters)) {
@@ -162,45 +155,33 @@ export function useEntityList(config: EntityListConfig) {
   }, []);
 
   // ソート（複数列対応）
-  // 通常クリック: その列を唯一のソートキーにする（asc → desc → 解除）
-  // Shift+クリック: 既存ソートを維持しつつ末尾に追加（マルチカラムソート）
+  // クリックするたびに対象列が末尾に追加され、複数列ソートが積み上がる。
+  // 同じ列を繰り返しクリック: 昇順 → 降順 → そのキーを解除（リストから削除）
   const handleSetSort = useCallback(
-    (field: string, multiSort?: boolean) => {
+    (field: string) => {
       setSortItems((prev) => {
         const existingIndex = prev.findIndex((s) => s.field === field);
 
-        if (multiSort) {
-          // Shift+クリック: マルチカラムソート（従来動作）
-          if (existingIndex < 0) {
-            return [...prev, { field, direction: 'asc' as const }];
-          }
-          const current = prev[existingIndex];
-          if (current.direction === 'asc') {
-            return prev.map((s, i) =>
-              i === existingIndex ? { ...s, direction: 'desc' as const } : s,
-            );
-          }
-          const next = prev.filter((_, i) => i !== existingIndex);
-          // 全列解除時は空配列（明示的なソート解除）
-          return next;
+        if (existingIndex < 0) {
+          // 未ソート → 昇順で末尾に追加（順番にクリックで複数列ソート）
+          return [...prev, { field, direction: 'asc' as const }];
         }
 
-        // 通常クリック: その列を唯一のソートキーにする
-        if (existingIndex < 0) {
-          // 未ソート → この列の昇順のみ
-          return [{ field, direction: 'asc' as const }];
-        }
         const current = prev[existingIndex];
         if (current.direction === 'asc') {
-          // 昇順 → 降順（この列のみ）
-          return [{ field, direction: 'desc' as const }];
+          // 昇順 → 降順
+          return prev.map((s, i) =>
+            i === existingIndex ? { ...s, direction: 'desc' as const } : s,
+          );
         }
-        // 降順 → 解除（空配列）。デフォルトソート列でも確実に解除できる
-        return [];
+
+        // 降順 → そのキーを解除（リストから削除）。全て解除されたらデフォルトに戻す
+        const next = prev.filter((_, i) => i !== existingIndex);
+        return next.length > 0 ? next : defaultSortItems;
       });
       setPage(1);
     },
-    [],
+    [defaultSortItems],
   );
 
   // ソートクリア
