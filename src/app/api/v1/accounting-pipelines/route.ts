@@ -3,8 +3,31 @@ import { getServerSession } from 'next-auth';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import type { Prisma } from '@prisma/client';
 import { ApiError, handleApiError } from '@/lib/error-handler';
 import { formatAccountingPipeline } from '@/lib/format-accounting-pipeline';
+import { parseSortParams } from '@/lib/sort-helper';
+
+// ソート許可フィールド → Prisma orderBy 変換マップ
+// リレーション越しのフィールド（MO番号・顧客名・代理店名）はネスト orderBy に変換する
+const PIPELINE_ORDER_BY_MAP: Record<
+  string,
+  (dir: 'asc' | 'desc') => Prisma.AccountingPipelineOrderByWithRelationInput
+> = {
+  'project.projectNo': (dir) => ({ project: { projectNo: dir } }),
+  'project.customerName': (dir) => ({ project: { customer: { customerName: dir } } }),
+  'project.partnerName': (dir) => ({ project: { partner: { partnerName: dir } } }),
+  revenueType: (dir) => ({ revenueType: dir }),
+  unitPrice: (dir) => ({ unitPrice: dir }),
+  quantity: (dir) => ({ quantity: dir }),
+  totalAmount: (dir) => ({ totalAmount: dir }),
+  createdAt: (dir) => ({ createdAt: dir }),
+  updatedAt: (dir) => ({ updatedAt: dir }),
+};
+
+const DEFAULT_PIPELINE_ORDER_BY: Prisma.AccountingPipelineOrderByWithRelationInput[] = [
+  { createdAt: 'desc' },
+];
 
 const PIPELINE_INCLUDE = {
   project: {
@@ -45,6 +68,13 @@ export async function GET(request: NextRequest) {
     const revenueTypeParam = searchParams.get('revenueType');
     const search = searchParams.get('search')?.trim();
 
+    // ソート（複数列対応）。許可フィールドのみ Prisma orderBy に変換し、無効時はデフォルト
+    const sortItems = parseSortParams(searchParams, 'createdAt', 'desc');
+    const mappedOrderBy = sortItems
+      .map((item) => PIPELINE_ORDER_BY_MAP[item.field]?.(item.direction))
+      .filter((o): o is Prisma.AccountingPipelineOrderByWithRelationInput => Boolean(o));
+    const orderBy = mappedOrderBy.length > 0 ? mappedOrderBy : DEFAULT_PIPELINE_ORDER_BY;
+
     const where: Record<string, unknown> = { pipelineIsActive: true };
 
     if (businessIdParam) {
@@ -73,7 +103,7 @@ export async function GET(request: NextRequest) {
       prisma.accountingPipeline.count({ where }),
       prisma.accountingPipeline.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: PIPELINE_INCLUDE,

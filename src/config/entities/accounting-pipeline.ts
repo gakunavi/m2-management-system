@@ -89,7 +89,6 @@ export const accountingPipelineListConfig: EntityListConfig = {
       key: 'latestEntryDate',
       label: '直近着金日',
       width: 120,
-      sortable: true,
       group: '着金情報',
     },
     {

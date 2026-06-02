@@ -45,6 +45,8 @@ export function useEntityList(config: EntityListConfig) {
   const [sortItems, setSortItems] = useState<SortItem[]>(() => {
     // URL の sort パラメータを解析
     const sortParam = searchParams.get('sort');
+    // 明示的なソート解除（デフォルトソート列も解除した状態）を復元
+    if (sortParam === 'none') return [];
     if (sortParam) {
       const parsed = sortParam.split(',').map((s) => {
         const [field, dir] = s.split(':');
@@ -85,7 +87,12 @@ export function useEntityList(config: EntityListConfig) {
     if (page > 1) params.set('page', String(page));
     if (pageSize !== defaultPageSize) params.set('pageSize', String(pageSize));
     if (debouncedSearch) params.set('search', debouncedSearch);
-    if (sortStr !== defaultSortStr) params.set('sort', sortStr);
+    // ソート解除（空）かつデフォルトソートが存在する場合は sentinel を保存
+    if (sortItems.length === 0) {
+      if (defaultSortItems.length > 0) params.set('sort', 'none');
+    } else if (sortStr !== defaultSortStr) {
+      params.set('sort', sortStr);
+    }
 
     // フィルターを URL に追加
     for (const [key, value] of Object.entries(filters)) {
@@ -174,7 +181,8 @@ export function useEntityList(config: EntityListConfig) {
             );
           }
           const next = prev.filter((_, i) => i !== existingIndex);
-          return next.length > 0 ? next : defaultSortItems;
+          // 全列解除時は空配列（明示的なソート解除）
+          return next;
         }
 
         // 通常クリック: その列を唯一のソートキーにする
@@ -187,12 +195,12 @@ export function useEntityList(config: EntityListConfig) {
           // 昇順 → 降順（この列のみ）
           return [{ field, direction: 'desc' as const }];
         }
-        // 降順 → 解除（デフォルトに戻す）
-        return defaultSortItems;
+        // 降順 → 解除（空配列）。デフォルトソート列でも確実に解除できる
+        return [];
       });
       setPage(1);
     },
-    [defaultSortItems],
+    [],
   );
 
   // ソートクリア
