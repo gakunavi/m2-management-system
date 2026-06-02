@@ -155,28 +155,41 @@ export function useEntityList(config: EntityListConfig) {
   }, []);
 
   // ソート（複数列対応）
-  // クリックするたびに対象列が末尾に追加され、複数列ソートが積み上がる。
-  // 同じ列を繰り返しクリック: 昇順 → 降順 → そのキーを解除（リストから削除）
+  // - 列クリック: その列を昇順で追加。順番にクリックすれば複数列ソートが積み上がる
+  // - 同じ列を再クリック: 昇順 → 降順 → そのキーを解除（リストから削除）
+  // - デフォルトソートのまま（未操作）の状態で最初の列をクリックした場合は、
+  //   デフォルトを置き換える。これをしないと一意なデフォルト列が常に第1キーになり、
+  //   後からクリックした列の昇順降順が並びに反映されない。
   const handleSetSort = useCallback(
     (field: string) => {
       setSortItems((prev) => {
-        const existingIndex = prev.findIndex((s) => s.field === field);
+        // 現在の並びがデフォルトソートと一致する（=ユーザー未操作）か判定
+        const isDefault =
+          prev.length === defaultSortItems.length &&
+          prev.every(
+            (s, i) =>
+              s.field === defaultSortItems[i]?.field &&
+              s.direction === defaultSortItems[i]?.direction,
+          );
+        const base = isDefault ? [] : prev;
+
+        const existingIndex = base.findIndex((s) => s.field === field);
 
         if (existingIndex < 0) {
           // 未ソート → 昇順で末尾に追加（順番にクリックで複数列ソート）
-          return [...prev, { field, direction: 'asc' as const }];
+          return [...base, { field, direction: 'asc' as const }];
         }
 
-        const current = prev[existingIndex];
+        const current = base[existingIndex];
         if (current.direction === 'asc') {
           // 昇順 → 降順
-          return prev.map((s, i) =>
+          return base.map((s, i) =>
             i === existingIndex ? { ...s, direction: 'desc' as const } : s,
           );
         }
 
         // 降順 → そのキーを解除（リストから削除）。全て解除されたらデフォルトに戻す
-        const next = prev.filter((_, i) => i !== existingIndex);
+        const next = base.filter((_, i) => i !== existingIndex);
         return next.length > 0 ? next : defaultSortItems;
       });
       setPage(1);
