@@ -59,6 +59,17 @@ export const PARTNER_STAFF_SORT_SPEC: SortSpec = dbSpec([
   'createdAt',
 ]);
 
+// 案件CSV: 生モデル行に対して適用するため、フラットな db列 + ステータスのみ対応
+// （CSVのソート許可フィールドは元々この範囲。リレーション/カスタムは対象外）
+export const PROJECT_CSV_SORT_SPEC: SortSpec = {
+  projectNo: { kind: 'db' },
+  projectSalesStatus: { kind: 'status' },
+  projectExpectedCloseMonth: { kind: 'db' },
+  projectAssignedUserName: { kind: 'db' },
+  updatedAt: { kind: 'db' },
+  createdAt: { kind: 'db' },
+};
+
 // 案件: リレーション越し・ステータス・顧客種別(定義順)を宣言。
 // 動的カラム(customData_/customerLink_/partnerLink_)は実行時に withCustomDataFields で付与。
 export const PROJECT_SORT_SPEC: SortSpec = {

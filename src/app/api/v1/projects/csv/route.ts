@@ -4,20 +4,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy } from '@/lib/sort-helper';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort } from '@/lib/sort/engine';
+import { PROJECT_CSV_SORT_SPEC } from '@/lib/sort/specs';
 import { escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
-
-const PROJECT_SORT_FIELDS = [
-  'projectNo',
-  'projectSalesStatus',
-  'projectExpectedCloseMonth',
-  'projectAssignedUserName',
-  'updatedAt',
-  'createdAt',
-] as const;
 
 // 固定ヘッダー定義
 const FIXED_HEADERS = [
@@ -100,7 +93,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const orderBy = buildOrderBy(sortItems, PROJECT_SORT_FIELDS, [{ field: 'updatedAt', direction: 'desc' }]);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, PROJECT_CSV_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ updatedAt: 'desc' }]
+    ) as Prisma.ProjectOrderByWithRelationInput[];
 
     // businessId が確定している場合のみ動的フィールドを取得
     const businessId = businessIdParam ? parseInt(businessIdParam, 10) : null;
@@ -179,6 +175,20 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // 営業ステータス=定義順(statusSortOrder)はアプリ側で整列（CSVは全件出力）
+    let sortedProjects = projects;
+    if (needsAppSort) {
+      const bizIds = Array.from(new Set(projects.map((p) => p.businessId)));
+      const defs = bizIds.length > 0
+        ? await prisma.businessStatusDefinition.findMany({
+            where: { businessId: { in: bizIds } },
+            select: { businessId: true, statusCode: true, statusSortOrder: true },
+          })
+        : [];
+      const statusOrder = new Map(defs.map((d) => [`${d.businessId}:${d.statusCode}`, d.statusSortOrder]));
+      sortedProjects = applyAppSort(projects, appSortItems, PROJECT_CSV_SORT_SPEC, { statusOrder });
+    }
+
     // ステータスラベルを一括取得
     const allStatuses = await prisma.businessStatusDefinition.findMany({
       where: {
@@ -193,7 +203,7 @@ export async function GET(request: NextRequest) {
     }
 
     const headerRow = exportHeaders.map((h) => escapeCSV(h.label)).join(',');
-    const rows = projects.map((p) => {
+    const rows = sortedProjects.map((p) => {
       const customData = p.projectCustomData as Record<string, unknown> | null;
       const statusLabel = statusLabelMap[`${p.businessId}:${p.projectSalesStatus}`] ?? p.projectSalesStatus;
 
