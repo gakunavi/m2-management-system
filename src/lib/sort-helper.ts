@@ -160,7 +160,7 @@ function sortByCustomData<T>(
 }
 
 /** select型フィールドをオプション定義順で比較 */
-function compareByOptionOrder(
+export function compareByOptionOrder(
   a: unknown,
   b: unknown,
   orderMap: Map<string, number>,
@@ -174,7 +174,7 @@ function compareByOptionOrder(
 }
 
 /** 数値を含む文字列の自然順ソート（"MO-1","MO-2","MO-11" の順になる） */
-function naturalCompare(a: string, b: string): number {
+export function naturalCompare(a: string, b: string): number {
   const aParts = a.split(/(\d+)/);
   const bParts = b.split(/(\d+)/);
   const len = Math.min(aParts.length, bParts.length);
@@ -195,7 +195,7 @@ function naturalCompare(a: string, b: string): number {
 }
 
 /** null を末尾に配置する汎用比較関数 */
-function compareValues(a: unknown, b: unknown): number {
+export function compareValues(a: unknown, b: unknown): number {
   // null/undefined は末尾
   if (a == null && b == null) return 0;
   if (a == null) return 1;

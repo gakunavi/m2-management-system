@@ -4,13 +4,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import {
-  parseSortParams,
-  buildOrderBy,
-  CUSTOMER_SORT_FIELDS,
-  needsListAppSort,
-  sortListRecords,
-} from '@/lib/sort-helper';
+import type { Prisma } from '@prisma/client';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort, appSortPagination } from '@/lib/sort/engine';
+import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { formatCustomer } from '@/lib/format-customer';
 import {
   whereIn,
@@ -101,18 +98,20 @@ export async function GET(request: NextRequest) {
       ...businessIdFilter,
     };
 
-    const orderBy = buildOrderBy(sortItems, CUSTOMER_SORT_FIELDS, [{ field: 'customerCode', direction: 'asc' }]);
-
-    // 定義順select(種別)等はアプリ側で並べ替えるため、その場合は全件取得してから整列・スライスする
-    const appSort = needsListAppSort(sortItems);
+    // 統一ソートエンジン: db列は Prisma orderBy、select(種別)等はアプリ側で処理
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, CUSTOMER_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ customerCode: 'asc' }]
+    ) as Prisma.CustomerOrderByWithRelationInput[];
+    const { skip, take } = appSortPagination(needsAppSort, page, pageSize);
 
     const [total, customers] = await Promise.all([
       prisma.customer.count({ where }),
       prisma.customer.findMany({
         where,
         orderBy,
-        skip: appSort ? undefined : (page - 1) * pageSize,
-        take: appSort ? undefined : pageSize,
+        skip,
+        take,
         include: {
           industry: { select: { id: true, industryName: true } },
           contacts: {
@@ -140,9 +139,12 @@ export async function GET(request: NextRequest) {
     const businessIdNum = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
 
     let data = customers.map((c) => formatCustomer(c, businessIdNum));
-    if (appSort) {
+    if (needsAppSort) {
       // 全件をアプリ側ソートしてから当該ページ分をスライス
-      data = sortListRecords(data, sortItems).slice((page - 1) * pageSize, page * pageSize);
+      data = applyAppSort(data, appSortItems, CUSTOMER_SORT_SPEC).slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
     }
 
     return NextResponse.json({

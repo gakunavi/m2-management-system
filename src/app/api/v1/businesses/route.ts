@@ -4,7 +4,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy, BUSINESS_SORT_FIELDS } from '@/lib/sort-helper';
+import type { Prisma } from '@prisma/client';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort, appSortPagination } from '@/lib/sort/engine';
+import { BUSINESS_SORT_SPEC } from '@/lib/sort/specs';
 import { formatBusiness } from '@/lib/format-business';
 import { whereBoolean, whereDateRange } from '@/lib/filter-helper';
 import { getBusinessIdsForUser } from '@/lib/revenue-helpers';
@@ -54,21 +57,33 @@ export async function GET(request: NextRequest) {
       ...(whereBoolean(searchParams, 'isActive', 'businessIsActive') ?? {}),
     };
 
-    const orderBy = buildOrderBy(sortItems, BUSINESS_SORT_FIELDS, [{ field: 'businessSortOrder', direction: 'asc' }]);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, BUSINESS_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ businessSortOrder: 'asc' }]
+    ) as Prisma.BusinessOrderByWithRelationInput[];
+    const { skip, take } = appSortPagination(needsAppSort, page, pageSize);
 
     const [total, businesses] = await Promise.all([
       prisma.business.count({ where }),
       prisma.business.findMany({
         where,
         orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip,
+        take,
       }),
     ]);
 
+    let data = businesses.map(formatBusiness);
+    if (needsAppSort) {
+      data = applyAppSort(data, appSortItems, BUSINESS_SORT_SPEC).slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      data: businesses.map(formatBusiness),
+      data,
       meta: {
         page,
         pageSize,

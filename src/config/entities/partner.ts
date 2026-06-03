@@ -1,17 +1,6 @@
 import { z } from 'zod';
 import type { EntityListConfig, EntityDetailConfig, EntityFormConfig } from '@/types/config';
-
-// ============================================
-// 代理店種別オプション
-// ============================================
-
-const PARTNER_TYPE_OPTIONS = [
-  { value: '法人', label: '法人' },
-  { value: '個人事業主', label: '個人事業主' },
-  { value: '個人', label: '個人' },
-  { value: '確認中', label: '確認中' },
-  { value: '未設定', label: '未設定' },
-];
+import { PARTNER_TYPE_OPTIONS } from '@/constants/entity-options';
 
 // PARTNER_TIER_OPTIONS は廃止（N次対応: 親代理店選択から自動算出）
 

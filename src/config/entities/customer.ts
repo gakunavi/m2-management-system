@@ -1,17 +1,6 @@
 import { z } from 'zod';
 import type { EntityListConfig, EntityDetailConfig, EntityFormConfig } from '@/types/config';
-
-// ============================================
-// 顧客種別オプション
-// ============================================
-
-const CUSTOMER_TYPE_OPTIONS = [
-  { value: '法人', label: '法人' },
-  { value: '個人事業主', label: '個人事業主' },
-  { value: '個人', label: '個人' },
-  { value: '確認中', label: '確認中' },
-  { value: '未設定', label: '未設定' },
-];
+import { CUSTOMER_TYPE_OPTIONS } from '@/constants/entity-options';
 
 // ============================================
 // 業種マスタ設定
