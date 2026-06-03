@@ -34,3 +34,8 @@ tsconfig.tsbuildinfo
 # ローカルアップロードファイル（開発環境のみ）
 public/uploads/*
 !public/uploads/.gitkeep
+
+# Claude/作業用一時ファイル
+.playwright-mcp/
+.plan
+.serena/

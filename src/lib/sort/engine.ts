@@ -10,7 +10,7 @@
 //   呼び出し側は全件取得 → applyAppSort で全キーを多段ソート → スライス。
 //   これにより「ステータス＋他列」「カスタム＋他列」も正しく合成される。
 
-import type { SortItem, SortSpec, SortStrategy, AppSortContext } from './types';
+import type { SortItem, SortSpec, AppSortContext } from './types';
 import { isAppSortKind } from './types';
 import { compareValues, compareByOptionOrder } from '@/lib/sort-helper';
 
@@ -87,19 +87,22 @@ export function resolveSort(sortItems: SortItem[], spec: SortSpec): ResolvedSort
   return { prismaOrderBy, appSortItems: valid, needsAppSort };
 }
 
-/** 1フィールドの値を行から取り出す（customData_ プレフィックスのみ JSONB から取得） */
+/**
+ * 1フィールドの値を行から取り出す。
+ * 本エンジンは「フォーマット済み行」をソートする前提のため、customData も含めて
+ * 全フィールドがフラット展開済み（row[field]）。getCustomData は未展開行のフォールバック。
+ */
 function readFieldValue(
   row: Record<string, unknown>,
   field: string,
-  strat: SortStrategy,
   ctx: AppSortContext,
 ): unknown {
-  if (strat.kind === 'customData' && field.startsWith('customData_')) {
+  if (row[field] !== undefined) return row[field] ?? null;
+  if (ctx.getCustomData && field.startsWith('customData_')) {
     const origKey = field.slice('customData_'.length);
-    return ctx.getCustomData?.(row)?.[origKey] ?? null;
+    return ctx.getCustomData(row)?.[origKey] ?? null;
   }
-  // relation/select/natural/db/status/customData(link系) はフォーマット済み行にフラット展開済み
-  return row[field] ?? null;
+  return null;
 }
 
 /**
@@ -135,8 +138,8 @@ export function applyAppSort<T extends Record<string, unknown>>(
         const bo = ctx.statusOrder?.get(`${b.businessId}:${b[item.field]}`) ?? 9999;
         cmp = ao - bo;
       } else if (strat.kind === 'customData') {
-        const av = readFieldValue(a, item.field, strat, ctx);
-        const bv = readFieldValue(b, item.field, strat, ctx);
+        const av = readFieldValue(a, item.field, ctx);
+        const bv = readFieldValue(b, item.field, ctx);
         const optOrder = ctx.customSelectOrder?.get(stripCustomDataPrefix(item.field));
         cmp = optOrder ? compareByOptionOrder(av, bv, optOrder) : compareValues(av, bv);
       } else {

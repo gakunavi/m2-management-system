@@ -213,63 +213,8 @@ export function compareValues(a: unknown, b: unknown): number {
   return naturalCompare(String(a), String(b));
 }
 
-// ============================================
-// 標準カラムのアプリ側ソート（定義順 select / 自然順）
-// ============================================
-
-/**
- * select型カラムを「オプション定義順」で並べたい列 → 値の順序。
- * DBの文字列ソートでは定義順にならないため、アプリ側でこの順序に従って並べる。
- */
-export const SELECT_SORT_ORDER: Record<string, readonly string[]> = {
-  customerType: ['法人', '個人事業主', '個人', '確認中', '未設定'],
-  partnerType: ['法人', '個人事業主', '個人', '確認中', '未設定'],
-};
-
-/**
- * 数値混じり文字列を自然順（1,2,11 の順）で並べたい列。
- * 例: 代理店の階層番号 AG-0001-2 / AG-0001-11。
- */
-export const NATURAL_SORT_FIELDS: readonly string[] = ['partnerTierNumber', 'partnerTier'];
-
-/** SELECT_SORT_ORDER を value→index の Map に事前変換 */
-const SELECT_ORDER_MAPS: Record<string, Map<string, number>> = Object.fromEntries(
-  Object.entries(SELECT_SORT_ORDER).map(([field, values]) => [
-    field,
-    new Map(values.map((v, i) => [v, i])),
-  ]),
-);
-
-/** sortItems にアプリ側ソートが必要な列（定義順select / 自然順）が含まれるか */
-export function needsListAppSort(sortItems: SortItem[]): boolean {
-  return sortItems.some(
-    (s) => s.field in SELECT_SORT_ORDER || NATURAL_SORT_FIELDS.includes(s.field),
-  );
-}
-
-/**
- * フォーマット済みの一覧行を sortItems の全キーでアプリ側ソートする（新しい配列を返す）。
- * - SELECT_SORT_ORDER の列はオプション定義順で比較
- * - それ以外は compareValues（数値/日付/boolean/自然順文字列、null末尾）で比較
- * 呼び出し側で全件取得 → 本関数でソート → スライスして使う。
- */
-export function sortListRecords<T extends Record<string, unknown>>(
-  records: T[],
-  sortItems: SortItem[],
-): T[] {
-  return [...records].sort((a, b) => {
-    for (const item of sortItems) {
-      const av = a[item.field] ?? null;
-      const bv = b[item.field] ?? null;
-      const orderMap = SELECT_ORDER_MAPS[item.field];
-      const cmp = orderMap
-        ? compareByOptionOrder(av, bv, orderMap)
-        : compareValues(av, bv);
-      if (cmp !== 0) return item.direction === 'asc' ? cmp : -cmp;
-    }
-    return 0;
-  });
-}
+// 注: 標準カラムの定義順select/自然順ソートは src/lib/sort/ の統一エンジンに移行済み。
+//     （旧 SELECT_SORT_ORDER / needsListAppSort / sortListRecords は撤去）
 
 /**
  * カスタムフィールドソート時に、全件取得→ソート→スライスするためのページネーションヘルパー。
