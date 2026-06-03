@@ -5,18 +5,10 @@ import bcrypt from 'bcryptjs';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy } from '@/lib/sort-helper';
-
-// ============================================
-// ソート許可フィールド
-// ============================================
-
-const PARTNER_STAFF_SORT_FIELDS = [
-  'userName',
-  'userEmail',
-  'userIsActive',
-  'createdAt',
-] as const;
+import type { Prisma } from '@prisma/client';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort, appSortPagination } from '@/lib/sort/engine';
+import { PARTNER_STAFF_SORT_SPEC } from '@/lib/sort/specs';
 
 // ============================================
 // 入力バリデーションスキーマ
@@ -122,7 +114,11 @@ export async function GET(request: NextRequest) {
           : {}),
     };
 
-    const orderBy = buildOrderBy(sortItems, PARTNER_STAFF_SORT_FIELDS, [{ field: 'userName', direction: 'asc' }]);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, PARTNER_STAFF_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ userName: 'asc' }]
+    ) as Prisma.UserOrderByWithRelationInput[];
+    const { skip, take } = appSortPagination(needsAppSort, page, pageSize);
 
     const [total, users] = await Promise.all([
       prisma.user.count({ where }),
@@ -130,14 +126,19 @@ export async function GET(request: NextRequest) {
         where,
         include: USER_INCLUDE,
         orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip,
+        take,
       }),
     ]);
 
+    let data = users.map(formatUser);
+    if (needsAppSort) {
+      data = applyAppSort(data, appSortItems, PARTNER_STAFF_SORT_SPEC).slice((page - 1) * pageSize, page * pageSize);
+    }
+
     return NextResponse.json({
       success: true,
-      data: users.map(formatUser),
+      data,
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     });
   } catch (error) {

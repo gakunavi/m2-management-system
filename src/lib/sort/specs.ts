@@ -41,6 +41,24 @@ export const BUSINESS_SORT_SPEC: SortSpec = {
   ...dbSpec(BUSINESS_SORT_FIELDS),
 };
 
+// ユーザー: すべて db
+export const USER_SORT_SPEC: SortSpec = dbSpec([
+  'userName',
+  'userEmail',
+  'userRole',
+  'userIsActive',
+  'createdAt',
+  'updatedAt',
+]);
+
+// 代理店スタッフ: すべて db
+export const PARTNER_STAFF_SORT_SPEC: SortSpec = dbSpec([
+  'userName',
+  'userEmail',
+  'userIsActive',
+  'createdAt',
+]);
+
 // 案件: リレーション越し・ステータス・顧客種別(定義順)を宣言。
 // 動的カラム(customData_/customerLink_/partnerLink_)は実行時に withCustomDataFields で付与。
 export const PROJECT_SORT_SPEC: SortSpec = {

@@ -3,7 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy, PARTNER_SORT_FIELDS } from '@/lib/sort-helper';
+import type { Prisma } from '@prisma/client';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort } from '@/lib/sort/engine';
+import { PARTNER_SORT_SPEC } from '@/lib/sort/specs';
 import { PARTNER_CSV_HEADERS, escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 
 const CSV_HEADERS = PARTNER_CSV_HEADERS;
@@ -50,9 +53,12 @@ export async function GET(request: NextRequest) {
       ...(isActive !== '' ? { partnerIsActive: isActive === 'true' } : {}),
     };
 
-    const orderBy = buildOrderBy(sortItems, PARTNER_SORT_FIELDS, [{ field: 'partnerCode', direction: 'asc' }]);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, PARTNER_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ partnerCode: 'asc' }]
+    ) as Prisma.PartnerOrderByWithRelationInput[];
 
-    const partners = await prisma.partner.findMany({
+    let partners = await prisma.partner.findMany({
       where,
       orderBy,
       include: {
@@ -72,6 +78,10 @@ export async function GET(request: NextRequest) {
         },
       },
     });
+    // 種別=定義順 / 階層番号=自然順 はアプリ側で全件整列（CSVは全件出力）
+    if (needsAppSort) {
+      partners = applyAppSort(partners, appSortItems, PARTNER_SORT_SPEC);
+    }
 
     const headerRow = exportHeaders.map((h) => escapeCSV(h.label)).join(',');
     const rows = partners.map((p) => {

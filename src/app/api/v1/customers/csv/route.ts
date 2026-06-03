@@ -3,7 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy, CUSTOMER_SORT_FIELDS } from '@/lib/sort-helper';
+import type { Prisma } from '@prisma/client';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort } from '@/lib/sort/engine';
+import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { CUSTOMER_CSV_HEADERS, escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 
 const CSV_HEADERS = CUSTOMER_CSV_HEADERS;
@@ -52,9 +55,12 @@ export async function GET(request: NextRequest) {
       ...(isActive !== '' ? { customerIsActive: isActive === 'true' } : {}),
     };
 
-    const orderBy = buildOrderBy(sortItems, CUSTOMER_SORT_FIELDS, [{ field: 'customerCode', direction: 'asc' }]);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, CUSTOMER_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ customerCode: 'asc' }]
+    ) as Prisma.CustomerOrderByWithRelationInput[];
 
-    const customers = await prisma.customer.findMany({
+    let customers = await prisma.customer.findMany({
       where,
       orderBy,
       include: {
@@ -73,6 +79,11 @@ export async function GET(request: NextRequest) {
         },
       },
     });
+
+    // 種別等の定義順ソートはアプリ側で全件整列（CSVは全件出力のためスライス不要）
+    if (needsAppSort) {
+      customers = applyAppSort(customers, appSortItems, CUSTOMER_SORT_SPEC);
+    }
 
     // CSV 生成（exportHeaders に従い列を出力）
     const headerRow = exportHeaders.map((h) => escapeCSV(h.label)).join(',');

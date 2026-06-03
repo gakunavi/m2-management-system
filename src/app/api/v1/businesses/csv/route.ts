@@ -3,7 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy, BUSINESS_SORT_FIELDS } from '@/lib/sort-helper';
+import type { Prisma } from '@prisma/client';
+import { parseSortParams } from '@/lib/sort-helper';
+import { resolveSort, applyAppSort } from '@/lib/sort/engine';
+import { BUSINESS_SORT_SPEC } from '@/lib/sort/specs';
 import { BUSINESS_CSV_HEADERS, escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 
 const CSV_HEADERS = BUSINESS_CSV_HEADERS;
@@ -45,12 +48,18 @@ export async function GET(request: NextRequest) {
       ...(isActive !== '' ? { businessIsActive: isActive === 'true' } : {}),
     };
 
-    const orderBy = buildOrderBy(sortItems, BUSINESS_SORT_FIELDS, [{ field: 'businessSortOrder', direction: 'asc' }]);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, BUSINESS_SORT_SPEC);
+    const orderBy = (
+      prismaOrderBy.length > 0 ? prismaOrderBy : [{ businessSortOrder: 'asc' }]
+    ) as Prisma.BusinessOrderByWithRelationInput[];
 
-    const businesses = await prisma.business.findMany({
+    let businesses = await prisma.business.findMany({
       where,
       orderBy,
     });
+    if (needsAppSort) {
+      businesses = applyAppSort(businesses, appSortItems, BUSINESS_SORT_SPEC);
+    }
 
     const headerRow = exportHeaders.map((h) => escapeCSV(h.label)).join(',');
     const rows = businesses.map((b) => {
