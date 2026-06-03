@@ -4,7 +4,13 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { parseSortParams, buildOrderBy, PARTNER_SORT_FIELDS } from '@/lib/sort-helper';
+import {
+  parseSortParams,
+  buildOrderBy,
+  PARTNER_SORT_FIELDS,
+  needsListAppSort,
+  sortListRecords,
+} from '@/lib/sort-helper';
 import { formatPartner } from '@/lib/format-partner';
 import {
   whereIn,
@@ -100,13 +106,16 @@ export async function GET(request: NextRequest) {
 
     const orderBy = buildOrderBy(sortItems, PARTNER_SORT_FIELDS, [{ field: 'partnerCode', direction: 'asc' }]);
 
+    // 種別(定義順) / 階層番号(自然順) はアプリ側で並べ替えるため全件取得する
+    const appSort = needsListAppSort(sortItems);
+
     const [total, partners] = await Promise.all([
       prisma.partner.count({ where }),
       prisma.partner.findMany({
         where,
         orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: appSort ? undefined : (page - 1) * pageSize,
+        take: appSort ? undefined : pageSize,
         include: {
           industry: { select: { id: true, industryName: true } },
           parent: { select: { id: true, partnerCode: true, partnerName: true } },
@@ -137,9 +146,15 @@ export async function GET(request: NextRequest) {
     ]);
 
     const targetBusinessId = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
+
+    let data = partners.map((p) => formatPartner(p, targetBusinessId));
+    if (appSort) {
+      data = sortListRecords(data, sortItems).slice((page - 1) * pageSize, page * pageSize);
+    }
+
     return NextResponse.json({
       success: true,
-      data: partners.map((p) => formatPartner(p, targetBusinessId)),
+      data,
       meta: {
         page,
         pageSize,

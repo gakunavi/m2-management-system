@@ -6,7 +6,62 @@ import {
   getCustomSortPagination,
   applyAppSortAndSlice,
   CUSTOMER_SORT_FIELDS,
+  needsListAppSort,
+  sortListRecords,
 } from '@/lib/sort-helper';
+
+// ============================================
+// needsListAppSort / sortListRecords（定義順select・自然順）
+// ============================================
+
+describe('needsListAppSort', () => {
+  it('種別(customerType/partnerType)と階層番号でtrueを返す', () => {
+    expect(needsListAppSort([{ field: 'customerType', direction: 'asc' }])).toBe(true);
+    expect(needsListAppSort([{ field: 'partnerType', direction: 'asc' }])).toBe(true);
+    expect(needsListAppSort([{ field: 'partnerTierNumber', direction: 'asc' }])).toBe(true);
+  });
+  it('通常列ではfalseを返す', () => {
+    expect(needsListAppSort([{ field: 'customerName', direction: 'asc' }])).toBe(false);
+    expect(needsListAppSort([{ field: 'updatedAt', direction: 'desc' }])).toBe(false);
+  });
+});
+
+describe('sortListRecords', () => {
+  it('種別(select)を定義順で並べる（法人→個人事業主→個人）', () => {
+    const rows = [
+      { id: 1, customerType: '個人事業主' },
+      { id: 2, customerType: '個人' },
+      { id: 3, customerType: '法人' },
+    ];
+    const asc = sortListRecords(rows, [{ field: 'customerType', direction: 'asc' }]);
+    expect(asc.map((r) => r.id)).toEqual([3, 1, 2]);
+    const desc = sortListRecords(rows, [{ field: 'customerType', direction: 'desc' }]);
+    expect(desc.map((r) => r.id)).toEqual([2, 1, 3]);
+  });
+
+  it('階層番号を自然順で並べる（1-2 が 1-11 より前）', () => {
+    const rows = [
+      { id: 1, partnerTierNumber: '1-11' },
+      { id: 2, partnerTierNumber: '1-2' },
+      { id: 3, partnerTierNumber: '2' },
+    ];
+    const asc = sortListRecords(rows, [{ field: 'partnerTierNumber', direction: 'asc' }]);
+    expect(asc.map((r) => r.id)).toEqual([2, 1, 3]);
+  });
+
+  it('複数キー（種別→顧客名）で並べる', () => {
+    const rows = [
+      { id: 1, customerType: '法人', customerName: 'ビ' },
+      { id: 2, customerType: '個人事業主', customerName: 'ア' },
+      { id: 3, customerType: '法人', customerName: 'ア' },
+    ];
+    const sorted = sortListRecords(rows, [
+      { field: 'customerType', direction: 'asc' },
+      { field: 'customerName', direction: 'asc' },
+    ]);
+    expect(sorted.map((r) => r.id)).toEqual([3, 1, 2]);
+  });
+});
 
 // ============================================
 // isCustomDataSort
