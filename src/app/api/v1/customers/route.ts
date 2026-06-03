@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import type { Prisma } from '@prisma/client';
 import { parseSortParams } from '@/lib/sort-helper';
-import { resolveSort, applyAppSort, appSortPagination } from '@/lib/sort/engine';
+import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } from '@/lib/sort/engine';
 import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { formatCustomer } from '@/lib/format-customer';
 import {
@@ -98,8 +98,9 @@ export async function GET(request: NextRequest) {
       ...businessIdFilter,
     };
 
-    // 統一ソートエンジン: db列は Prisma orderBy、select(種別)等はアプリ側で処理
-    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, CUSTOMER_SORT_SPEC);
+    // 統一ソートエンジン: db列は Prisma orderBy、select(種別)/カスタム列等はアプリ側で処理
+    const sortSpec = withCustomDataFields(CUSTOMER_SORT_SPEC, sortItems);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, sortSpec);
     const orderBy = (
       prismaOrderBy.length > 0 ? prismaOrderBy : [{ customerCode: 'asc' }]
     ) as Prisma.CustomerOrderByWithRelationInput[];
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
     let data = customers.map((c) => formatCustomer(c, businessIdNum));
     if (needsAppSort) {
       // 全件をアプリ側ソートしてから当該ページ分をスライス
-      data = applyAppSort(data, appSortItems, CUSTOMER_SORT_SPEC).slice(
+      data = applyAppSort(data, appSortItems, sortSpec).slice(
         (page - 1) * pageSize,
         page * pageSize,
       );

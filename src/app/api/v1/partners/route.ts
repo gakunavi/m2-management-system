@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import type { Prisma } from '@prisma/client';
 import { parseSortParams } from '@/lib/sort-helper';
-import { resolveSort, applyAppSort, appSortPagination } from '@/lib/sort/engine';
+import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } from '@/lib/sort/engine';
 import { PARTNER_SORT_SPEC } from '@/lib/sort/specs';
 import { formatPartner } from '@/lib/format-partner';
 import {
@@ -101,7 +101,8 @@ export async function GET(request: NextRequest) {
       ...businessIdFilter,
     };
 
-    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, PARTNER_SORT_SPEC);
+    const sortSpec = withCustomDataFields(PARTNER_SORT_SPEC, sortItems);
+    const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, sortSpec);
     const orderBy = (
       prismaOrderBy.length > 0 ? prismaOrderBy : [{ partnerCode: 'asc' }]
     ) as Prisma.PartnerOrderByWithRelationInput[];
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
 
     let data = partners.map((p) => formatPartner(p, targetBusinessId));
     if (needsAppSort) {
-      data = applyAppSort(data, appSortItems, PARTNER_SORT_SPEC).slice(
+      data = applyAppSort(data, appSortItems, sortSpec).slice(
         (page - 1) * pageSize,
         page * pageSize,
       );
