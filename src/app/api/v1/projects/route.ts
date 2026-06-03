@@ -34,6 +34,7 @@ const SORT_FIELD_MAP: Record<string, (dir: SortDirection) => Record<string, unkn
   projectExpectedCloseMonth: (dir) => ({ projectExpectedCloseMonth: dir }),
   projectAssignedUserName: (dir) => ({ projectAssignedUserName: dir }),
   projectNotes: (dir) => ({ projectNotes: dir }),
+  portalVisible: (dir) => ({ portalVisible: dir }),
   updatedAt: (dir) => ({ updatedAt: dir }),
   createdAt: (dir) => ({ createdAt: dir }),
   // リレーション経由フィールド（顧客）

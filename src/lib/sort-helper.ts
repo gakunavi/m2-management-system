@@ -278,6 +278,7 @@ export const CUSTOMER_SORT_FIELDS = [
   'customerCorporateNumber',
   'customerInvoiceNumber',
   'customerCapital',
+  'customerFiscalMonth',
   'customerEstablishedDate',
   'customerFolderUrl',
   'customerNotes',
