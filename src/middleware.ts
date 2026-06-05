@@ -133,6 +133,11 @@ export default withAuth(
           return true;
         }
 
+        // /api/stats は STATS_API_TOKEN で保護（機械アクセス専用・セッション認証不要）
+        if (pathname.startsWith('/api/stats')) {
+          return true;
+        }
+
         // /api/v1 は認証必須
         if (pathname.startsWith('/api/v1')) {
           return !!token;

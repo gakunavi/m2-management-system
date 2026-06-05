@@ -57,4 +57,10 @@ export const env = {
 
   // Cron
   CRON_SECRET: optional('CRON_SECRET'),
+
+  // 経営統計 API（read-only / 機械アクセス専用）
+  // トークン未設定時はエンドポイント自体を無効化（404）
+  STATS_API_TOKEN: optional('STATS_API_TOKEN'),
+  // 集計対象事業を安定キー businessCode で指定（autoincrement の id 直書きを避ける）
+  STATS_BUSINESS_CODE: optional('STATS_BUSINESS_CODE'),
 } as const;
