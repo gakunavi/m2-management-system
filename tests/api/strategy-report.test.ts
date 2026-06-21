@@ -17,6 +17,12 @@ const { mockPrisma } = vi.hoisted(() => ({
     project: {
       findMany: vi.fn(),
     },
+    partnerBusinessLink: {
+      findMany: vi.fn(),
+    },
+    partner: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
@@ -111,6 +117,9 @@ describe('GET /api/stats/strategy-report', () => {
     vi.clearAllMocks();
     process.env.STATS_API_TOKEN = TOKEN;
     process.env.STATS_BUSINESS_CODE = 'LIGHT';
+    // 系統情報のデフォルト（個別テストで上書き）
+    mockPrisma.partnerBusinessLink.findMany.mockResolvedValue([]);
+    mockPrisma.partner.findMany.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -172,6 +181,12 @@ describe('GET /api/stats/strategy-report', () => {
       });
       mockPrisma.businessStatusDefinition.findMany.mockResolvedValue(STATUS_DEFS);
       mockPrisma.project.findMany.mockResolvedValue(sampleProjects(cur));
+      // 代理店の系統: A代理店(1, 2次代理店) ← 親 B商事(2, 1次代理店)。
+      // 事業別リンクは無し → グローバル階層（partners）へフォールバック。
+      mockPrisma.partner.findMany.mockResolvedValue([
+        { id: 1, partnerName: '株式会社A代理店', partnerTier: '2次代理店', parentId: 2 },
+        { id: 2, partnerName: '株式会社B商事', partnerTier: '1次代理店', parentId: null },
+      ]);
     });
 
     it('business と period を返す', async () => {
@@ -203,6 +218,51 @@ describe('GET /api/stats/strategy-report', () => {
       const names = body.pipeline.by_agent.map((a: { agent: string }) => a.agent);
       expect(names).toContain('株式会社A代理店');
       expect(names).toContain('直販');
+    });
+
+    it('pipeline.by_agent に系統フィールド（partner_id/lineage/tier/referrer）が後方互換で追加される', async () => {
+      const res = await GET(createRequest('/api/stats/strategy-report', TOKEN));
+      const body = await res.json();
+      const a = body.pipeline.by_agent.find((x: { agent: string }) => x.agent === '株式会社A代理店');
+      // 既存フィールドは維持
+      expect(a.active_deals).toBe(2); // id12(見積), id13(成約) は active
+      expect(a.stages).toBeDefined();
+      // 追加フィールド: 2次代理店 → 系統の根は親の B商事
+      expect(a.partner_id).toBe(1);
+      expect(a.lineage).toBe('株式会社B商事');
+      expect(a.tier).toBe('2次代理店');
+      expect(a.referrer).toBe('株式会社B商事');
+      expect(a.referrer_partner_id).toBe(2);
+      // 直販は独立系統・系統メタは null
+      const direct = body.pipeline.by_agent.find((x: { agent: string }) => x.agent === '直販');
+      expect(direct.partner_id).toBeNull();
+      expect(direct.lineage).toBe('直販');
+      expect(direct.tier).toBeNull();
+      expect(direct.referrer).toBeNull();
+      expect(direct.referrer_partner_id).toBeNull();
+    });
+
+    it('pipeline.by_lineage は系統ロールアップと active_share を返す', async () => {
+      const res = await GET(createRequest('/api/stats/strategy-report', TOKEN));
+      const body = await res.json();
+      const bLine = body.pipeline.by_lineage.find((x: { lineage: string }) => x.lineage === '株式会社B商事');
+      expect(bLine.partner_count).toBe(1); // A代理店のみ
+      expect(bLine.agents).toEqual(['株式会社A代理店']);
+      expect(bLine.active_deals).toBe(2); // id12, id13
+      expect(bLine.closed_units_period).toBe(2); // id13 の unit_count=2
+      expect(bLine.active_share).toBe(0.5); // 2 / 4(active 合計)
+      const direct = body.pipeline.by_lineage.find((x: { lineage: string }) => x.lineage === '直販');
+      expect(direct.active_deals).toBe(2); // id11, id14
+      expect(direct.closed_units_period).toBe(0); // 期間内成約なし
+      expect(direct.active_share).toBe(0.5);
+    });
+
+    it('closed_deals に lineage/tier が追加される', async () => {
+      const res = await GET(createRequest('/api/stats/strategy-report', TOKEN));
+      const body = await res.json();
+      const deal = body.closed_deals[0]; // id13 = A代理店
+      expect(deal.lineage).toBe('株式会社B商事');
+      expect(deal.tier).toBe('2次代理店');
     });
 
     it('closed_deals は期間内の成約のみ・顧客は匿名 ID・lead_time_days は null', async () => {
