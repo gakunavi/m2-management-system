@@ -253,3 +253,55 @@ export async function findBusinessRootPartnerId(
 
   return currentId;
 }
+
+/**
+ * 事業リンク作成時に、グローバル親（partners.parent_id）から事業別階層を継承する。
+ *
+ * 再発防止: 代理店をある事業に紐付けるとき、その代理店にグローバル親が居て、
+ * かつその親が同じ事業に階層設定済み（business_tier あり）でリンクされていれば、
+ * 子リンクの business_parent_id / business_tier / business_tier_number を自動設定する。
+ *
+ * - グローバル親が無い → 何もしない（その事業の1次店扱い）
+ * - 親が同事業に未リンク or 事業別階層未設定 → 何もしない（安全側。後でバックフィル/手動設定）
+ *
+ * 対象リンクは事前に作成済みであること（同一トランザクション内で呼ぶ）。
+ */
+export async function inheritBusinessHierarchyOnLink(
+  tx: TxClient,
+  partnerId: number,
+  businessId: number,
+): Promise<void> {
+  const partner = await tx.partner.findUnique({
+    where: { id: partnerId },
+    select: { parentId: true, partnerCode: true },
+  });
+  if (!partner?.parentId) return; // グローバル親なし → 1次店
+
+  const parentLink = await tx.partnerBusinessLink.findFirst({
+    where: { businessId, partnerId: partner.parentId, linkStatus: 'active' },
+    select: { businessTier: true },
+  });
+  // 親が同事業にリンクされ、かつ事業別階層が設定済みのときのみ継承
+  if (!parentLink?.businessTier) return;
+
+  const match = parentLink.businessTier.match(/^(\d+)次代理店$/);
+  if (!match) return;
+  const childTier = `${parseInt(match[1], 10) + 1}次代理店`;
+
+  const childTierNumber = await generateBusinessTierNumber(
+    tx,
+    businessId,
+    childTier,
+    partner.parentId,
+    partner.partnerCode,
+  );
+
+  await tx.partnerBusinessLink.updateMany({
+    where: { businessId, partnerId },
+    data: {
+      businessParentId: partner.parentId,
+      businessTier: childTier,
+      businessTierNumber: childTierNumber,
+    },
+  });
+}

@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { inheritBusinessHierarchyOnLink } from '@/lib/business-partner-hierarchy';
 
 // ============================================
 // GET /api/v1/partners/:id/business-links
@@ -99,15 +100,20 @@ export async function POST(
     const body = await request.json();
     const data = createLinkSchema.parse(body);
 
-    const created = await prisma.partnerBusinessLink.create({
-      data: {
-        partnerId,
-        businessId: data.businessId,
-        linkStatus: data.linkStatus,
-        commissionRate: data.commissionRate ?? undefined,
-        contactPerson: data.contactPerson ?? undefined,
-        linkCustomData: data.linkCustomData as Prisma.InputJsonValue,
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const link = await tx.partnerBusinessLink.create({
+        data: {
+          partnerId,
+          businessId: data.businessId,
+          linkStatus: data.linkStatus,
+          commissionRate: data.commissionRate ?? undefined,
+          contactPerson: data.contactPerson ?? undefined,
+          linkCustomData: data.linkCustomData as Prisma.InputJsonValue,
+        },
+      });
+      // 再発防止: グローバル親が同事業に階層設定済みなら事業別階層を継承
+      await inheritBusinessHierarchyOnLink(tx, partnerId, data.businessId);
+      return link;
     });
 
     const linkWithBusiness = await prisma.partnerBusinessLink.findUnique({
