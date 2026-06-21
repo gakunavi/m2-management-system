@@ -386,4 +386,44 @@ describe('GET /api/stats/strategy-report', () => {
     const lineageA = body.pipeline.by_lineage.find((x: { lineage: string }) => x.lineage === '1次店A');
     expect(lineageA.partner_count).toBe(2); // A, B
   });
+
+  // --- 事業別リンク側に親が無くても、グローバルの親代理店(partners.parent_id)で系列を解決 ---
+  // 本番ライト事業の実データ回帰: business_parent_id が空でも partners.parent_id に親が入っている
+  // 代理店（例: アイリック→ライフサポート）を、グローバル親へフォールバックして系列化する。
+  it('事業別リンクが空でもグローバルの親代理店で系列を解決する', async () => {
+    mockPrisma.business.findFirst.mockResolvedValue({
+      id: 1,
+      businessCode: 'LIGHT',
+      businessName: 'ライト事業',
+      businessConfig: businessConfigWithKpi(),
+    });
+    mockPrisma.businessStatusDefinition.findMany.mockResolvedValue(STATUS_DEFS);
+    mockPrisma.project.findMany.mockResolvedValue([
+      { id: 41, customerId: 401, partnerId: 10, projectSalesStatus: 'quote', projectExpectedCloseMonth: null, projectCustomData: { amount: 100 }, createdAt: new Date(), projectStatusChangedAt: null, projectIsActive: true, partner: { partnerName: 'ライフサポート' } },
+      { id: 42, customerId: 402, partnerId: 11, projectSalesStatus: 'quote', projectExpectedCloseMonth: null, projectCustomData: { amount: 100 }, createdAt: new Date(), projectStatusChangedAt: null, projectIsActive: true, partner: { partnerName: 'アイリック' } },
+    ]);
+    // 親子はグローバル側に登録（アイリック(11)→ライフサポート(10)）
+    mockPrisma.partner.findMany.mockResolvedValue([
+      { id: 10, partnerName: 'ライフサポート', partnerTier: '1次代理店', parentId: null },
+      { id: 11, partnerName: 'アイリック', partnerTier: '2次代理店', parentId: 10 },
+    ]);
+    // 事業別リンクは存在するが business_tier / business_parent_id は空
+    mockPrisma.partnerBusinessLink.findMany.mockResolvedValue([
+      { partnerId: 10, businessTier: null, businessTierNumber: null, businessParentId: null },
+      { partnerId: 11, businessTier: null, businessTierNumber: null, businessParentId: null },
+    ]);
+
+    const res = await GET(createRequest('/api/stats/strategy-report', TOKEN));
+    const body = await res.json();
+    const byAgent = (n: string) => body.pipeline.by_agent.find((x: { agent: string }) => x.agent === n);
+    // アイリックはグローバル親でライフサポート系列に解決される（バグ時は自分自身=未連携になる）
+    expect(byAgent('アイリック').lineage).toBe('ライフサポート');
+    expect(byAgent('アイリック').referrer).toBe('ライフサポート');
+    expect(byAgent('アイリック').referrer_partner_id).toBe(10);
+    expect(byAgent('ライフサポート').lineage).toBe('ライフサポート'); // 1次店
+    expect(byAgent('ライフサポート').referrer).toBeNull();
+    // 系列はライフサポート1つ（2社）
+    const lineage = body.pipeline.by_lineage.find((x: { lineage: string }) => x.lineage === 'ライフサポート');
+    expect(lineage.partner_count).toBe(2);
+  });
 });

@@ -302,28 +302,6 @@ export async function GET(request: NextRequest) {
     return { lineage: rootName ?? '未分類', tier: tierOf(partnerId), referrer, referrer_partner_id: parentId };
   };
 
-  // 一時診断: ?debug=hierarchy で、対象事業に事業リンクを持つ代理店の生の階層フィールドを返す。
-  // 「親を紐付けたのに系列が出ない」データの所在（事業別FK / 階層番号 / グローバル親）を特定するため。
-  const debugHierarchy =
-    request.nextUrl.searchParams.get('debug') === 'hierarchy'
-      ? bizLinks
-          .map((bl) => {
-            const g = partnerMap.get(bl.partnerId);
-            return {
-              partner_id: bl.partnerId,
-              name: g?.name ?? null,
-              biz_tier: bl.businessTier,
-              biz_tier_number: bl.businessTierNumber,
-              biz_parent_id: bl.businessParentId,
-              global_parent_id: g?.parentId ?? null,
-              global_tier: g?.tier ?? null,
-              resolved_parent_id: businessParentOf(bl.partnerId),
-              lineage: agentMetaOf(bl.partnerId).lineage,
-            };
-          })
-          .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'ja'))
-      : null;
-
   // --- pipeline.by_stage（アクティブ案件のスナップショット） --------------
   const activeProjects = projects.filter((p) => p.projectIsActive);
   const stageAgg = new Map<string, { count: number; amount: number }>();
@@ -437,7 +415,7 @@ export async function GET(request: NextRequest) {
       active_share: totalActiveDeals > 0 ? Math.round((v.active_deals / totalActiveDeals) * 1000) / 1000 : 0,
     }));
   notes.push(
-    'pipeline.by_lineage は「この事業内の代理店系列」単位のロールアップです。系列名は専用カラムではなく、事業別リンク（partner_business_links）の business_parent_id を根まで遡った最上位代理店（＝この事業の1次店）の代理店名です。事業別の親が無い代理店は1次店として自分自身が系列の根になります（グローバル partners.parent_id は使いません）。partner_count は系列内のユニーク代理店数、active_share は当該系列 active_deals ÷ 全系列 active_deals 合計（小数第3位）。closed_units_period は期間内成約の台数合計（台数フィールド未解決時は null）。直販（代理店なし案件）は系列「直販」に集約します。',
+    'pipeline.by_lineage は代理店系列単位のロールアップです。系列名は専用カラムではなく、親を根まで遡った最上位代理店（＝1次店）の代理店名です。親の解決は事業別を優先しつつ多段フォールバック（1.partner_business_links.business_parent_id → 2.business_tier_number の接頭辞から復元 → 3.partners.parent_id［グローバルの親代理店］→ 4.いずれも無ければ1次店＝自分自身が系列の根）。これは系列の親子が事業別リンク側に入っているケースとグローバルの代理店マスタ側に入っているケースの双方に対応するためです。partner_count は系列内のユニーク代理店数、active_share は当該系列 active_deals ÷ 全系列 active_deals 合計（小数第3位）。closed_units_period は期間内成約の台数合計（台数フィールド未解決時は null）。直販（代理店なし案件）は系列「直販」に集約します。',
   );
 
   // --- monthly_summary ----------------------------------------------------
@@ -482,7 +460,6 @@ export async function GET(request: NextRequest) {
     monthly_summary,
     lead_time,
     notes: notes.join(' '),
-    ...(debugHierarchy ? { _debug_hierarchy: debugHierarchy } : {}),
   });
 }
 
