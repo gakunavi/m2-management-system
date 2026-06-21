@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 // グローバル親(partners.parent_id)にしか系列が無い代理店の business_parent_id 等を
 // 補完するための、一回限りの運用用。確認後にこのファイルごと削除する。
 //
-// 認証: Authorization: Bearer <STATS_API_TOKEN>（既存の機械アクセス用トークンを流用）
+// /api/stats 配下なので middleware のセッション認証を経由しない（機械アクセス）。
+// 認証: Authorization: Bearer <STATS_API_TOKEN>
 //   - GET                     → dry-run（読み取り専用・計画を返す）
 //   - POST {"confirm":"APPLY-BACKFILL"} → 適用（トランザクション）＋ 変更前スナップショット返却
 // ============================================================================
