@@ -54,10 +54,10 @@ GET /api/stats/strategy-report?months=6
 | `by_stage[].amount_total` | `projects.project_custom_data[<金額フィールド>]` の合計 | 金額フィールド = primary KPI の `sourceField`。KPI 未設定なら `null` |
 | `pipeline.by_agent[].agent` | `partners.partner_name`、`partner_id=null` → `"直販"` | 実名 |
 | `by_agent[].partner_id` | `projects.partner_id`（=`partners.id`） | 突合用内部 ID。直販 → `null` |
-| `by_agent[].lineage` | 系統名（紹介ルートの根＝最上位代理店名）。`partner_business_links.business_parent_id` を根まで遡り、最上位代理店の `partners.partner_name` を採用（グローバル `partners.parent_id` をフォールバック） | 直販 → `"直販"` / 階層情報なし → `"未分類"`。1次代理店は自分自身が根 → 自社名 |
-| `by_agent[].tier` | `partner_business_links.business_tier`（フォールバック `partners.partner_tier`） | 既存値そのまま（例: `1次代理店`/`2次代理店`）。無し → `null` |
-| `by_agent[].referrer` | 直接の親 `business_parent.partner_name`（フォールバック `parent.partner_name`） | 1次代理店/根 → `null` |
-| `by_agent[].referrer_partner_id` | `partner_business_links.business_parent_id`（フォールバック `partners.parent_id`） | 同上 → `null` |
+| `by_agent[].lineage` | 系列名。**この事業の** `partner_business_links.business_parent_id` を根まで遡った最上位代理店（1次店）の `partners.partner_name` | 直販 → `"直販"`。事業別の親が無い代理店は1次店＝自社名（未分類にしない） |
+| `by_agent[].tier` | `partner_business_links.business_tier`（表示用に `partners.partner_tier` で補完） | 既存値そのまま（例: `1次代理店`/`2次代理店`）。無し → `null` |
+| `by_agent[].referrer` | この事業内の直接の親 `business_parent.partner_name` | 1次店 → `null` |
+| `by_agent[].referrer_partner_id` | `partner_business_links.business_parent_id` | 1次店 → `null` |
 | `by_agent[].active_deals` / `.stages` | partner × status で集計 | |
 | `pipeline.by_lineage[].lineage` | 系統名（上記 `by_agent[].lineage` と同じ算出） | 直販/未分類を含む |
 | `by_lineage[].partner_count` | その系統内のユニーク代理店数 | |
@@ -89,19 +89,18 @@ GET /api/stats/strategy-report?months=6
 - **成約** = `business_status_definitions.status_is_final = true` かつ `status_is_lost = false`
 - **失注** = `status_is_lost = true`
 
-### 代理店の系統（lineage / tier / referrer）の解決
+### 代理店の系列（lineage / tier / referrer）の解決 — 事業別
 
-系統情報には **専用カラムが存在しない**。`lineage`（系統名）は紹介ルートの根を遡って導出する派生値。
+「系列(lineage)」には **専用カラムが存在しない**。**この事業内の親子（`partner_business_links.business_parent_id`）だけ**を根まで遡り、最上位代理店（＝この事業の1次店）の `partner_name` を系列名とする派生値。**本 API は単一事業スコープであり、系列はあくまで「事業ごとの紐付け」で判定する。グローバル `partners.parent_id` は使わない。**
 
-- **階層のソース（2系統）と優先順位**: 本 API は単一事業スコープのため、**事業別階層を主・グローバル階層をフォールバック**とする。
-  - 事業別（正）: `partner_business_links`（`business_tier` / `business_parent_id`）— 当該事業にリンクがある代理店はこの階層を全面採用（`business_parent_id=null` ならこの事業での 1次代理店扱い）。`formatPartner(p, businessId)` が `partner_tier` を `business_tier` で上書きする既存挙動と整合。
-  - グローバル（フォールバック）: `partners`（`partner_tier` / `parent_id`）— 当該事業にリンクが無い代理店のみ使用。
-- **`lineage`（系統名）**: 親 → 親…と根まで遡った最上位代理店の `partner_name`（深さ 10 で打ち切り）。1次代理店は自分自身が根なので自社名。
-- **`tier`**: `business_tier`（フォールバック `partner_tier`）の **既存値そのまま**（正規化・英訳しない）。
-- **`referrer` / `referrer_partner_id`**: **直接の親**（`business_parent_id`、フォールバック `parent_id`）の名前と ID。
-- **直販**（`partner_id=null` の案件）→ 系統 `"直販"` の独立グループ（tier/referrer は `null`）。
-- **未分類**（階層・親いずれも持たない代理店）→ 系統 `"未分類"`（欠損の可視化）。
-- `by_lineage[].active_share` の分母は **全系統 `active_deals` の合計**（= アクティブ案件総数。各案件は 1 系統に属する）。
+- **`lineage`（系列名）**: `business_parent_id` を根まで遡った最上位代理店の `partner_name`（深さ 10 で打ち切り）。
+  - **事業別の親が無い代理店は「1次店」＝自分自身が系列の根**（自社名が系列名）。「未分類」には落とさない。これは「紐付けが無い＝（その事業の）1次店、もしくは未連携」という実務に合わせた扱い。
+- **`tier`**: `business_tier`（無ければ表示用に `partner_tier`）の **既存値そのまま**（正規化・英訳しない）。
+- **`referrer` / `referrer_partner_id`**: この事業内の **直接の親**（`business_parent_id`）の名前と ID。1次店は `null`。
+- **直販**（`partner_id=null` の案件）→ 系列 `"直販"` の独立グループ（tier/referrer は `null`）。
+- `by_lineage[].active_share` の分母は **全系列 `active_deals` の合計**（= アクティブ案件総数。各案件は 1 系列に属する）。
+
+> **別事業を見たい場合**は `STATS_BUSINESS_CODE` を切り替える（系列は事業ごとに独立。同じ代理店でも事業が違えば親子・1次店の判定は別）。
 
 ### 取得できない / 代替した項目（`notes` に明記される）
 

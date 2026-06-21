@@ -216,11 +216,12 @@ export async function GET(request: NextRequest) {
   const closeMonthOf = (p: ProjectRow): string | null =>
     getRevenueMonth({ id: p.id, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData }, dateField);
 
-  // --- 代理店の系統（階層）情報のロード ----------------------------------
-  // 系統 = 紹介ルート。専用カラムは無く、親子チェーンを根まで遡った最上位
-  // （1次代理店）の代理店名を「系統名（lineage）」とする派生値。
-  // 事業別階層（PartnerBusinessLink）を主、グローバル階層（Partner）を
-  // フォールバックとして解決する（本 API は単一事業スコープのため）。
+  // --- 代理店の系列（事業別）情報のロード --------------------------------
+  // 「系列(lineage)」= この事業内で誰の傘下か。事業別リンク（partner_business_links）の
+  // business_parent_id を根まで遡った最上位代理店（＝この事業の1次店）の代理店名を系列名とする。
+  // ※ 本 API は単一事業スコープ。系列はあくまで「事業ごとの紐付け」で判定し、
+  //    グローバル（partners.parent_id）の親子は使わない。
+  // ※ 事業別の親が無い代理店は「1次店」＝自分自身が系列の根（未分類にしない）。
   const bizLinks = await prisma.partnerBusinessLink.findMany({
     where: { businessId: business.id },
     select: { partnerId: true, businessTier: true, businessParentId: true },
@@ -229,34 +230,29 @@ export async function GET(request: NextRequest) {
   for (const bl of bizLinks) {
     bizLinkMap.set(bl.partnerId, { tier: bl.businessTier, parentId: bl.businessParentId });
   }
-  // 代理店名・グローバル階層の解決用（祖先名は本体 Partner にしか無いため全件ロード）。
+  // 代理店名・tier ラベル解決用（祖先名は本体 Partner にしかないため全件ロード）。
   const allPartners = await prisma.partner.findMany({
-    select: { id: true, partnerName: true, partnerTier: true, parentId: true },
+    select: { id: true, partnerName: true, partnerTier: true },
   });
-  const partnerMap = new Map<number, { name: string; tier: string | null; parentId: number | null }>();
+  const partnerMap = new Map<number, { name: string; tier: string | null }>();
   for (const pt of allPartners) {
-    partnerMap.set(pt.id, { name: pt.partnerName, tier: pt.partnerTier, parentId: pt.parentId });
+    partnerMap.set(pt.id, { name: pt.partnerName, tier: pt.partnerTier });
   }
 
-  // 事業別優先・グローバルフォールバックで階層（tier/親）を解決する。
-  // 事業リンクが存在する代理店は、その事業内の階層を全面採用（親が null なら
-  // この事業での 1次代理店扱い）。リンクが無い代理店のみグローバルへフォールバック。
-  const resolveHierarchy = (partnerId: number): { tier: string | null; parentId: number | null } => {
-    const bl = bizLinkMap.get(partnerId);
-    if (bl) return { tier: bl.tier, parentId: bl.parentId };
-    const pt = partnerMap.get(partnerId);
-    if (pt) return { tier: pt.tier, parentId: pt.parentId };
-    return { tier: null, parentId: null };
-  };
   const partnerNameOf = (partnerId: number): string | null => partnerMap.get(partnerId)?.name ?? null;
+  // 事業別の親（business_parent_id）のみ。グローバルの親は参照しない。
+  const businessParentOf = (partnerId: number): number | null => bizLinkMap.get(partnerId)?.parentId ?? null;
+  // tier 表示ラベル: business_tier 優先・無ければ partner_tier（formatPartner と同じ表示規約）。
+  const tierOf = (partnerId: number): string | null =>
+    bizLinkMap.get(partnerId)?.tier ?? partnerMap.get(partnerId)?.tier ?? null;
 
-  // 紹介ルートの根（最上位代理店）まで遡って partnerId を返す（循環/異常は深さ 10 で打ち切り）。
+  // 事業内の系列の根（最上位＝1次店）まで business_parent_id を遡る。
+  // 親が無ければ自分自身が根（1次店）。循環・異常は深さ 10 で打ち切り。
   const resolveLineageRootId = (partnerId: number): number => {
     let currentId = partnerId;
     for (let depth = 0; depth < 10; depth++) {
-      const { parentId } = resolveHierarchy(currentId);
+      const parentId = businessParentOf(currentId);
       if (parentId == null || parentId === currentId) break;
-      if (!partnerMap.has(parentId) && !bizLinkMap.has(parentId)) break;
       currentId = parentId;
     }
     return currentId;
@@ -268,19 +264,15 @@ export async function GET(request: NextRequest) {
     referrer: string | null;
     referrer_partner_id: number | null;
   };
-  // 代理店ID → 系統メタ。直販(null)は独立系統、tier/親いずれも無い代理店は「未分類」。
+  // 代理店ID → 系列メタ。直販(null)は独立系列。事業別の親が無い代理店は1次店＝自分が系列の根。
   const agentMetaOf = (partnerId: number | null): AgentMeta => {
     if (partnerId == null) {
       return { lineage: '直販', tier: null, referrer: null, referrer_partner_id: null };
     }
-    const { tier, parentId } = resolveHierarchy(partnerId);
-    // 系統情報が一切無い（階層・親ともに null）代理店 → 欠損を可視化するため未分類
-    if (tier == null && parentId == null) {
-      return { lineage: '未分類', tier: null, referrer: null, referrer_partner_id: null };
-    }
-    const rootName = partnerNameOf(resolveLineageRootId(partnerId));
-    const referrer = parentId != null ? partnerNameOf(parentId) : null;
-    return { lineage: rootName ?? '未分類', tier, referrer, referrer_partner_id: parentId };
+    const parentId = businessParentOf(partnerId); // null = この事業の1次店
+    const rootName = partnerNameOf(resolveLineageRootId(partnerId)) ?? partnerNameOf(partnerId);
+    const referrer = parentId != null ? partnerNameOf(parentId) : null; // 1次店は null
+    return { lineage: rootName ?? '未分類', tier: tierOf(partnerId), referrer, referrer_partner_id: parentId };
   };
 
   // --- pipeline.by_stage（アクティブ案件のスナップショット） --------------
@@ -396,7 +388,7 @@ export async function GET(request: NextRequest) {
       active_share: totalActiveDeals > 0 ? Math.round((v.active_deals / totalActiveDeals) * 1000) / 1000 : 0,
     }));
   notes.push(
-    'pipeline.by_lineage は代理店の系統（紹介ルートの根＝最上位代理店名）単位のロールアップです。系統名は専用カラムではなく、事業別階層（partner_business_links）を主・グローバル階層（partners）をフォールバックに親子チェーンを根まで遡った最上位代理店名です。partner_count は系統内のユニーク代理店数、active_share は当該系統 active_deals ÷ 全系統 active_deals 合計（小数第3位）。closed_units_period は期間内成約の台数合計（台数フィールド未解決時は null）。直販（代理店なし案件）は系統「直販」、階層情報の無い代理店は「未分類」に集約します。',
+    'pipeline.by_lineage は「この事業内の代理店系列」単位のロールアップです。系列名は専用カラムではなく、事業別リンク（partner_business_links）の business_parent_id を根まで遡った最上位代理店（＝この事業の1次店）の代理店名です。事業別の親が無い代理店は1次店として自分自身が系列の根になります（グローバル partners.parent_id は使いません）。partner_count は系列内のユニーク代理店数、active_share は当該系列 active_deals ÷ 全系列 active_deals 合計（小数第3位）。closed_units_period は期間内成約の台数合計（台数フィールド未解決時は null）。直販（代理店なし案件）は系列「直販」に集約します。',
   );
 
   // --- monthly_summary ----------------------------------------------------

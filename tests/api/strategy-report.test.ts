@@ -181,11 +181,14 @@ describe('GET /api/stats/strategy-report', () => {
       });
       mockPrisma.businessStatusDefinition.findMany.mockResolvedValue(STATUS_DEFS);
       mockPrisma.project.findMany.mockResolvedValue(sampleProjects(cur));
-      // 代理店の系統: A代理店(1, 2次代理店) ← 親 B商事(2, 1次代理店)。
-      // 事業別リンクは無し → グローバル階層（partners）へフォールバック。
+      // 代理店の系列(事業別): A代理店(1, 2次店) ← 事業内の親 B商事(2, 1次店)。
       mockPrisma.partner.findMany.mockResolvedValue([
-        { id: 1, partnerName: '株式会社A代理店', partnerTier: '2次代理店', parentId: 2 },
-        { id: 2, partnerName: '株式会社B商事', partnerTier: '1次代理店', parentId: null },
+        { id: 1, partnerName: '株式会社A代理店', partnerTier: '2次代理店' },
+        { id: 2, partnerName: '株式会社B商事', partnerTier: '1次代理店' },
+      ]);
+      mockPrisma.partnerBusinessLink.findMany.mockResolvedValue([
+        { partnerId: 1, businessTier: '2次代理店', businessParentId: 2 },
+        { partnerId: 2, businessTier: '1次代理店', businessParentId: null },
       ]);
     });
 
@@ -330,5 +333,57 @@ describe('GET /api/stats/strategy-report', () => {
       expect(s.amount_total).toBeNull();
     }
     expect(body.notes).toContain('金額');
+  });
+
+  // --- 事業別の親が無い代理店は1次店＝自分自身を系列の根にする（未分類にしない） ---
+  // 本番で「未分類」が多発した回帰の防止。系列は事業別(business_parent_id)で判定し、
+  // 事業内に親が無い代理店は1次店として自分の名前を系列にする。
+  it('事業別の親が無い代理店は1次店として自分自身が系列の根になる（未分類にしない）', async () => {
+    mockPrisma.business.findFirst.mockResolvedValue({
+      id: 1,
+      businessCode: 'LIGHT',
+      businessName: 'ライト事業',
+      businessConfig: businessConfigWithKpi(),
+    });
+    mockPrisma.businessStatusDefinition.findMany.mockResolvedValue(STATUS_DEFS);
+    mockPrisma.project.findMany.mockResolvedValue([
+      // 1次店A（事業内の親なし）
+      { id: 31, customerId: 301, partnerId: 1, projectSalesStatus: 'quote', projectExpectedCloseMonth: null, projectCustomData: { amount: 100 }, createdAt: new Date(), projectStatusChangedAt: null, projectIsActive: true, partner: { partnerName: '1次店A' } },
+      // Aの2次店B
+      { id: 32, customerId: 302, partnerId: 2, projectSalesStatus: 'quote', projectExpectedCloseMonth: null, projectCustomData: { amount: 100 }, createdAt: new Date(), projectStatusChangedAt: null, projectIsActive: true, partner: { partnerName: '2次店B' } },
+      // 事業別リンクに階層が無い（親なし）代理店C → 1次店扱い・自分が系列の根
+      { id: 33, customerId: 303, partnerId: 3, projectSalesStatus: 'quote', projectExpectedCloseMonth: null, projectCustomData: { amount: 100 }, createdAt: new Date(), projectStatusChangedAt: null, projectIsActive: true, partner: { partnerName: '紐付け無しC' } },
+    ]);
+    mockPrisma.partner.findMany.mockResolvedValue([
+      { id: 1, partnerName: '1次店A', partnerTier: '1次代理店' },
+      { id: 2, partnerName: '2次店B', partnerTier: '2次代理店' },
+      { id: 3, partnerName: '紐付け無しC', partnerTier: null },
+    ]);
+    mockPrisma.partnerBusinessLink.findMany.mockResolvedValue([
+      { partnerId: 1, businessTier: '1次代理店', businessParentId: null },
+      { partnerId: 2, businessTier: '2次代理店', businessParentId: 1 },
+      { partnerId: 3, businessTier: null, businessParentId: null }, // リンクは在るが階層なし
+    ]);
+
+    const res = await GET(createRequest('/api/stats/strategy-report', TOKEN));
+    const body = await res.json();
+    const byAgent = (n: string) => body.pipeline.by_agent.find((x: { agent: string }) => x.agent === n);
+    // 1次店A: 自分が根
+    expect(byAgent('1次店A').lineage).toBe('1次店A');
+    expect(byAgent('1次店A').referrer).toBeNull();
+    // 2次店B: 系列は1次店A、紹介元はA
+    expect(byAgent('2次店B').lineage).toBe('1次店A');
+    expect(byAgent('2次店B').referrer).toBe('1次店A');
+    expect(byAgent('2次店B').referrer_partner_id).toBe(1);
+    // 紐付け無しC: 1次店扱い・自分が系列の根（未分類にしない）
+    expect(byAgent('紐付け無しC').lineage).toBe('紐付け無しC');
+    expect(byAgent('紐付け無しC').referrer).toBeNull();
+    // 未分類グループは存在しない
+    expect(body.pipeline.by_lineage.some((x: { lineage: string }) => x.lineage === '未分類')).toBe(false);
+    // 系列は「1次店A」(A+B) と「紐付け無しC」の2つ
+    const lineages = body.pipeline.by_lineage.map((x: { lineage: string }) => x.lineage).sort();
+    expect(lineages).toEqual(['1次店A', '紐付け無しC']);
+    const lineageA = body.pipeline.by_lineage.find((x: { lineage: string }) => x.lineage === '1次店A');
+    expect(lineageA.partner_count).toBe(2); // A, B
   });
 });
