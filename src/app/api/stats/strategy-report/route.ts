@@ -216,6 +216,73 @@ export async function GET(request: NextRequest) {
   const closeMonthOf = (p: ProjectRow): string | null =>
     getRevenueMonth({ id: p.id, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData }, dateField);
 
+  // --- 代理店の系統（階層）情報のロード ----------------------------------
+  // 系統 = 紹介ルート。専用カラムは無く、親子チェーンを根まで遡った最上位
+  // （1次代理店）の代理店名を「系統名（lineage）」とする派生値。
+  // 事業別階層（PartnerBusinessLink）を主、グローバル階層（Partner）を
+  // フォールバックとして解決する（本 API は単一事業スコープのため）。
+  const bizLinks = await prisma.partnerBusinessLink.findMany({
+    where: { businessId: business.id },
+    select: { partnerId: true, businessTier: true, businessParentId: true },
+  });
+  const bizLinkMap = new Map<number, { tier: string | null; parentId: number | null }>();
+  for (const bl of bizLinks) {
+    bizLinkMap.set(bl.partnerId, { tier: bl.businessTier, parentId: bl.businessParentId });
+  }
+  // 代理店名・グローバル階層の解決用（祖先名は本体 Partner にしか無いため全件ロード）。
+  const allPartners = await prisma.partner.findMany({
+    select: { id: true, partnerName: true, partnerTier: true, parentId: true },
+  });
+  const partnerMap = new Map<number, { name: string; tier: string | null; parentId: number | null }>();
+  for (const pt of allPartners) {
+    partnerMap.set(pt.id, { name: pt.partnerName, tier: pt.partnerTier, parentId: pt.parentId });
+  }
+
+  // 事業別優先・グローバルフォールバックで階層（tier/親）を解決する。
+  // 事業リンクが存在する代理店は、その事業内の階層を全面採用（親が null なら
+  // この事業での 1次代理店扱い）。リンクが無い代理店のみグローバルへフォールバック。
+  const resolveHierarchy = (partnerId: number): { tier: string | null; parentId: number | null } => {
+    const bl = bizLinkMap.get(partnerId);
+    if (bl) return { tier: bl.tier, parentId: bl.parentId };
+    const pt = partnerMap.get(partnerId);
+    if (pt) return { tier: pt.tier, parentId: pt.parentId };
+    return { tier: null, parentId: null };
+  };
+  const partnerNameOf = (partnerId: number): string | null => partnerMap.get(partnerId)?.name ?? null;
+
+  // 紹介ルートの根（最上位代理店）まで遡って partnerId を返す（循環/異常は深さ 10 で打ち切り）。
+  const resolveLineageRootId = (partnerId: number): number => {
+    let currentId = partnerId;
+    for (let depth = 0; depth < 10; depth++) {
+      const { parentId } = resolveHierarchy(currentId);
+      if (parentId == null || parentId === currentId) break;
+      if (!partnerMap.has(parentId) && !bizLinkMap.has(parentId)) break;
+      currentId = parentId;
+    }
+    return currentId;
+  };
+
+  type AgentMeta = {
+    lineage: string;
+    tier: string | null;
+    referrer: string | null;
+    referrer_partner_id: number | null;
+  };
+  // 代理店ID → 系統メタ。直販(null)は独立系統、tier/親いずれも無い代理店は「未分類」。
+  const agentMetaOf = (partnerId: number | null): AgentMeta => {
+    if (partnerId == null) {
+      return { lineage: '直販', tier: null, referrer: null, referrer_partner_id: null };
+    }
+    const { tier, parentId } = resolveHierarchy(partnerId);
+    // 系統情報が一切無い（階層・親ともに null）代理店 → 欠損を可視化するため未分類
+    if (tier == null && parentId == null) {
+      return { lineage: '未分類', tier: null, referrer: null, referrer_partner_id: null };
+    }
+    const rootName = partnerNameOf(resolveLineageRootId(partnerId));
+    const referrer = parentId != null ? partnerNameOf(parentId) : null;
+    return { lineage: rootName ?? '未分類', tier, referrer, referrer_partner_id: parentId };
+  };
+
   // --- pipeline.by_stage（アクティブ案件のスナップショット） --------------
   const activeProjects = projects.filter((p) => p.projectIsActive);
   const stageAgg = new Map<string, { count: number; amount: number }>();
@@ -242,37 +309,95 @@ export async function GET(request: NextRequest) {
     }));
 
   // --- pipeline.by_agent --------------------------------------------------
-  const agentAgg = new Map<string, { active_deals: number; stages: Map<string, number> }>();
+  // 代理店ID をキーに集計（同名代理店の衝突回避 + 系統メタの正確な付与）。
+  // 出力の agent は従来どおり代理店名（直販は '直販'）で後方互換を維持。
+  const agentAgg = new Map<
+    string,
+    { partnerId: number | null; name: string; active_deals: number; stages: Map<string, number> }
+  >();
   for (const p of activeProjects) {
-    const name = agentName(p);
-    const entry = agentAgg.get(name) ?? { active_deals: 0, stages: new Map<string, number>() };
+    const key = p.partnerId == null ? '__direct__' : `p${p.partnerId}`;
+    const entry =
+      agentAgg.get(key) ?? { partnerId: p.partnerId, name: agentName(p), active_deals: 0, stages: new Map<string, number>() };
     entry.active_deals += 1;
     const label = statusLabelMap.get(p.projectSalesStatus) ?? p.projectSalesStatus;
     entry.stages.set(label, (entry.stages.get(label) ?? 0) + 1);
-    agentAgg.set(name, entry);
+    agentAgg.set(key, entry);
   }
-  const by_agent = Array.from(agentAgg.entries())
-    .sort((a, b) => b[1].active_deals - a[1].active_deals)
-    .map(([agent, v]) => ({
-      agent,
-      active_deals: v.active_deals,
-      stages: Object.fromEntries(v.stages),
-    }));
+  const by_agent = Array.from(agentAgg.values())
+    .sort((a, b) => b.active_deals - a.active_deals)
+    .map((v) => {
+      const meta = agentMetaOf(v.partnerId);
+      return {
+        agent: v.name,
+        partner_id: v.partnerId,
+        lineage: meta.lineage,
+        tier: meta.tier,
+        referrer: meta.referrer,
+        referrer_partner_id: meta.referrer_partner_id,
+        active_deals: v.active_deals,
+        stages: Object.fromEntries(v.stages),
+      };
+    });
 
   // --- closed_deals（成約案件・期間内） -----------------------------------
-  const closed_deals = projects
+  const closedInPeriod = projects
     .filter((p) => wonCodes.has(p.projectSalesStatus))
     .map((p) => ({ p, month: closeMonthOf(p) }))
     .filter(({ month }) => month !== null && month >= fromYm && month <= currentYm)
-    .sort((a, b) => (a.month! < b.month! ? -1 : 1))
-    .map(({ p, month }) => ({
+    .sort((a, b) => (a.month! < b.month! ? -1 : 1));
+  const closed_deals = closedInPeriod.map(({ p, month }) => {
+    const meta = agentMetaOf(p.partnerId);
+    return {
       closed_month: month,
       agent: agentName(p),
+      lineage: meta.lineage,
+      tier: meta.tier,
       units: unitsOf(p),
       amount: amountField ? amountOf(p) : null,
       lead_time_days: null as number | null,
       customer_ref: `cust_${p.customerId}`,
+    };
+  });
+
+  // --- pipeline.by_lineage（系統ロールアップ） ----------------------------
+  // アクティブ案件（active_deals/active_share）＋ 期間内成約（closed_units_period）を
+  // 系統単位で集約。系統に現れる代理店はアクティブ・成約いずれかから収集する。
+  type LineageAgg = { agentNames: Set<string>; active_deals: number; closed_units: number };
+  const lineageAgg = new Map<string, LineageAgg>();
+  const ensureLineage = (lineage: string): LineageAgg => {
+    let e = lineageAgg.get(lineage);
+    if (!e) {
+      e = { agentNames: new Set<string>(), active_deals: 0, closed_units: 0 };
+      lineageAgg.set(lineage, e);
+    }
+    return e;
+  };
+  for (const p of activeProjects) {
+    const e = ensureLineage(agentMetaOf(p.partnerId).lineage);
+    e.agentNames.add(agentName(p));
+    e.active_deals += 1;
+  }
+  for (const { p } of closedInPeriod) {
+    const e = ensureLineage(agentMetaOf(p.partnerId).lineage);
+    e.agentNames.add(agentName(p));
+    const u = unitsOf(p);
+    if (u != null) e.closed_units += u;
+  }
+  const totalActiveDeals = activeProjects.length; // 全系統 active_deals 合計（各案件は 1 系統に属する）
+  const by_lineage = Array.from(lineageAgg.entries())
+    .sort((a, b) => b[1].active_deals - a[1].active_deals)
+    .map(([lineage, v]) => ({
+      lineage,
+      partner_count: v.agentNames.size,
+      agents: Array.from(v.agentNames).sort(),
+      active_deals: v.active_deals,
+      closed_units_period: unitsField ? v.closed_units : null,
+      active_share: totalActiveDeals > 0 ? Math.round((v.active_deals / totalActiveDeals) * 1000) / 1000 : 0,
     }));
+  notes.push(
+    'pipeline.by_lineage は代理店の系統（紹介ルートの根＝最上位代理店名）単位のロールアップです。系統名は専用カラムではなく、事業別階層（partner_business_links）を主・グローバル階層（partners）をフォールバックに親子チェーンを根まで遡った最上位代理店名です。partner_count は系統内のユニーク代理店数、active_share は当該系統 active_deals ÷ 全系統 active_deals 合計（小数第3位）。closed_units_period は期間内成約の台数合計（台数フィールド未解決時は null）。直販（代理店なし案件）は系統「直販」、階層情報の無い代理店は「未分類」に集約します。',
+  );
 
   // --- monthly_summary ----------------------------------------------------
   const monthly_summary = months_list.map((month) => {
@@ -311,7 +436,7 @@ export async function GET(request: NextRequest) {
     generated_at: nowIsoJst(now),
     business: { code: business.businessCode ?? businessCode, name: business.businessName },
     period: { from: fromStr, to: toStr },
-    pipeline: { by_stage, by_agent },
+    pipeline: { by_stage, by_agent, by_lineage },
     closed_deals,
     monthly_summary,
     lead_time,
@@ -331,7 +456,7 @@ function buildEmptyResponse(
     generated_at: nowIsoJst(now),
     business: null,
     period: { from: fromStr, to: toStr },
-    pipeline: { by_stage: [], by_agent: [] },
+    pipeline: { by_stage: [], by_agent: [], by_lineage: [] },
     closed_deals: [],
     monthly_summary: months_list.map((month) => ({
       month,
