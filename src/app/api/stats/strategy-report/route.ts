@@ -217,42 +217,69 @@ export async function GET(request: NextRequest) {
     getRevenueMonth({ id: p.id, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData }, dateField);
 
   // --- 代理店の系列（事業別）情報のロード --------------------------------
-  // 「系列(lineage)」= この事業内で誰の傘下か。事業別リンク（partner_business_links）の
-  // business_parent_id を根まで遡った最上位代理店（＝この事業の1次店）の代理店名を系列名とする。
-  // ※ 本 API は単一事業スコープ。系列はあくまで「事業ごとの紐付け」で判定し、
-  //    グローバル（partners.parent_id）の親子は使わない。
-  // ※ 事業別の親が無い代理店は「1次店」＝自分自身が系列の根（未分類にしない）。
+  // 「系列(lineage)」= この事業内で誰の傘下か。親を根まで遡った最上位代理店（＝1次店）の
+  // 代理店名を系列名とする。本 API は単一事業スコープ。
+  // 親の解決は「事業ごとの紐付け」を優先しつつ、データ欠落に堅牢な多段フォールバック:
+  //   1) partner_business_links.business_parent_id（事業別の明示FK）
+  //   2) business_tier_number の接頭辞から親を復元（FKは空だが階層番号は付与済みのデータ対策）
+  //   3) partners.parent_id（グローバルの親。事業リンク側に階層が無い場合の保険）
+  //   4) いずれも無ければ 1次店＝自分自身が系列の根（未分類にしない）
   const bizLinks = await prisma.partnerBusinessLink.findMany({
-    where: { businessId: business.id },
-    select: { partnerId: true, businessTier: true, businessParentId: true },
+    where: { businessId: business.id, linkStatus: 'active' },
+    select: { partnerId: true, businessTier: true, businessTierNumber: true, businessParentId: true },
   });
-  const bizLinkMap = new Map<number, { tier: string | null; parentId: number | null }>();
+  const bizLinkMap = new Map<
+    number,
+    { tier: string | null; tierNumber: string | null; parentId: number | null }
+  >();
+  const tierNumberToPartnerId = new Map<string, number>();
   for (const bl of bizLinks) {
-    bizLinkMap.set(bl.partnerId, { tier: bl.businessTier, parentId: bl.businessParentId });
+    bizLinkMap.set(bl.partnerId, {
+      tier: bl.businessTier,
+      tierNumber: bl.businessTierNumber,
+      parentId: bl.businessParentId,
+    });
+    if (bl.businessTierNumber) tierNumberToPartnerId.set(bl.businessTierNumber, bl.partnerId);
   }
-  // 代理店名・tier ラベル解決用（祖先名は本体 Partner にしかないため全件ロード）。
+  // 代理店名・tier ラベル・グローバル親の解決用（祖先名は本体 Partner にしかないため全件ロード）。
   const allPartners = await prisma.partner.findMany({
-    select: { id: true, partnerName: true, partnerTier: true },
+    select: { id: true, partnerName: true, partnerTier: true, parentId: true },
   });
-  const partnerMap = new Map<number, { name: string; tier: string | null }>();
+  const partnerMap = new Map<number, { name: string; tier: string | null; parentId: number | null }>();
   for (const pt of allPartners) {
-    partnerMap.set(pt.id, { name: pt.partnerName, tier: pt.partnerTier });
+    partnerMap.set(pt.id, { name: pt.partnerName, tier: pt.partnerTier, parentId: pt.parentId });
   }
 
   const partnerNameOf = (partnerId: number): string | null => partnerMap.get(partnerId)?.name ?? null;
-  // 事業別の親（business_parent_id）のみ。グローバルの親は参照しない。
-  const businessParentOf = (partnerId: number): number | null => bizLinkMap.get(partnerId)?.parentId ?? null;
   // tier 表示ラベル: business_tier 優先・無ければ partner_tier（formatPartner と同じ表示規約）。
   const tierOf = (partnerId: number): string | null =>
     bizLinkMap.get(partnerId)?.tier ?? partnerMap.get(partnerId)?.tier ?? null;
 
-  // 事業内の系列の根（最上位＝1次店）まで business_parent_id を遡る。
-  // 親が無ければ自分自身が根（1次店）。循環・異常は深さ 10 で打ち切り。
+  // 親の解決（多段フォールバック。事業別を優先）。
+  const businessParentOf = (partnerId: number): number | null => {
+    const bl = bizLinkMap.get(partnerId);
+    // 1) 事業別の明示FK
+    if (bl?.parentId != null) return bl.parentId;
+    // 2) 事業別の階層番号から親を復元（親FK欠落だが階層番号は入っているデータ）
+    if (bl?.tierNumber) {
+      const parentTierNumber = bl.tierNumber.replace(/-\d+$/, '');
+      if (parentTierNumber !== bl.tierNumber) {
+        const pid = tierNumberToPartnerId.get(parentTierNumber);
+        if (pid != null && pid !== partnerId) return pid;
+      }
+    }
+    // 3) グローバルの親
+    return partnerMap.get(partnerId)?.parentId ?? null;
+  };
+
+  // 系列の根（最上位＝1次店）まで親を遡る。親が無ければ自分自身が根。循環・異常は深さ 10 で打ち切り。
   const resolveLineageRootId = (partnerId: number): number => {
     let currentId = partnerId;
+    const seen = new Set<number>([currentId]);
     for (let depth = 0; depth < 10; depth++) {
       const parentId = businessParentOf(currentId);
-      if (parentId == null || parentId === currentId) break;
+      if (parentId == null || seen.has(parentId)) break;
+      seen.add(parentId);
       currentId = parentId;
     }
     return currentId;
@@ -264,16 +291,38 @@ export async function GET(request: NextRequest) {
     referrer: string | null;
     referrer_partner_id: number | null;
   };
-  // 代理店ID → 系列メタ。直販(null)は独立系列。事業別の親が無い代理店は1次店＝自分が系列の根。
+  // 代理店ID → 系列メタ。直販(null)は独立系列。親が無い代理店は1次店＝自分が系列の根。
   const agentMetaOf = (partnerId: number | null): AgentMeta => {
     if (partnerId == null) {
       return { lineage: '直販', tier: null, referrer: null, referrer_partner_id: null };
     }
-    const parentId = businessParentOf(partnerId); // null = この事業の1次店
+    const parentId = businessParentOf(partnerId); // null = 1次店
     const rootName = partnerNameOf(resolveLineageRootId(partnerId)) ?? partnerNameOf(partnerId);
     const referrer = parentId != null ? partnerNameOf(parentId) : null; // 1次店は null
     return { lineage: rootName ?? '未分類', tier: tierOf(partnerId), referrer, referrer_partner_id: parentId };
   };
+
+  // 一時診断: ?debug=hierarchy で、対象事業に事業リンクを持つ代理店の生の階層フィールドを返す。
+  // 「親を紐付けたのに系列が出ない」データの所在（事業別FK / 階層番号 / グローバル親）を特定するため。
+  const debugHierarchy =
+    request.nextUrl.searchParams.get('debug') === 'hierarchy'
+      ? bizLinks
+          .map((bl) => {
+            const g = partnerMap.get(bl.partnerId);
+            return {
+              partner_id: bl.partnerId,
+              name: g?.name ?? null,
+              biz_tier: bl.businessTier,
+              biz_tier_number: bl.businessTierNumber,
+              biz_parent_id: bl.businessParentId,
+              global_parent_id: g?.parentId ?? null,
+              global_tier: g?.tier ?? null,
+              resolved_parent_id: businessParentOf(bl.partnerId),
+              lineage: agentMetaOf(bl.partnerId).lineage,
+            };
+          })
+          .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'ja'))
+      : null;
 
   // --- pipeline.by_stage（アクティブ案件のスナップショット） --------------
   const activeProjects = projects.filter((p) => p.projectIsActive);
@@ -433,6 +482,7 @@ export async function GET(request: NextRequest) {
     monthly_summary,
     lead_time,
     notes: notes.join(' '),
+    ...(debugHierarchy ? { _debug_hierarchy: debugHierarchy } : {}),
   });
 }
 
