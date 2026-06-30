@@ -255,14 +255,81 @@ export async function findBusinessRootPartnerId(
 }
 
 /**
- * 事業リンク作成時に、グローバル親（partners.parent_id）から事業別階層を継承する。
+ * 同一事業内で、子リンクをグローバル親の配下に接続する（内部ヘルパー）。
  *
- * 再発防止: 代理店をある事業に紐付けるとき、その代理店にグローバル親が居て、
- * かつその親が同じ事業に階層設定済み（business_tier あり）でリンクされていれば、
- * 子リンクの business_parent_id / business_tier / business_tier_number を自動設定する。
+ * - 子リンクが存在しない／既に事業別階層が設定済み → 何もしない（手動設定を尊重）
+ * - 親リンクが存在しない → 何もしない（親が同事業に未リンク）
+ * - 親が事業別階層未設定 → 親を1次代理店に自動昇格（PATCH時の挙動と同一）
+ * - 接続後は孫もカスケード再計算
+ */
+async function connectChildToParentInBusiness(
+  tx: TxClient,
+  businessId: number,
+  childPartnerId: number,
+  parentPartnerId: number,
+): Promise<void> {
+  const childLink = await tx.partnerBusinessLink.findFirst({
+    where: { businessId, partnerId: childPartnerId, linkStatus: 'active' },
+    select: { id: true, businessTier: true },
+  });
+  if (!childLink) return; // 子が同事業に未リンク
+  if (childLink.businessTier) return; // 既に階層設定済み → 触らない
+
+  const parentLink = await tx.partnerBusinessLink.findFirst({
+    where: { businessId, partnerId: parentPartnerId, linkStatus: 'active' },
+    include: { partner: { select: { partnerCode: true } } },
+  });
+  if (!parentLink) return; // 親が同事業に未リンク
+
+  // 親が事業別階層未設定 → 1次代理店に自動昇格
+  let parentTier = parentLink.businessTier;
+  if (!parentTier) {
+    const parentTierNumber = await generateBusinessTierNumber(
+      tx, businessId, '1次代理店', null, parentLink.partner.partnerCode,
+    );
+    await tx.partnerBusinessLink.update({
+      where: { id: parentLink.id },
+      data: { businessTier: '1次代理店', businessTierNumber: parentTierNumber, businessParentId: null },
+    });
+    parentTier = '1次代理店';
+  }
+
+  const match = parentTier.match(/^(\d+)次代理店$/);
+  if (!match) return;
+  const childTier = `${parseInt(match[1], 10) + 1}次代理店`;
+
+  const childPartner = await tx.partner.findUnique({
+    where: { id: childPartnerId },
+    select: { partnerCode: true },
+  });
+  if (!childPartner) return;
+
+  const childTierNumber = await generateBusinessTierNumber(
+    tx, businessId, childTier, parentPartnerId, childPartner.partnerCode,
+  );
+
+  await tx.partnerBusinessLink.update({
+    where: { id: childLink.id },
+    data: {
+      businessParentId: parentPartnerId,
+      businessTier: childTier,
+      businessTierNumber: childTierNumber,
+    },
+  });
+
+  // 既に子の配下に孫がいれば番号をカスケード再計算
+  await recalculateBusinessDescendantTierNumbers(tx, businessId, childPartnerId);
+}
+
+/**
+ * 事業リンク作成時に、グローバルな親子関係（partners.parent_id）から事業別階層を
+ * 「双方向」で継承する。登録順に依存しないことが目的。
  *
- * - グローバル親が無い → 何もしない（その事業の1次店扱い）
- * - 親が同事業に未リンク or 事業別階層未設定 → 何もしない（安全側。後でバックフィル/手動設定）
+ * 1. 自分 → グローバル親の配下へ接続（親が同事業にリンク済みの場合）
+ * 2. 自分の配下 → 既に同事業にリンク済みのグローバル子を自分の配下へ接続
+ *
+ * これにより「親より先に子を登録」「子より後に親を登録」のどちらの順でも
+ * 最終的に正しい事業別階層に揃う。手動で階層設定済みのリンクは上書きしない。
  *
  * 対象リンクは事前に作成済みであること（同一トランザクション内で呼ぶ）。
  */
@@ -273,35 +340,20 @@ export async function inheritBusinessHierarchyOnLink(
 ): Promise<void> {
   const partner = await tx.partner.findUnique({
     where: { id: partnerId },
-    select: { parentId: true, partnerCode: true },
+    select: { parentId: true },
   });
-  if (!partner?.parentId) return; // グローバル親なし → 1次店
 
-  const parentLink = await tx.partnerBusinessLink.findFirst({
-    where: { businessId, partnerId: partner.parentId, linkStatus: 'active' },
-    select: { businessTier: true },
+  // 1. 自分をグローバル親の配下へ接続
+  if (partner?.parentId) {
+    await connectChildToParentInBusiness(tx, businessId, partnerId, partner.parentId);
+  }
+
+  // 2. 同事業に既にリンク済みのグローバル子を、自分の配下へ接続
+  const globalChildren = await tx.partner.findMany({
+    where: { parentId: partnerId },
+    select: { id: true },
   });
-  // 親が同事業にリンクされ、かつ事業別階層が設定済みのときのみ継承
-  if (!parentLink?.businessTier) return;
-
-  const match = parentLink.businessTier.match(/^(\d+)次代理店$/);
-  if (!match) return;
-  const childTier = `${parseInt(match[1], 10) + 1}次代理店`;
-
-  const childTierNumber = await generateBusinessTierNumber(
-    tx,
-    businessId,
-    childTier,
-    partner.parentId,
-    partner.partnerCode,
-  );
-
-  await tx.partnerBusinessLink.updateMany({
-    where: { businessId, partnerId },
-    data: {
-      businessParentId: partner.parentId,
-      businessTier: childTier,
-      businessTierNumber: childTierNumber,
-    },
-  });
+  for (const child of globalChildren) {
+    await connectChildToParentInBusiness(tx, businessId, child.id, partnerId);
+  }
 }
