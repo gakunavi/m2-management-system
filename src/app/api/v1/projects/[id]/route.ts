@@ -254,22 +254,8 @@ export async function PATCH(
             notifyUserIds.push(updated.projectAssignedUserId);
           }
 
-          // 2. 案件に紐づく代理店の partner_admin ユーザー
-          if (updated.partnerId) {
-            const partnerAdmins = await prisma.user.findMany({
-              where: {
-                userPartnerId: updated.partnerId,
-                userRole: 'partner_admin',
-                userIsActive: true,
-              },
-              select: { id: true },
-            });
-            for (const pa of partnerAdmins) {
-              if (pa.id !== user.id && !notifyUserIds.includes(pa.id)) {
-                notifyUserIds.push(pa.id);
-              }
-            }
-          }
+          // 代理店（partner_admin）へのステータス変更通知は送らない
+          // （社内の主担当者のみに通知する運用）
 
           if (notifyUserIds.length > 0) {
             await createNotificationsForUsers(notifyUserIds, {
