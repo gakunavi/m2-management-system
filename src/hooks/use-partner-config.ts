@@ -152,7 +152,9 @@ export function usePartnerConfig(businessId: number | null): UsePartnerConfigRes
 
   // 動的 detailConfig
   const detailConfig = useMemo<EntityDetailConfig>(() => {
-    if (partnerFields.length === 0 && globalFields.length === 0) return partnerDetailConfig;
+    if (partnerFields.length === 0 && globalFields.length === 0) {
+      return { ...partnerDetailConfig, businessId };
+    }
 
     const globalDisplayFields = buildDynamicDisplayFields(globalFields, {
       dataKey: 'partnerCustomData',
@@ -169,6 +171,7 @@ export function usePartnerConfig(businessId: number | null): UsePartnerConfigRes
 
     return {
       ...partnerDetailConfig,
+      businessId,
       tabs: [
         {
           ...infoTab,
@@ -196,7 +199,7 @@ export function usePartnerConfig(businessId: number | null): UsePartnerConfigRes
         ...partnerDetailConfig.tabs.slice(1),
       ],
     };
-  }, [partnerFields, globalFields]);
+  }, [partnerFields, globalFields, businessId]);
 
   return {
     listConfig,

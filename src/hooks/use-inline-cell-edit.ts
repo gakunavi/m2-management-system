@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient, ApiClientError } from '@/lib/api-client';
+import { parsePatchTarget, targetsListRow } from '@/lib/patch-target';
 import { useToast } from './use-toast';
 import type { EntityListConfig, CustomPatchConfig } from '@/types/config';
 
@@ -62,8 +63,16 @@ export function useInlineCellEdit(config: EntityListConfig) {
             body = { ...body, ...extra };
           }
           const updated = await apiClient.patch<Record<string, unknown>>(endpoint, body);
-          // レスポンスが親エンティティの場合のみ行置換（連絡先等の子エンティティは別スキーマ）
-          const isSameEntity = updated.id === (row.id as number) && 'version' in updated;
+
+          // PATCH 先の判定は ID の一致ではなくエンドポイントのパスで行う。
+          // ID で判定すると、案件IDと顧客IDがたまたま一致したときに
+          // 案件の行が顧客オブジェクトで置換されてしまう。
+          const target = parsePatchTarget(endpoint);
+          const isThisRow = targetsListRow(target, config.entityType, row.id as number);
+
+          // 行を置換してよいのは「この行自身」への PATCH のときだけ。
+          // 子エンティティ（連絡先等）は別スキーマなので置換しない。
+          const isSameEntity = isThisRow && !target.isChild && 'version' in updated;
           if (isSameEntity) {
             queryClient.setQueryData(queryKey, (old: unknown) => {
               if (!old || typeof old !== 'object') return old;
@@ -84,29 +93,18 @@ export function useInlineCellEdit(config: EntityListConfig) {
           queryClient.invalidateQueries({
             queryKey: [config.entityType, String(row.id)],
           });
-          // クロスエンティティ編集時: 更新先エンティティのキャッシュも無効化
-          if (updated.id !== (row.id as number)) {
-            // PATCH先のエンティティタイプを endpoint から推定
-            const ep = endpoint.toLowerCase();
-            if (ep.includes('/customers/')) {
-              queryClient.invalidateQueries({
-                queryKey: ['customer', String(updated.id)],
-              });
-              // 顧客一覧キャッシュも無効化
-              queryClient.invalidateQueries({ predicate: (q) => {
-                const key = q.queryKey[0];
-                return typeof key === 'string' && key.startsWith('/customers');
-              }});
-            }
-            if (ep.includes('/partners/')) {
-              queryClient.invalidateQueries({
-                queryKey: ['partner', String(updated.id)],
-              });
-              queryClient.invalidateQueries({ predicate: (q) => {
-                const key = q.queryKey[0];
-                return typeof key === 'string' && key.startsWith('/partners');
-              }});
-            }
+          // クロスエンティティ編集時（例: 案件一覧から顧客を編集）:
+          // 更新先エンティティの詳細・一覧キャッシュも無効化する。
+          // 無効化に使う ID はレスポンスの id ではなく URL の親ID を使う
+          // （子リソースへの PATCH ではレスポンスの id は連絡先の id になるため）。
+          if (!isThisRow && target.entityType && target.id != null) {
+            queryClient.invalidateQueries({
+              queryKey: [target.entityType, String(target.id)],
+            });
+            queryClient.invalidateQueries({ predicate: (q) => {
+              const key = q.queryKey[0];
+              return typeof key === 'string' && key.startsWith(`/${target.entityType}s`);
+            }});
           }
           // 顧客・代理店カスタムフィールド更新時は案件一覧キャッシュも無効化
           if (config.entityType === 'customer' || config.entityType === 'partner') {
@@ -166,6 +164,13 @@ export function useInlineCellEdit(config: EntityListConfig) {
               type: 'error',
             });
           }
+        } else {
+          // ネットワーク例外や「PATCH 対象が見つかりません」等。
+          // 以前は無通知でセルが赤枠になるだけで、原因が分からなかった。
+          toast({
+            message: error instanceof Error ? error.message : '更新に失敗しました',
+            type: 'error',
+          });
         }
 
         throw error;

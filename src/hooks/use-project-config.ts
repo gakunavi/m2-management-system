@@ -171,7 +171,7 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
         },
       }),
     };
-  }, [projectFields, customerShowFields, partnerShowFields, statusOptions]);
+  }, [projectFields, customerShowFields, partnerShowFields, statusOptions, businessId]);
 
   // 6. 動的 formConfig
   const formConfig = useMemo<EntityFormConfig>(() => {

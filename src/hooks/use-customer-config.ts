@@ -156,7 +156,9 @@ export function useCustomerConfig(businessId: number | null): UseCustomerConfigR
 
   // 動的 detailConfig
   const detailConfig = useMemo<EntityDetailConfig>(() => {
-    if (customerFields.length === 0 && globalFields.length === 0) return customerDetailConfig;
+    if (customerFields.length === 0 && globalFields.length === 0) {
+      return { ...customerDetailConfig, businessId };
+    }
 
     const globalDisplayFields = buildDynamicDisplayFields(globalFields, {
       dataKey: 'customerCustomData',
@@ -173,6 +175,7 @@ export function useCustomerConfig(businessId: number | null): UseCustomerConfigR
 
     return {
       ...customerDetailConfig,
+      businessId,
       tabs: [
         {
           ...infoTab,
@@ -200,7 +203,7 @@ export function useCustomerConfig(businessId: number | null): UseCustomerConfigR
         ...customerDetailConfig.tabs.slice(1),
       ],
     };
-  }, [customerFields, globalFields]);
+  }, [customerFields, globalFields, businessId]);
 
   return {
     listConfig,
