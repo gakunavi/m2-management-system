@@ -3,6 +3,18 @@ set -e
 
 PRISMA="node ./node_modules/prisma/build/index.js"
 
+# 既存DB（本番）には 0_init を実行せず「適用済み」として記録するだけにする。
+# 新規DBでは何もしない（migrate deploy が 0_init を普通に実行する）。
+echo "[entrypoint] Checking migration baseline..."
+BASELINE_RC=0
+node ./scripts/baseline-check.js || BASELINE_RC=$?
+if [ "$BASELINE_RC" -eq 0 ]; then
+  echo "[entrypoint] Marking 0_init as applied..."
+  $PRISMA migrate resolve --applied 0_init 2>&1 || echo "[entrypoint] WARNING: baseline resolve failed"
+elif [ "$BASELINE_RC" -ne 10 ]; then
+  echo "[entrypoint] WARNING: baseline check failed. Continuing anyway..."
+fi
+
 echo "[entrypoint] Running Prisma migrate deploy..."
 if $PRISMA migrate deploy 2>&1; then
   echo "[entrypoint] Migration completed successfully"
