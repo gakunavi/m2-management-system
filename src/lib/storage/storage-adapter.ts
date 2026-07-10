@@ -34,4 +34,12 @@ export interface StorageAdapter {
    * ファイルの存在確認
    */
   exists(key: string): Promise<boolean>;
+
+  /**
+   * ダウンロード用URLを取得する。
+   * S3 では短命の署名付きURL、ローカルでは公開パスを返す。
+   * @param key - upload() が返した key
+   * @param expiresInSeconds - 署名付きURLの有効期限（S3のみ）
+   */
+  getDownloadUrl(key: string, expiresInSeconds?: number): Promise<string>;
 }

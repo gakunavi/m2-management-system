@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { getStorageAdapter } from '@/lib/storage';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -49,7 +50,7 @@ async function findDocument(docId: number, businessId: number) {
   return doc;
 }
 
-function serializeDocument(doc: Record<string, unknown>) {
+async function serializeDocument(doc: Record<string, unknown>) {
   return {
     id: doc.id,
     businessId: doc.businessId,
@@ -57,7 +58,7 @@ function serializeDocument(doc: Record<string, unknown>) {
     documentTitle: doc.documentTitle,
     fileName: doc.fileName,
     fileStorageKey: doc.fileStorageKey,
-    fileUrl: doc.fileUrl,
+    fileUrl: await getDownloadUrl(doc.fileStorageKey as string, doc.fileUrl as string),
     fileSize: doc.fileSize,
     fileMimeType: doc.fileMimeType,
     targetMonth: doc.targetMonth,
@@ -137,7 +138,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       include: INCLUDE_CREATOR,
     });
 
-    return NextResponse.json({ success: true, data: serializeDocument(updated as unknown as Record<string, unknown>) });
+    return NextResponse.json({ success: true, data: await serializeDocument(updated as unknown as Record<string, unknown>) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -165,7 +166,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       include: INCLUDE_CREATOR,
     });
 
-    return NextResponse.json({ success: true, data: serializeDocument(updated as unknown as Record<string, unknown>) });
+    return NextResponse.json({ success: true, data: await serializeDocument(updated as unknown as Record<string, unknown>) });
   } catch (error) {
     return handleApiError(error);
   }

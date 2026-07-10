@@ -52,6 +52,11 @@ export class LocalStorageAdapter implements StorageAdapter {
     }
   }
 
+  async getDownloadUrl(key: string): Promise<string> {
+    // ローカル開発では public/uploads から直接配信される
+    return `/uploads/${key}`;
+  }
+
   /**
    * キーを basePath 配下に解決する。外に出る場合は例外。
    * 呼び出し側（API ルート）でも検証しているが、アダプタ単体でも防ぐ。

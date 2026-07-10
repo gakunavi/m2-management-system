@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { getStorageAdapter } from '@/lib/storage';
 
 // ============================================
@@ -32,7 +33,7 @@ const VALID_DOCUMENT_TYPES = ['material', 'invoice'];
 // ヘルパー
 // ============================================
 
-function serializeDocument(doc: {
+async function serializeDocument(doc: {
   id: number;
   businessId: number;
   documentType: string;
@@ -60,7 +61,7 @@ function serializeDocument(doc: {
     documentTitle: doc.documentTitle,
     fileName: doc.fileName,
     fileStorageKey: doc.fileStorageKey,
-    fileUrl: doc.fileUrl,
+    fileUrl: await getDownloadUrl(doc.fileStorageKey, doc.fileUrl),
     fileSize: doc.fileSize,
     fileMimeType: doc.fileMimeType,
     targetMonth: doc.targetMonth,
@@ -125,7 +126,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: documents.map(serializeDocument),
+      data: await Promise.all(documents.map(serializeDocument)),
     });
   } catch (error) {
     return handleApiError(error);
@@ -211,7 +212,7 @@ export async function POST(
       include: INCLUDE_CREATOR,
     });
 
-    return NextResponse.json({ success: true, data: serializeDocument(created) }, { status: 201 });
+    return NextResponse.json({ success: true, data: await serializeDocument(created) }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

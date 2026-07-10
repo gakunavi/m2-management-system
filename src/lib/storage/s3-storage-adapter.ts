@@ -5,8 +5,13 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { StorageAdapter, UploadResult } from './storage-adapter';
+
+// 署名付きURLのデフォルト有効期限（秒）。ダウンロードに十分かつ短めに。
+const DEFAULT_SIGNED_URL_EXPIRY = 300;
 
 // ============================================
 // AWS S3 保存アダプタ
@@ -85,5 +90,16 @@ export class S3StorageAdapter implements StorageAdapter {
     } catch {
       return false;
     }
+  }
+
+  async getDownloadUrl(
+    key: string,
+    expiresInSeconds: number = DEFAULT_SIGNED_URL_EXPIRY,
+  ): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { expiresIn: expiresInSeconds },
+    );
   }
 }

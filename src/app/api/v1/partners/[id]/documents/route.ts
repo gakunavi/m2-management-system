@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { getStorageAdapter } from '@/lib/storage';
 
 // ============================================
@@ -32,7 +33,7 @@ const INCLUDE_RELATIONS = {
 } as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serializeDocument(doc: any) {
+async function serializeDocument(doc: any) {
   return {
     id: doc.id,
     businessId: doc.businessId,
@@ -41,7 +42,7 @@ function serializeDocument(doc: any) {
     documentTitle: doc.documentTitle,
     fileName: doc.fileName,
     fileStorageKey: doc.fileStorageKey,
-    fileUrl: doc.fileUrl,
+    fileUrl: await getDownloadUrl(doc.fileStorageKey, doc.fileUrl),
     fileSize: doc.fileSize,
     fileMimeType: doc.fileMimeType,
     targetMonth: doc.targetMonth,
@@ -101,7 +102,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: documents.map(serializeDocument),
+      data: await Promise.all(documents.map(serializeDocument)),
     });
   } catch (error) {
     return handleApiError(error);
@@ -183,7 +184,7 @@ export async function POST(
       include: INCLUDE_RELATIONS,
     });
 
-    return NextResponse.json({ success: true, data: serializeDocument(created) }, { status: 201 });
+    return NextResponse.json({ success: true, data: await serializeDocument(created) }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }
