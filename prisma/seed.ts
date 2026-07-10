@@ -1,5 +1,8 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { encrypt, ENCRYPTION_PURPOSE } from '../src/lib/encryption';
+
+const encryptPassword = (plain: string) => encrypt(plain, ENCRYPTION_PURPOSE.userPassword);
 
 const prisma = new PrismaClient();
 
@@ -278,7 +281,7 @@ async function main() {
       data: {
         userEmail: 'admin@example.com',
         userPasswordHash: adminHash,
-        userPasswordPlain: 'admin123',
+        userPasswordEnc: encryptPassword('admin123'),
         userName: '管理者 太郎',
         userRole: 'admin',
       },
@@ -288,7 +291,7 @@ async function main() {
       data: {
         userEmail: 'staff@example.com',
         userPasswordHash: staffHash,
-        userPasswordPlain: 'staff123',
+        userPasswordEnc: encryptPassword('staff123'),
         userName: '山田 花子',
         userRole: 'staff',
         createdBy: admin.id,
@@ -299,7 +302,7 @@ async function main() {
       data: {
         userEmail: 'staff2@example.com',
         userPasswordHash: staff2Hash,
-        userPasswordPlain: 'staff456',
+        userPasswordEnc: encryptPassword('staff456'),
         userName: '佐々木 一郎',
         userRole: 'staff',
         createdBy: admin.id,
@@ -310,7 +313,7 @@ async function main() {
       data: {
         userEmail: 'partner-admin@example.com',
         userPasswordHash: partnerHash,
-        userPasswordPlain: 'partner123',
+        userPasswordEnc: encryptPassword('partner123'),
         userName: '佐藤 代理店長',
         userRole: 'partner_admin',
         createdBy: admin.id,
@@ -321,7 +324,7 @@ async function main() {
       data: {
         userEmail: 'partner-staff@example.com',
         userPasswordHash: partnerHash,
-        userPasswordPlain: 'partner123',
+        userPasswordEnc: encryptPassword('partner123'),
         userName: '中村 美咲',
         userRole: 'partner_staff',
         createdBy: admin.id,
@@ -332,7 +335,7 @@ async function main() {
       data: {
         userEmail: 'partner-admin2@example.com',
         userPasswordHash: partnerHash,
-        userPasswordPlain: 'partner123',
+        userPasswordEnc: encryptPassword('partner123'),
         userName: '木村 浩二',
         userRole: 'partner_admin',
         createdBy: admin.id,

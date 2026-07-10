@@ -46,5 +46,15 @@ else
   fi
 fi
 
+# 発行パスワードの平文 → AES-256-GCM 暗号化（冪等・実質1回だけ効く移行）
+# 失敗してもアプリ自体は動く（平文フォールバックがあるため）ので、
+# ここでコンテナを落とさない。
+echo "[entrypoint] Encrypting legacy plaintext passwords..."
+if node ./scripts/encrypt-existing-passwords.js 2>&1; then
+  echo "[entrypoint] Password encryption step completed"
+else
+  echo "[entrypoint] WARNING: Password encryption failed. Continuing anyway..."
+fi
+
 echo "[entrypoint] Starting server..."
 exec node server.js

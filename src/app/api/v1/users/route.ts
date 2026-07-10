@@ -9,6 +9,7 @@ import type { Prisma } from '@prisma/client';
 import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort, appSortPagination } from '@/lib/sort/engine';
 import { USER_SORT_SPEC } from '@/lib/sort/specs';
+import { encryptPassword, decryptPasswordSafe } from '@/lib/password-vault';
 
 // ============================================
 // 入力バリデーションスキーマ
@@ -35,7 +36,7 @@ function formatUser(user: {
   userName: string;
   userRole: string;
   userPartnerId: number | null;
-  userPasswordPlain: string | null;
+  userPasswordEnc: string | null;
   userIsActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -49,7 +50,7 @@ function formatUser(user: {
     userRole: user.userRole,
     userRoleLabel: USER_ROLE_LABELS[user.userRole] ?? user.userRole,
     userPartnerId: user.userPartnerId,
-    userPasswordPlain: user.userPasswordPlain,
+    userPasswordIssued: decryptPasswordSafe(user.userPasswordEnc),
     userIsActive: user.userIsActive,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest) {
           userEmail: data.userEmail,
           userName: data.userName,
           userPasswordHash: passwordHash,
-          userPasswordPlain: data.userPassword,
+          userPasswordEnc: encryptPassword(data.userPassword),
           userRole: data.userRole,
           userPartnerId: data.userPartnerId ?? null,
           userIsActive: true,

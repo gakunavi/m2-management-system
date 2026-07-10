@@ -12,7 +12,9 @@ model User {
   id                  Int                      @id @default(autoincrement())
   userEmail           String                   @unique @map("user_email") @db.VarChar(255)
   userPasswordHash    String                   @map("user_password_hash") @db.VarChar(255)
-  userPasswordPlain   String?                  @map("user_password_plain") @db.VarChar(100)
+  /// 発行パスワードの表示用コピー。AES-256-GCM で暗号化して保存する（src/lib/password-vault.ts）。
+  /// 認証には使わない。認証は userPasswordHash（bcrypt）のみ。
+  userPasswordEnc     String?                  @map("user_password_encrypted") @db.VarChar(512)
   userName            String                   @map("user_name") @db.VarChar(100)
   userRole            String                   @map("user_role") @db.VarChar(20)
   userPartnerId       Int?                     @map("user_partner_id")

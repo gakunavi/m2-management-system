@@ -31,7 +31,7 @@ interface StaffItem {
   userName: string;
   userRole: string;
   userRoleLabel: string;
-  userPasswordPlain: string | null;
+  userPasswordIssued: string | null;
   userIsActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -208,9 +208,9 @@ export function StaffListClient() {
                     {staff.userEmail}
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
-                    {staff.userPasswordPlain ? (
+                    {staff.userPasswordIssued ? (
                       <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
-                        {staff.userPasswordPlain}
+                        {staff.userPasswordIssued}
                       </code>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>

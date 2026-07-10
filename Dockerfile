@@ -57,7 +57,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modul
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/package.json ./package.json
 
-# エントリポイントスクリプト（migrate deploy → server 起動）
+# 起動時に走る移行スクリプト（素の Node で動く .js のみ）
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+
+# エントリポイントスクリプト（migrate deploy → パスワード暗号化 → server 起動）
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 
 USER nextjs

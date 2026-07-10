@@ -71,7 +71,7 @@ interface UserData {
   userEmail: string;
   userRole: string;
   userPartnerId: number | null;
-  userPasswordPlain: string | null;
+  userPasswordIssued: string | null;
   userIsActive: boolean;
   businesses: { id: number; businessCode: string; businessName: string }[];
 }
@@ -348,10 +348,10 @@ export function UserFormClient({ mode, userId }: Props) {
             {errors.userPassword && (
               <p className="text-xs text-destructive">{errors.userPassword}</p>
             )}
-            {mode === 'edit' && initial?.userPasswordPlain && (
+            {mode === 'edit' && initial?.userPasswordIssued && (
               <div className="mt-1 p-2 bg-muted rounded-md">
                 <p className="text-xs text-muted-foreground mb-1">現在のパスワード:</p>
-                <code className="text-sm font-mono">{initial.userPasswordPlain}</code>
+                <code className="text-sm font-mono">{initial.userPasswordIssued}</code>
               </div>
             )}
           </div>
