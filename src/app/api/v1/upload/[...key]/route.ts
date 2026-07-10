@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { getStorageAdapter } from '@/lib/storage';
+import { isSafeStorageKey } from '@/lib/storage/storage-key';
 
 // ============================================
 // DELETE /api/v1/upload/[...key]
@@ -25,6 +26,11 @@ export async function DELETE(
 
     if (!fileKey) {
       throw new ApiError('VALIDATION_ERROR', 'ファイルキーが指定されていません', 400);
+    }
+
+    // `..` を含むキーで保存領域外のファイルを削除されるのを防ぐ
+    if (!isSafeStorageKey(fileKey)) {
+      throw new ApiError('VALIDATION_ERROR', 'ファイルキーが不正です', 400);
     }
 
     const storage = getStorageAdapter();

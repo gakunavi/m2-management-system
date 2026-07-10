@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { requireInternalUser } from '@/lib/authz';
 
 // ============================================
 // GET /api/v1/partners/candidates
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
+    requireInternalUser(session);
 
     const { searchParams } = request.nextUrl;
     const tier = searchParams.get('tier') ?? '';

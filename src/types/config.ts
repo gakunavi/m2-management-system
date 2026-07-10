@@ -242,6 +242,12 @@ export type EntityDetailConfig = {
   /** ページパスのベース（例: '/businesses'）。省略時は `/${entityType}s` を使用 */
   basePath?: string;
   apiEndpoint: (id: string) => string;
+  /**
+   * 選択中の事業ID。指定すると詳細 GET に `?businessId=` が付き、
+   * API が中間テーブルの事業別カスタムデータ（linkCustomData）を展開して返す。
+   * 未指定だと「事業カスタム情報」セクションが常に空になる。
+   */
+  businessId?: number | null;
   title: (data: Record<string, unknown>) => string;
   tabs: TabDef[];
   actions: {

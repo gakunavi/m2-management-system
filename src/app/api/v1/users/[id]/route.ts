@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { encryptPassword, decryptPasswordSafe } from '@/lib/password-vault';
 
 // ============================================
 // 入力バリデーションスキーマ
@@ -46,7 +47,7 @@ function formatUser(user: {
   userName: string;
   userRole: string;
   userPartnerId: number | null;
-  userPasswordPlain: string | null;
+  userPasswordEnc: string | null;
   userIsActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -60,7 +61,7 @@ function formatUser(user: {
     userRole: user.userRole,
     userRoleLabel: USER_ROLE_LABELS[user.userRole] ?? user.userRole,
     userPartnerId: user.userPartnerId,
-    userPasswordPlain: user.userPasswordPlain,
+    userPasswordIssued: decryptPasswordSafe(user.userPasswordEnc),
     userIsActive: user.userIsActive,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -164,7 +165,7 @@ export async function PATCH(
       if (data.userIsActive !== undefined) updateData.userIsActive = data.userIsActive;
       if (data.userPassword) {
         updateData.userPasswordHash = await bcrypt.hash(data.userPassword, 12);
-        updateData.userPasswordPlain = data.userPassword;
+        updateData.userPasswordEnc = encryptPassword(data.userPassword);
       }
 
       await tx.user.update({ where: { id: userId }, data: updateData });

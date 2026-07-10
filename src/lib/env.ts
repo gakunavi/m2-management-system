@@ -55,6 +55,11 @@ export const env = {
   EMAIL_FROM: optional('EMAIL_FROM'),
   EMAIL_API_KEY: optional('EMAIL_API_KEY'),
 
+  // 可逆暗号化キー（システム設定のAPIキーと、発行パスワードの保管に使用）
+  // 未設定時は NEXTAUTH_SECRET から派生する。
+  // 注意: この値を変更すると既存の暗号化データは復号できなくなる。
+  ENCRYPTION_KEY: optional('ENCRYPTION_KEY'),
+
   // Cron
   CRON_SECRET: optional('CRON_SECRET'),
 

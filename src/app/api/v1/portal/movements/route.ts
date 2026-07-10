@@ -95,12 +95,6 @@ export async function GET(request: NextRequest) {
     });
 
     const visibleTemplateIds = templates.map((t) => t.id);
-    // テンプレートID → 連動フィールドキーのマップ
-    const templateLinkedFieldMap = new Map(
-      templates
-        .filter((t) => t.stepLinkedFieldKey)
-        .map((t) => [t.id, t.stepLinkedFieldKey!]),
-    );
 
     // 案件 + ムーブメント取得（visibleToPartner テンプレートのみ）
     const projects = await prisma.project.findMany({
@@ -112,7 +106,6 @@ export async function GET(request: NextRequest) {
         projectSalesStatus: true,
         projectExpectedCloseMonth: true,
         projectAssignedUserName: true,
-        projectNotes: true,
         projectCustomData: true,
         customer: { select: { customerName: true } },
         movements: {
@@ -152,6 +145,19 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options }));
 
+    // テンプレートID → 連動フィールドキーのマップ
+    // 連動フィールド自体が visibleToPartner でなければ値を返さない
+    // （meta 側は既に非公開フィールドを null にしているため UI は表示しないが、
+    //   レスポンスの payload には値が含まれてしまっていた）
+    const partnerVisibleFieldKeys = new Set(
+      projectFields.filter((f) => f.visibleToPartner).map((f) => f.key),
+    );
+    const templateLinkedFieldMap = new Map(
+      templates
+        .filter((t) => t.stepLinkedFieldKey && partnerVisibleFieldKeys.has(t.stepLinkedFieldKey))
+        .map((t) => [t.id, t.stepLinkedFieldKey!]),
+    );
+
     // ステータス定義
     const allStatusDefs = await prisma.businessStatusDefinition.findMany({
       where: { businessId: bizId, statusIsActive: true },
@@ -187,7 +193,6 @@ export async function GET(request: NextRequest) {
         projectSalesStatusColor: status?.color ?? null,
         projectExpectedCloseMonth: p.projectExpectedCloseMonth,
         projectAssignedUserName: p.projectAssignedUserName,
-        projectNotes: p.projectNotes,
         projectNeeds: needsKey ? String((p.projectCustomData as Record<string, unknown>)?.[needsKey] ?? '') || null : null,
         customerName: p.customer?.customerName ?? null,
         movements: p.movements.map((m) => {

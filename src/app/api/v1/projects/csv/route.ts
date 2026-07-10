@@ -49,6 +49,12 @@ export async function GET(request: NextRequest) {
     if (!session?.user) throw ApiError.unauthorized();
 
     const user = session.user as { id: number; role: string; partnerId?: number };
+
+    // CSV エクスポートは社内ユーザー専用（代理店は middleware でも遮断される）
+    if (!['admin', 'staff'].includes(user.role)) {
+      throw ApiError.forbidden();
+    }
+
     const { searchParams } = request.nextUrl;
 
     const search = searchParams.get('search') ?? '';
@@ -64,17 +70,27 @@ export async function GET(request: NextRequest) {
         : {}),
     };
 
-    if (businessIdParam) {
-      where.businessId = parseInt(businessIdParam, 10);
-    } else if (user.role === 'staff') {
+    const requestedBusinessId = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
+
+    if (requestedBusinessId !== undefined) {
+      where.businessId = requestedBusinessId;
+    }
+
+    // staff は自分がアサインされた事業のみ。
+    // businessId 指定の有無に関わらず適用する（指定でスコープが外れないように）。
+    if (user.role === 'staff') {
       const assignments = await prisma.userBusinessAssignment.findMany({
         where: { userId: user.id },
         select: { businessId: true },
       });
-      where.businessId = { in: assignments.map((a) => a.businessId) };
-    } else if (user.role === 'partner_admin' || user.role === 'partner_staff') {
-      if (user.partnerId) {
-        where.partnerId = user.partnerId;
+      const assignedBusinessIds = assignments.map((a) => a.businessId);
+
+      if (requestedBusinessId !== undefined) {
+        if (!assignedBusinessIds.includes(requestedBusinessId)) {
+          throw ApiError.forbidden('この事業の案件をエクスポートする権限がありません');
+        }
+      } else {
+        where.businessId = { in: assignedBusinessIds };
       }
     }
 

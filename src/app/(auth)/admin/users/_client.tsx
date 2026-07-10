@@ -43,7 +43,7 @@ interface UserItem {
   userRole: string;
   userRoleLabel: string;
   userPartnerId: number | null;
-  userPasswordPlain: string | null;
+  userPasswordIssued: string | null;
   userIsActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -569,9 +569,9 @@ function UserRow({
       </td>
       <td className="px-4 py-3 text-muted-foreground">{user.userEmail}</td>
       <td className="px-4 py-3">
-        {user.userPasswordPlain ? (
+        {user.userPasswordIssued ? (
           <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
-            {user.userPasswordPlain}
+            {user.userPasswordIssued}
           </code>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>

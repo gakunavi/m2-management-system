@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { requireInternalUser } from '@/lib/authz';
 import { findRootPartnerId } from '@/lib/partner-hierarchy';
 
 // ============================================
@@ -17,6 +18,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
+    requireInternalUser(session);
 
     const { id } = await params;
     const partnerId = parseInt(id, 10);
