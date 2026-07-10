@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { requireInternalUser } from '@/lib/authz';
 import {
   createBankAccountSchema,
   formatBankAccount,
@@ -20,6 +21,7 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
+    requireInternalUser(session);
 
     const { id } = await params;
     const customerId = parseInt(id, 10);
@@ -57,6 +59,7 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
+    requireInternalUser(session);
 
     const user = session.user as { id: number; role: string };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();

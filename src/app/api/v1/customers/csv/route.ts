@@ -20,6 +20,12 @@ export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
+    // CSV エクスポートは社内ユーザー専用（代理店は middleware でも遮断される）
+    const user = session.user as { role: string };
+    if (!['admin', 'staff'].includes(user.role)) {
+      throw ApiError.forbidden();
+    }
+
     const { searchParams } = request.nextUrl;
     const search = searchParams.get('search') ?? '';
     const customerType = searchParams.get('filter[customerType]') || searchParams.get('customerType') || '';

@@ -108,31 +108,67 @@ export async function GET(request: NextRequest) {
       where.customerId = parseInt(customerIdParam, 10);
     }
 
-    // 代理店フィルター（関連案件タブ用）
-    if (partnerIdParam) {
-      where.partnerId = parseInt(partnerIdParam, 10);
+    const requestedBusinessId = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
+    const requestedPartnerId = partnerIdParam ? parseInt(partnerIdParam, 10) : undefined;
+
+    // 事業フィルター（クエリ指定は「絞り込み」であって権限の緩和ではない）
+    if (requestedBusinessId !== undefined) {
+      where.businessId = requestedBusinessId;
     }
 
-    // 事業フィルター
-    if (businessIdParam) {
-      where.businessId = parseInt(businessIdParam, 10);
-    } else if (user.role === 'staff') {
-      // staffは自分がアサインされた事業のみ
+    // ============================================
+    // ロール別スコープ
+    // ============================================
+    // businessId の指定有無に関わらず必ず適用する。
+    // 以前は `if (businessId) {...} else if (role) {...}` の連鎖だったため、
+    // ?businessId=X を付けるだけで代理店スコープと portalVisible が外れていた。
+    if (user.role === 'staff') {
+      // staff は自分がアサインされた事業のみ
       const assignments = await prisma.userBusinessAssignment.findMany({
         where: { userId: user.id },
         select: { businessId: true },
       });
-      where.businessId = { in: assignments.map((a) => a.businessId) };
-    } else if (user.role === 'partner_admin') {
-      if (user.partnerId) {
-        const businessIdForScope = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
-        const partnerIds = await getBusinessPartnerScope(prisma, user.partnerId, businessIdForScope);
-        where.partnerId = { in: partnerIds };
+      const assignedBusinessIds = assignments.map((a) => a.businessId);
+
+      if (requestedBusinessId !== undefined) {
+        if (!assignedBusinessIds.includes(requestedBusinessId)) {
+          throw ApiError.forbidden('この事業の案件を閲覧する権限がありません');
+        }
+      } else {
+        where.businessId = { in: assignedBusinessIds };
       }
+    } else if (user.role === 'partner_admin' || user.role === 'partner_staff') {
+      // 代理店に partnerId が無い場合は絞り込めないので拒否する（フェイルクローズ）
+      if (!user.partnerId) {
+        throw ApiError.forbidden('代理店が紐づいていないため案件を閲覧できません');
+      }
+
       where.portalVisible = true;
-    } else if (user.role === 'partner_staff') {
-      where.projectAssignedUserId = user.id;
-      where.portalVisible = true;
+
+      if (user.role === 'partner_staff') {
+        where.projectAssignedUserId = user.id;
+      } else {
+        const scopedPartnerIds = await getBusinessPartnerScope(
+          prisma,
+          user.partnerId,
+          requestedBusinessId,
+        );
+
+        // partnerId フィルターはスコープと交差させる（スコープ外の指定は拒否）
+        if (requestedPartnerId !== undefined) {
+          if (!scopedPartnerIds.includes(requestedPartnerId)) {
+            throw ApiError.forbidden('この代理店の案件を閲覧する権限がありません');
+          }
+        } else {
+          where.partnerId = { in: scopedPartnerIds };
+        }
+      }
+    }
+
+    // 代理店フィルター（関連案件タブ用）
+    // 代理店ロールでは上のスコープ検証を通過した場合のみ適用される
+    if (requestedPartnerId !== undefined && where.partnerId === undefined) {
+      where.partnerId = requestedPartnerId;
     }
 
     // テキスト検索

@@ -1,6 +1,21 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
 import { checkRateLimit, AUTH_RATE_LIMIT, UPLOAD_RATE_LIMIT, API_RATE_LIMIT } from '@/lib/rate-limit';
+import { isPartnerApiAllowed, isPartnerRole } from '@/lib/partner-api-allowlist';
+
+// 代理店ユーザーが開けない社内専用ページ
+const INTERNAL_ONLY_PATHS = [
+  '/businesses',
+  '/customers',
+  '/partners',
+  '/projects',
+  '/movements',
+  '/admin',
+  '/announcements',
+  '/accounting',
+  '/ai-assistant',
+  '/tasks',
+];
 
 function getClientIp(headers: Headers): string {
   return (
@@ -40,13 +55,7 @@ export default withAuth(
       // パートナードメインで社内専用パスにアクセス → /portal にリダイレクト
       if (
         pathname.startsWith('/dashboard') ||
-        pathname.startsWith('/businesses') ||
-        pathname.startsWith('/customers') ||
-        pathname.startsWith('/partners') ||
-        pathname.startsWith('/projects') ||
-        pathname.startsWith('/movements') ||
-        pathname.startsWith('/admin') ||
-        pathname.startsWith('/announcements')
+        INTERNAL_ONLY_PATHS.some((p) => pathname.startsWith(p))
       ) {
         return NextResponse.redirect(new URL('/portal', request.url));
       }
@@ -88,7 +97,21 @@ export default withAuth(
     }
 
     const role = token.role as string;
-    const isPartner = role === 'partner_admin' || role === 'partner_staff';
+    const isPartner = isPartnerRole(role);
+
+    // ============================================
+    // 代理店ロールの API アクセス制御（許可リスト方式）
+    // ============================================
+    // 個々のルートのロールチェックに頼らず、社内向け API を一元的に遮断する。
+    // 許可対象は src/lib/partner-api-allowlist.ts を参照。
+    if (isPartner && pathname.startsWith('/api/v1/') && !pathname.startsWith('/api/v1/cron')) {
+      if (!isPartnerApiAllowed(pathname, request.method, role)) {
+        return NextResponse.json(
+          { success: false, error: { message: 'この操作を行う権限がありません' } },
+          { status: 403 },
+        );
+      }
+    }
 
     // 代理店ユーザーが管理画面にアクセス → /portal にリダイレクト
     if (isPartner && pathname.startsWith('/dashboard')) {
@@ -96,8 +119,7 @@ export default withAuth(
     }
 
     // 代理店ユーザーが社内専用ページにアクセス → /portal にリダイレクト
-    const internalOnlyPaths = ['/businesses', '/customers', '/partners', '/projects', '/movements', '/admin', '/announcements'];
-    if (isPartner && internalOnlyPaths.some((p) => pathname.startsWith(p))) {
+    if (isPartner && INTERNAL_ONLY_PATHS.some((p) => pathname.startsWith(p))) {
       return NextResponse.redirect(new URL('/portal', request.url));
     }
 

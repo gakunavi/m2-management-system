@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { requireInternalUser } from '@/lib/authz';
 import { updateMovementSchema } from '@/lib/validations/movement';
 import type { Prisma } from '@prisma/client';
 
@@ -17,6 +18,7 @@ export async function PATCH(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
+    requireInternalUser(session);
 
     const user = session.user as { id: number; role: string };
     const { id, movementId } = await params;
