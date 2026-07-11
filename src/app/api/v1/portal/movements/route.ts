@@ -137,7 +137,9 @@ export async function GET(request: NextRequest) {
     });
     const businessConfig = (business?.businessConfig ?? {}) as Record<string, unknown>;
     const projectFields = (businessConfig.projectFields ?? []) as Array<{ key: string; label: string; type: string; options?: string[]; filterable?: boolean; visibleToPartner?: boolean; sortOrder: number }>;
-    const needsField = projectFields.find((f) => f.label === 'ニーズ');
+    // ニーズ欄も他のカスタムフィールドと同様に visibleToPartner に従う。
+    // 非公開に設定したフィールドが代理店に見えたままにならないようにする。
+    const needsField = projectFields.find((f) => f.label === 'ニーズ' && f.visibleToPartner);
     const needsKey = needsField?.key ?? null;
     // filterable かつ visibleToPartner なフィールド定義
     const filterableFieldDefs = projectFields

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { qaItemSchema } from '@/lib/validations/qa';
 import { getStorageAdapter } from '@/lib/storage';
 import { logger } from '@/lib/logger';
@@ -94,15 +95,17 @@ export async function GET(
         itemViewCount: item.itemViewCount,
         itemSortOrder: item.itemSortOrder,
         itemPublishedAt: item.itemPublishedAt ? item.itemPublishedAt.toISOString() : null,
-        attachments: item.attachments.map((att) => ({
-          id: att.id,
-          attachmentName: att.attachmentName,
-          attachmentOriginalName: att.attachmentOriginalName,
-          attachmentUrl: att.attachmentUrl,
-          attachmentSize: att.attachmentSize,
-          attachmentMimeType: att.attachmentMimeType,
-          createdAt: att.createdAt.toISOString(),
-        })),
+        attachments: await Promise.all(
+          item.attachments.map(async (att) => ({
+            id: att.id,
+            attachmentName: att.attachmentName,
+            attachmentOriginalName: att.attachmentOriginalName,
+            attachmentUrl: await getDownloadUrl(att.attachmentStorageKey, att.attachmentUrl),
+            attachmentSize: att.attachmentSize,
+            attachmentMimeType: att.attachmentMimeType,
+            createdAt: att.createdAt.toISOString(),
+          })),
+        ),
         creator: item.creator
           ? { id: item.creator.id, userName: item.creator.userName }
           : null,

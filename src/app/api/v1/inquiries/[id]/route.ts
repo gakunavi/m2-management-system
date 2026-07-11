@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { inquiryUpdateSchema } from '@/lib/validations/inquiry';
 
 const PARTNER_ROLES = ['partner_admin', 'partner_staff'];
@@ -72,18 +73,20 @@ export async function GET(
         respondedByUser: inquiry.respondedByUser,
         convertedQa: inquiry.convertedQa,
         project: inquiry.project,
-        attachments: inquiry.attachments.map((a) => ({
-          id: a.id,
-          inquiryId: a.inquiryId,
-          attachmentName: a.attachmentName,
-          attachmentOriginalName: a.attachmentOriginalName,
-          attachmentStorageKey: a.attachmentStorageKey,
-          attachmentUrl: a.attachmentUrl,
-          attachmentSize: a.attachmentSize,
-          attachmentMimeType: a.attachmentMimeType,
-          uploadedBy: a.uploadedBy,
-          createdAt: a.createdAt.toISOString(),
-        })),
+        attachments: await Promise.all(
+          inquiry.attachments.map(async (a) => ({
+            id: a.id,
+            inquiryId: a.inquiryId,
+            attachmentName: a.attachmentName,
+            attachmentOriginalName: a.attachmentOriginalName,
+            attachmentStorageKey: a.attachmentStorageKey,
+            attachmentUrl: await getDownloadUrl(a.attachmentStorageKey, a.attachmentUrl),
+            attachmentSize: a.attachmentSize,
+            attachmentMimeType: a.attachmentMimeType,
+            uploadedBy: a.uploadedBy,
+            createdAt: a.createdAt.toISOString(),
+          })),
+        ),
       },
     });
   } catch (error) {
@@ -164,18 +167,20 @@ export async function PATCH(
         respondedByUser: updated.respondedByUser,
         convertedQa: updated.convertedQa,
         project: updated.project,
-        attachments: updated.attachments.map((a) => ({
-          id: a.id,
-          inquiryId: a.inquiryId,
-          attachmentName: a.attachmentName,
-          attachmentOriginalName: a.attachmentOriginalName,
-          attachmentStorageKey: a.attachmentStorageKey,
-          attachmentUrl: a.attachmentUrl,
-          attachmentSize: a.attachmentSize,
-          attachmentMimeType: a.attachmentMimeType,
-          uploadedBy: a.uploadedBy,
-          createdAt: a.createdAt.toISOString(),
-        })),
+        attachments: await Promise.all(
+          updated.attachments.map(async (a) => ({
+            id: a.id,
+            inquiryId: a.inquiryId,
+            attachmentName: a.attachmentName,
+            attachmentOriginalName: a.attachmentOriginalName,
+            attachmentStorageKey: a.attachmentStorageKey,
+            attachmentUrl: await getDownloadUrl(a.attachmentStorageKey, a.attachmentUrl),
+            attachmentSize: a.attachmentSize,
+            attachmentMimeType: a.attachmentMimeType,
+            uploadedBy: a.uploadedBy,
+            createdAt: a.createdAt.toISOString(),
+          })),
+        ),
       },
     });
   } catch (error) {

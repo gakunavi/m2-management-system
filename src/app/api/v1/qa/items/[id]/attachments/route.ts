@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { getStorageAdapter } from '@/lib/storage';
 
 // ============================================
@@ -99,7 +100,7 @@ export async function POST(
           qaItemId: attachment.qaItemId,
           attachmentName: attachment.attachmentName,
           attachmentOriginalName: attachment.attachmentOriginalName,
-          attachmentUrl: attachment.attachmentUrl,
+          attachmentUrl: await getDownloadUrl(attachment.attachmentStorageKey, attachment.attachmentUrl),
           attachmentSize: attachment.attachmentSize,
           attachmentMimeType: attachment.attachmentMimeType,
           createdAt: attachment.createdAt.toISOString(),

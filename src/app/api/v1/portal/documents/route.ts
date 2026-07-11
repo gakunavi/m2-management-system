@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 
 export const dynamic = 'force-dynamic';
@@ -83,26 +84,28 @@ export async function GET(request: NextRequest) {
         : { documentSortOrder: 'asc' },
     });
 
-    const data = documents.map((doc) => ({
-      id: doc.id,
-      businessId: doc.businessId,
-      partnerId: doc.partnerId,
-      documentType: doc.documentType,
-      documentTitle: doc.documentTitle,
-      fileName: doc.fileName,
-      fileStorageKey: doc.fileStorageKey,
-      fileUrl: doc.fileUrl,
-      fileSize: doc.fileSize,
-      fileMimeType: doc.fileMimeType,
-      targetMonth: doc.targetMonth,
-      documentDescription: doc.documentDescription,
-      isPublic: doc.isPublic,
-      documentSortOrder: doc.documentSortOrder,
-      createdAt: doc.createdAt.toISOString(),
-      updatedAt: doc.updatedAt.toISOString(),
-      createdBy: doc.createdBy,
-      creator: doc.creator,
-    }));
+    const data = await Promise.all(
+      documents.map(async (doc) => ({
+        id: doc.id,
+        businessId: doc.businessId,
+        partnerId: doc.partnerId,
+        documentType: doc.documentType,
+        documentTitle: doc.documentTitle,
+        fileName: doc.fileName,
+        fileStorageKey: doc.fileStorageKey,
+        fileUrl: await getDownloadUrl(doc.fileStorageKey, doc.fileUrl),
+        fileSize: doc.fileSize,
+        fileMimeType: doc.fileMimeType,
+        targetMonth: doc.targetMonth,
+        documentDescription: doc.documentDescription,
+        isPublic: doc.isPublic,
+        documentSortOrder: doc.documentSortOrder,
+        createdAt: doc.createdAt.toISOString(),
+        updatedAt: doc.updatedAt.toISOString(),
+        createdBy: doc.createdBy,
+        creator: doc.creator,
+      })),
+    );
 
     return NextResponse.json({ success: true, data });
   } catch (error) {

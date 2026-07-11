@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { requireInternalUser } from '@/lib/authz';
 import { getStorageAdapter } from '@/lib/storage';
 
@@ -63,20 +64,22 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
     });
 
-    const data = files.map((f) => ({
-      id: f.id,
-      projectId: f.projectId,
-      fileName: f.fileName,
-      fileStorageKey: f.fileStorageKey,
-      fileUrl: f.fileUrl,
-      fileSize: f.fileSize,
-      fileMimeType: f.fileMimeType,
-      fileCategory: f.fileCategory,
-      fileDescription: f.fileDescription,
-      createdAt: f.createdAt.toISOString(),
-      createdBy: f.createdBy,
-      creator: f.creator,
-    }));
+    const data = await Promise.all(
+      files.map(async (f) => ({
+        id: f.id,
+        projectId: f.projectId,
+        fileName: f.fileName,
+        fileStorageKey: f.fileStorageKey,
+        fileUrl: await getDownloadUrl(f.fileStorageKey, f.fileUrl),
+        fileSize: f.fileSize,
+        fileMimeType: f.fileMimeType,
+        fileCategory: f.fileCategory,
+        fileDescription: f.fileDescription,
+        createdAt: f.createdAt.toISOString(),
+        createdBy: f.createdBy,
+        creator: f.creator,
+      })),
+    );
 
     // businessConfig から fileCategories を取得
     const config = (project.business?.businessConfig ?? {}) as Record<string, unknown>;
@@ -171,7 +174,7 @@ export async function POST(
           projectId: created.projectId,
           fileName: created.fileName,
           fileStorageKey: created.fileStorageKey,
-          fileUrl: created.fileUrl,
+          fileUrl: await getDownloadUrl(created.fileStorageKey, created.fileUrl),
           fileSize: created.fileSize,
           fileMimeType: created.fileMimeType,
           fileCategory: created.fileCategory,

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { getDownloadUrl } from '@/lib/storage/download-url';
 import { getStorageAdapter } from '@/lib/storage';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -51,7 +52,7 @@ async function findDocument(docId: number, partnerId: number) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serializeDocument(doc: any) {
+async function serializeDocument(doc: any) {
   return {
     id: doc.id,
     businessId: doc.businessId,
@@ -60,7 +61,7 @@ function serializeDocument(doc: any) {
     documentTitle: doc.documentTitle,
     fileName: doc.fileName,
     fileStorageKey: doc.fileStorageKey,
-    fileUrl: doc.fileUrl,
+    fileUrl: await getDownloadUrl(doc.fileStorageKey, doc.fileUrl),
     fileSize: doc.fileSize,
     fileMimeType: doc.fileMimeType,
     targetMonth: doc.targetMonth,
@@ -129,7 +130,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       include: INCLUDE_RELATIONS,
     });
 
-    return NextResponse.json({ success: true, data: serializeDocument(updated) });
+    return NextResponse.json({ success: true, data: await serializeDocument(updated) });
   } catch (error) {
     return handleApiError(error);
   }
