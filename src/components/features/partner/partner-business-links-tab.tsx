@@ -39,7 +39,10 @@ interface PartnerBusinessLink {
   businessName: string;
   businessCode: string;
   linkStatus: string;
-  commissionRate: number | null;
+  directRewardType: string | null;
+  directRewardValue: number | null;
+  indirectRewardType: string | null;
+  indirectRewardValue: number | null;
   contactPerson: string | null;
   linkCustomData: Record<string, unknown>;
   businessTier: string | null;
@@ -72,7 +75,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<{
     linkId: number;
-    field: 'commissionRate' | 'contactPerson';
+    field: 'directRewardValue' | 'contactPerson';
   } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
 
@@ -172,7 +175,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
   const startEditing = (
     linkId: number,
-    field: 'commissionRate' | 'contactPerson',
+    field: 'directRewardValue' | 'contactPerson',
     currentValue: string | number | null,
   ) => {
     setEditingField({ linkId, field });
@@ -182,9 +185,9 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const commitEdit = () => {
     if (!editingField) return;
     const { linkId, field } = editingField;
-    if (field === 'commissionRate') {
+    if (field === 'directRewardValue') {
       const num = editValue !== '' ? Number(editValue) : null;
-      updateMutation.mutate({ linkId, data: { commissionRate: num } });
+      updateMutation.mutate({ linkId, data: { directRewardType: num != null ? 'rate' : null, directRewardValue: num } });
     } else {
       updateMutation.mutate({ linkId, data: { contactPerson: editValue || null } });
     }
@@ -297,7 +300,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
                   {/* 手数料率 */}
                   <TableCell>
-                    {editingField?.linkId === link.id && editingField.field === 'commissionRate' ? (
+                    {editingField?.linkId === link.id && editingField.field === 'directRewardValue' ? (
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
@@ -319,9 +322,9 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                     ) : (
                       <button
                         className="text-sm hover:underline cursor-pointer text-left"
-                        onClick={() => startEditing(link.id, 'commissionRate', link.commissionRate)}
+                        onClick={() => startEditing(link.id, 'directRewardValue', link.directRewardValue)}
                       >
-                        {link.commissionRate != null ? `${link.commissionRate}%` : '-'}
+                        {link.directRewardValue != null ? `${link.directRewardValue}%` : '-'}
                       </button>
                     )}
                   </TableCell>

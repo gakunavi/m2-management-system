@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { serializeRewardLinkFields, rewardLinkInputSchema, rewardLinkUpdateData } from '@/lib/reward-link-serializer';
 import {
   generateBusinessTierNumber,
   validateBusinessTierHierarchy,
@@ -19,7 +20,7 @@ import {
 
 const updateLinkSchema = z.object({
   linkStatus: z.string().max(20).optional(),
-  commissionRate: z.number().min(0).max(100).nullable().optional(),
+  ...rewardLinkInputSchema,
   contactPerson: z.string().max(100).nullable().optional(),
   linkCustomData: z.record(z.unknown()).optional(),
   businessTier: z.string().max(50).nullable().optional(),
@@ -125,7 +126,7 @@ export async function PATCH(
           where: { id: linkIdNum },
           data: {
             ...(data.linkStatus !== undefined ? { linkStatus: data.linkStatus } : {}),
-            ...(data.commissionRate !== undefined ? { commissionRate: data.commissionRate } : {}),
+            ...rewardLinkUpdateData(data),
             ...(data.contactPerson !== undefined ? { contactPerson: data.contactPerson } : {}),
             ...(data.linkCustomData !== undefined ? { linkCustomData: data.linkCustomData as Prisma.InputJsonValue } : {}),
             businessTier: newTier,
@@ -143,7 +144,7 @@ export async function PATCH(
         where: { id: linkIdNum },
         data: {
           ...(data.linkStatus !== undefined ? { linkStatus: data.linkStatus } : {}),
-          ...(data.commissionRate !== undefined ? { commissionRate: data.commissionRate } : {}),
+          ...rewardLinkUpdateData(data),
           ...(data.contactPerson !== undefined ? { contactPerson: data.contactPerson } : {}),
           ...(data.linkCustomData !== undefined ? { linkCustomData: data.linkCustomData as Prisma.InputJsonValue } : {}),
         },
@@ -167,7 +168,7 @@ export async function PATCH(
         businessName: updated!.business.businessName,
         businessCode: updated!.business.businessCode,
         linkStatus: updated!.linkStatus,
-        commissionRate: updated!.commissionRate != null ? Number(updated!.commissionRate) : null,
+        ...serializeRewardLinkFields(updated!),
         contactPerson: updated!.contactPerson,
         linkCustomData: updated!.linkCustomData,
         businessTier: updated!.businessTier,

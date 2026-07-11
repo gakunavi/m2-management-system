@@ -580,14 +580,14 @@ async function main() {
     // ============================================
     await tx.partnerBusinessLink.createMany({
       data: [
-        // MOAG事業
-        { partnerId: partner1.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, commissionRate: new Prisma.Decimal(15) },
-        { partnerId: partner2.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, commissionRate: new Prisma.Decimal(10) },
-        { partnerId: partner3.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-2', businessParentId: partner1.id, commissionRate: new Prisma.Decimal(8) },
-        { partnerId: partner4.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '2', businessParentId: null, commissionRate: new Prisma.Decimal(12) },
+        // MOAG事業（direct=直紹介率、indirectは1次店が配下の成果から得る間接率）
+        { partnerId: partner1.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, directRewardType: 'rate', directRewardValue: new Prisma.Decimal(15), indirectRewardType: 'rate', indirectRewardValue: new Prisma.Decimal(5) },
+        { partnerId: partner2.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, directRewardType: 'rate', directRewardValue: new Prisma.Decimal(10) },
+        { partnerId: partner3.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-2', businessParentId: partner1.id, directRewardType: 'rate', directRewardValue: new Prisma.Decimal(8) },
+        { partnerId: partner4.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '2', businessParentId: null, directRewardType: 'rate', directRewardValue: new Prisma.Decimal(12) },
         // サービスA事業
-        { partnerId: partner1.id, businessId: businessB.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, commissionRate: new Prisma.Decimal(20) },
-        { partnerId: partner2.id, businessId: businessB.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, commissionRate: new Prisma.Decimal(12) },
+        { partnerId: partner1.id, businessId: businessB.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, directRewardType: 'rate', directRewardValue: new Prisma.Decimal(20), indirectRewardType: 'rate', indirectRewardValue: new Prisma.Decimal(5) },
+        { partnerId: partner2.id, businessId: businessB.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, directRewardType: 'rate', directRewardValue: new Prisma.Decimal(12) },
       ],
     });
 

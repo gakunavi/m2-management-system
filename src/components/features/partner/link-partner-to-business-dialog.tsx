@@ -158,7 +158,8 @@ export function LinkPartnerToBusinessDialog({
         body: JSON.stringify({
           businessId,
           linkStatus: 'active',
-          commissionRate: commissionRate ? parseFloat(commissionRate) : null,
+          directRewardType: commissionRate ? 'rate' : null,
+          directRewardValue: commissionRate ? parseFloat(commissionRate) : null,
           contactPerson: contactPerson || null,
         }),
       });

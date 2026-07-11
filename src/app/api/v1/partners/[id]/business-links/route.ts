@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { requireInternalUser } from '@/lib/authz';
 import { inheritBusinessHierarchyOnLink } from '@/lib/business-partner-hierarchy';
+import { serializeRewardLinkFields, rewardLinkInputSchema } from '@/lib/reward-link-serializer';
 
 // ============================================
 // GET /api/v1/partners/:id/business-links
@@ -49,7 +50,7 @@ export async function GET(
         businessName: l.business.businessName,
         businessCode: l.business.businessCode,
         linkStatus: l.linkStatus,
-        commissionRate: l.commissionRate != null ? Number(l.commissionRate) : null,
+        ...serializeRewardLinkFields(l),
         contactPerson: l.contactPerson,
         linkCustomData: l.linkCustomData,
         businessTier: l.businessTier,
@@ -73,7 +74,7 @@ export async function GET(
 const createLinkSchema = z.object({
   businessId: z.number().int().positive(),
   linkStatus: z.string().max(20).default('active'),
-  commissionRate: z.number().min(0).max(100).nullable().optional(),
+  ...rewardLinkInputSchema,
   contactPerson: z.string().max(100).nullable().optional(),
   linkCustomData: z.record(z.unknown()).default({}),
 });
@@ -109,7 +110,10 @@ export async function POST(
           partnerId,
           businessId: data.businessId,
           linkStatus: data.linkStatus,
-          commissionRate: data.commissionRate ?? undefined,
+          directRewardType: data.directRewardType ?? undefined,
+          directRewardValue: data.directRewardValue ?? undefined,
+          indirectRewardType: data.indirectRewardType ?? undefined,
+          indirectRewardValue: data.indirectRewardValue ?? undefined,
           contactPerson: data.contactPerson ?? undefined,
           linkCustomData: data.linkCustomData as Prisma.InputJsonValue,
         },
@@ -133,7 +137,7 @@ export async function POST(
         businessName: linkWithBusiness!.business.businessName,
         businessCode: linkWithBusiness!.business.businessCode,
         linkStatus: linkWithBusiness!.linkStatus,
-        commissionRate: linkWithBusiness!.commissionRate != null ? Number(linkWithBusiness!.commissionRate) : null,
+        ...serializeRewardLinkFields(linkWithBusiness!),
         contactPerson: linkWithBusiness!.contactPerson,
         linkCustomData: linkWithBusiness!.linkCustomData,
         createdAt: linkWithBusiness!.createdAt.toISOString(),
