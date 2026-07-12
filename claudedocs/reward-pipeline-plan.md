@@ -9,7 +9,7 @@
 | 論点 | 決定 |
 |---|---|
 | 報酬の計算方式 | **率(%) または 固定額**。どちらをデフォルトにするかは**事業ごとに選べる**。案件ごとに上書き可（直・間接とも） |
-| 報酬の確定タイミング | **ステータス定義の「収益確定」フラグ**（`BusinessStatusDefinition.isRevenueConfirmed`）が付いたステータスの案件。失注には付けない。受注・納品完了・入金済など事業ごとに指定。月次締めで経理が確認・確定 |
+| 報酬の確定タイミング | **案件の収益確定ラッチ**。ステータス定義の `isRevenueConfirmed=true` のステータスに変わった時点で `Project.revenueConfirmedAt` を自動セット。**一度セットされたらステータスを進めても戻しても自動では外れない（手動リセットのみ）**。sortOrder 非依存。報酬対象＝`revenueConfirmedAt` が入っている案件、計上月＝その日付（編集可）。月次締めで経理が確認・確定 |
 | 階層報酬 | **2段オーバーライド**。子代理店Bが受注 → Bに「直紹介報酬」、親Aに「間接報酬」で**双方に別々に支払い** |
 | 明細書の出力 | **xlsxのみ**。代理店への添付は手動（既存の請求書アップロード流用）。PDFは将来 |
 | 位置づけ | **全事業共通のデフォルト機能**（一時的な機能ではない） |
@@ -81,6 +81,15 @@ rewardConfig: {
 - `directRewardOverride Json?` = `{type, value}` | null
 - `indirectRewardOverride Json?` = `{type, value}` | null
 - 未設定なら リンク → 事業デフォルト にフォールバック
+- `revenueConfirmedAt DateTime?` = **収益確定ラッチ**。`isRevenueConfirmed` ステータスへの遷移時に自動セット、手動リセットのみ解除。報酬対象判定＋計上月に使用（sortOrder 非依存）
+
+**BusinessStatusDefinition**（新設カラム）
+- `isRevenueConfirmed Boolean` = このステータスに変わると `Project.revenueConfirmedAt` を自動セットする「収益確定トリガー」。失注には付けない
+
+**確定ラッチの挙動（Phase 2 の PATCH フックで実装）**
+- 案件のステータス変更で、新ステータスが `isRevenueConfirmed=true` かつ `revenueConfirmedAt` が null → `revenueConfirmedAt = now()`（または指定日）
+- ステータスが確定→非確定へ動いても `revenueConfirmedAt` は**保持**（自動で消さない）
+- 手動で `revenueConfirmedAt` を編集/クリア可能（誤セットの訂正、過去月への計上、既存受注案件の登録に対応）
 
 **RewardStatement（新規）** — 締め単位＝支払明細書1通
 ```

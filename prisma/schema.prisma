@@ -557,6 +557,10 @@ model Project {
   // 案件別の報酬上書き（直・間接とも）。{ type: 'rate'|'fixed', value: number } | null
   directRewardOverride      Json?             @map("direct_reward_override")
   indirectRewardOverride    Json?             @map("indirect_reward_override")
+  /// 収益確定日（代理店報酬のラッチ）。収益確定フラグ付きステータスに変わった時点で
+  /// 自動セットされ、その後のステータス変更では自動で外れない（手動リセットのみ）。
+  /// null=未確定。報酬対象判定と計上月はこの日付で行う（編集可＝過去月の計上も可能）。
+  revenueConfirmedAt        DateTime?         @map("revenue_confirmed_at") @db.Timestamptz(6)
   movements                 ProjectMovement[]
   rewardEntries             RewardEntry[]
   files                     ProjectFile[]
@@ -571,6 +575,7 @@ model Project {
   updater                   User?             @relation("ProjectUpdater", fields: [updatedBy], references: [id])
 
   @@index([businessId, projectSalesStatus], map: "idx_projects_business_status")
+  @@index([businessId, revenueConfirmedAt], map: "idx_projects_revenue_confirmed")
   @@index([customerId], map: "idx_projects_customer_id")
   @@index([partnerId], map: "idx_projects_partner_id")
   @@index([projectAssignedUserId], map: "idx_projects_assigned_user_id")
