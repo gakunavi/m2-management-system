@@ -649,7 +649,7 @@ async function main() {
       data: { businessId: businessA.id, statusCode: 'nego', statusLabel: '交渉中', statusPriority: 50, statusColor: '#f59e0b', statusIsFinal: false, statusIsLost: false, statusSortOrder: 3, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
-      data: { businessId: businessA.id, statusCode: 'won', statusLabel: '受注', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, statusSortOrder: 4, statusIsActive: true },
+      data: { businessId: businessA.id, statusCode: 'won', statusLabel: '受注', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, isRevenueConfirmed: true, statusSortOrder: 4, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
       data: { businessId: businessA.id, statusCode: 'lost', statusLabel: '失注', statusPriority: 10, statusColor: '#ef4444', statusIsFinal: true, statusIsLost: true, statusSortOrder: 5, statusIsActive: true },
@@ -666,7 +666,7 @@ async function main() {
       data: { businessId: businessB.id, statusCode: 'trial', statusLabel: 'トライアル', statusPriority: 60, statusColor: '#f59e0b', statusIsFinal: false, statusIsLost: false, statusSortOrder: 3, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
-      data: { businessId: businessB.id, statusCode: 'contract', statusLabel: '契約済', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, statusSortOrder: 4, statusIsActive: true },
+      data: { businessId: businessB.id, statusCode: 'contract', statusLabel: '契約済', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, isRevenueConfirmed: true, statusSortOrder: 4, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
       data: { businessId: businessB.id, statusCode: 'lost', statusLabel: '失注', statusPriority: 10, statusColor: '#ef4444', statusIsFinal: true, statusIsLost: true, statusSortOrder: 5, statusIsActive: true },

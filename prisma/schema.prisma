@@ -121,6 +121,9 @@ model BusinessStatusDefinition {
   statusColor     String?  @map("status_color") @db.VarChar(20)
   statusIsFinal   Boolean  @default(false) @map("status_is_final")
   statusIsLost    Boolean  @default(false) @map("status_is_lost")
+  /// このステータスの案件を代理店報酬の対象（収益確定）とみなすか。
+  /// 失注には付けない。受注・納品完了・入金済など「確定」ステータスに付ける。
+  isRevenueConfirmed Boolean @default(false) @map("is_revenue_confirmed")
   statusSortOrder Int      @default(0) @map("status_sort_order")
   statusIsActive  Boolean  @default(true) @map("status_is_active")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
