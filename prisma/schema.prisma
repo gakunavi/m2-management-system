@@ -322,10 +322,13 @@ model PartnerBusinessLink {
   linkStatus         String   @default("active") @map("link_status") @db.VarChar(20)
   // 代理店×事業ごとの報酬上書き（未設定なら事業デフォルト rewardConfig にフォールバック）
   // type: 'rate'(率%) | 'fixed'(固定額円)。value は Decimal(12,2) で率・固定額の両方を保持
-  directRewardType    String?  @map("direct_reward_type") @db.VarChar(10)
-  directRewardValue   Decimal? @map("direct_reward_value") @db.Decimal(12, 2)
-  indirectRewardType  String?  @map("indirect_reward_type") @db.VarChar(10)
-  indirectRewardValue Decimal? @map("indirect_reward_value") @db.Decimal(12, 2)
+  // 報酬設定の代理店×事業別上書き（RewardSlots 構造の部分JSON）
+  // { shot?: { direct?: {type,value}, indirect?: {type,value} },
+  //   stock?: { direct?: {type,value}, indirect?: {type,value} } }
+  rewardSlots         Json?    @map("reward_slots")
+  // 支払い対象月の代理店特例（未設定なら事業デフォルト）
+  paymentTiming       String?  @map("payment_timing") @db.VarChar(20) // same|next|next2|closing
+  closingDay          Int?     @map("closing_day")
   contactPerson      String?  @map("contact_person") @db.VarChar(100)
   linkCustomData     Json     @default("{}") @map("link_custom_data")
   businessTier       String?  @map("business_tier") @db.VarChar(50)
@@ -380,11 +383,12 @@ model RewardStatement {
   @@map("reward_statements")
 }
 
-/// 支払明細書の明細行（案件1件＝直 or 間接 の1行）
+/// 支払明細書の明細行（案件1件＝ショット/ストック × 直/間接 の1行）
 model RewardEntry {
   id                  Int      @id @default(autoincrement())
   statementId         Int      @map("statement_id")
   projectId           Int?     @map("project_id")
+  rewardKind          String   @map("reward_kind") @db.VarChar(10) // shot | stock
   entryType           String   @map("entry_type") @db.VarChar(10) // direct | indirect
   sourcePartnerId     Int?     @map("source_partner_id") // indirect のとき、成果を出した配下代理店
   projectNoSnapshot   String?  @map("project_no_snapshot") @db.VarChar(30)
@@ -555,8 +559,12 @@ model Project {
   projectAssignedUserName   String?           @map("project_assigned_user_name") @db.VarChar(100)
   projectRenovationNumber   String?           @map("project_renovation_number") @db.VarChar(100)
   // 案件別の報酬上書き（直・間接とも）。{ type: 'rate'|'fixed', value: number } | null
-  directRewardOverride      Json?             @map("direct_reward_override")
-  indirectRewardOverride    Json?             @map("indirect_reward_override")
+  // 案件別の報酬上書き（RewardSlots 構造の部分JSON。ショット/ストック×直/間接）
+  rewardOverride            Json?             @map("reward_override")
+  // ストック報酬の終了。解約日（null=継続中）
+  cancelledAt               DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  // ストック固定期間（月数）。将来用。null=解約日まで
+  stockTermMonths           Int?              @map("stock_term_months")
   /// 収益確定日（代理店報酬のラッチ）。収益確定フラグ付きステータスに変わった時点で
   /// 自動セットされ、その後のステータス変更では自動で外れない（手動リセットのみ）。
   /// null=未確定。報酬対象判定と計上月はこの日付で行う（編集可＝過去月の計上も可能）。

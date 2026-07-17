@@ -27,6 +27,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
 import { useBusiness } from '@/hooks/use-business';
 import { BusinessParentPartnerSelect } from './business-parent-partner-select';
+import type { RewardSlots } from '@/lib/reward-slots';
 
 // ============================================
 // 型定義
@@ -39,10 +40,9 @@ interface PartnerBusinessLink {
   businessName: string;
   businessCode: string;
   linkStatus: string;
-  directRewardType: string | null;
-  directRewardValue: number | null;
-  indirectRewardType: string | null;
-  indirectRewardValue: number | null;
+  rewardSlots: RewardSlots | null;
+  paymentTiming: string | null;
+  closingDay: number | null;
   contactPerson: string | null;
   linkCustomData: Record<string, unknown>;
   businessTier: string | null;
@@ -75,7 +75,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<{
     linkId: number;
-    field: 'directRewardValue' | 'contactPerson';
+    field: 'shotDirectRate' | 'contactPerson';
   } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
 
@@ -175,7 +175,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
   const startEditing = (
     linkId: number,
-    field: 'directRewardValue' | 'contactPerson',
+    field: 'shotDirectRate' | 'contactPerson',
     currentValue: string | number | null,
   ) => {
     setEditingField({ linkId, field });
@@ -185,9 +185,19 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const commitEdit = () => {
     if (!editingField) return;
     const { linkId, field } = editingField;
-    if (field === 'directRewardValue') {
+    if (field === 'shotDirectRate') {
       const num = editValue !== '' ? Number(editValue) : null;
-      updateMutation.mutate({ linkId, data: { directRewardType: num != null ? 'rate' : null, directRewardValue: num } });
+      const link = links.find((l) => l.id === linkId);
+      // 他スロット（ストック・間接）を消さないよう既存とマージして送る
+      const current = link?.rewardSlots ?? {};
+      const nextSlots: RewardSlots = {
+        ...current,
+        shot: {
+          ...current.shot,
+          direct: num != null ? { type: 'rate', value: num } : undefined,
+        },
+      };
+      updateMutation.mutate({ linkId, data: { rewardSlots: nextSlots } });
     } else {
       updateMutation.mutate({ linkId, data: { contactPerson: editValue || null } });
     }
@@ -298,9 +308,9 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                     </Select>
                   </TableCell>
 
-                  {/* 手数料率 */}
+                  {/* 直紹介率（ショット） */}
                   <TableCell>
-                    {editingField?.linkId === link.id && editingField.field === 'directRewardValue' ? (
+                    {editingField?.linkId === link.id && editingField.field === 'shotDirectRate' ? (
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
@@ -322,9 +332,9 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                     ) : (
                       <button
                         className="text-sm hover:underline cursor-pointer text-left"
-                        onClick={() => startEditing(link.id, 'directRewardValue', link.directRewardValue)}
+                        onClick={() => startEditing(link.id, 'shotDirectRate', link.rewardSlots?.shot?.direct?.value ?? null)}
                       >
-                        {link.directRewardValue != null ? `${link.directRewardValue}%` : '-'}
+                        {link.rewardSlots?.shot?.direct?.value != null ? `${link.rewardSlots.shot.direct.value}%` : '-'}
                       </button>
                     )}
                   </TableCell>

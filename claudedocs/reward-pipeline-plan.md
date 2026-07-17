@@ -8,7 +8,10 @@
 
 | 論点 | 決定 |
 |---|---|
-| 報酬の計算方式 | **率(%) または 固定額**。どちらをデフォルトにするかは**事業ごとに選べる**。案件ごとに上書き可（直・間接とも） |
+| 報酬の種類 | **ショット報酬**（契約確定時に1回）と **ストック報酬**（契約継続中は毎月）。事業・代理店・案件ごとに、どちらか/両方を設定できる |
+| 報酬の計算方式 | ショット・ストックとも **率(%) または 固定額**。ショット率=確定金額×率、ストック率=月額×率、固定額=そのまま |
+| ストックの期間 | 確定月から発生、**解約月まで**（案件に「解約日」を追加）。固定期間（○ヶ月）は将来対応（カラムだけ用意） |
+| 支払い対象月 | 確定月から「**当月／翌月／翌々月／締め日基準**」で決定。事業デフォルト＋代理店特例で選択 |
 | 報酬の確定タイミング | **案件の収益確定ラッチ**。ステータス定義の `isRevenueConfirmed=true` のステータスに変わった時点で `Project.revenueConfirmedAt` を自動セット。**一度セットされたらステータスを進めても戻しても自動では外れない（手動リセットのみ）**。sortOrder 非依存。報酬対象＝`revenueConfirmedAt` が入っている案件、計上月＝その日付（編集可）。月次締めで経理が確認・確定 |
 | 階層報酬 | **2段オーバーライド**。子代理店Bが受注 → Bに「直紹介報酬」、親Aに「間接報酬」で**双方に別々に支払い** |
 | 明細書の出力 | **xlsxのみ**。代理店への添付は手動（既存の請求書アップロード流用）。PDFは将来 |
@@ -45,43 +48,58 @@
 
 ## 3. アーキテクチャ設計
 
-### 3.1 報酬設定の共通型と3層解決
+### 3.1 報酬設定の構造と3層解決（ショット×ストック×直×間接）
 
 報酬の1単位を **`RewardSetting = { type: 'rate' | 'fixed', value: number }`** で表す。
-- `type='rate'` → 報酬 = ⌊案件金額 × value%⌋（円未満切り捨て）
-- `type='fixed'` → 報酬 = value（固定額。案件金額に依らない）
+- ショット率 → ⌊確定金額 × value%⌋　／　ショット固定 → value（1回）
+- ストック率 → ⌊月額 × value%⌋（毎月）　／　ストック固定 → value（毎月）
+- すべて円未満切り捨て
 
-「直紹介」「間接」それぞれについて、優先順に解決する（既存のカスタムフィールド3層と同型）:
+1事業ぶんの報酬設定は **4スロット**（ショット直/ショット間接/ストック直/ストック間接）。設定が入っているスロットだけ有効（例: ショット直＋ストック直だけ設定＝間接なし）。
 
-1. **案件別上書き**（最優先）: その案件だけの `RewardSetting`
-2. **代理店×事業リンク別**: `PartnerBusinessLink` の設定（未設定ならスキップ）
-3. **事業デフォルト**: `Business.businessConfig.rewardConfig`（率 or 固定額を事業ごとに選択）
+各スロットを、優先順に3層解決する（既存カスタムフィールド3層と同型）:
+1. **案件別上書き**（最優先）
+2. **代理店×事業リンク別**
+3. **事業デフォルト**
 
-直紹介は「担当代理店のリンク」、間接は「親代理店のリンク」で解決する。
+直紹介は「担当代理店のリンク」、間接は「親代理店のリンク」で解決。
 
 ### 3.2 データモデル変更
 
-**Business.businessConfig.rewardConfig**（JSON、新規キー）
+> **⚠️ スキーマ見直し（2026-07-15、ショット/ストック対応）**: 報酬設定を「4スロット×3層」で持つため、Phase0 で入れたフラット列（directReward*/indirectReward*）と Project の override 列は **JSON構造に作り直す**。commissionRate 移行・新テーブル・収益確定ラッチ・収益確定フラグはそのまま活かす。まだ push/本番反映していないため作り直し可能。
+
+**共通の報酬スロット型**
+```
+RewardSlots = {
+  shot?:  { direct?: RewardSetting, indirect?: RewardSetting },
+  stock?: { direct?: RewardSetting, indirect?: RewardSetting },
+}
+RewardSetting = { type: 'rate'|'fixed', value: number }
+```
+
+**Business.businessConfig.rewardConfig**（JSON）
 ```
 rewardConfig: {
-  direct:   { type: 'rate'|'fixed', value: number },  // 事業デフォルト（直紹介）
-  indirect: { type: 'rate'|'fixed', value: number },  // 事業デフォルト（間接）
+  defaults: RewardSlots,       // 事業デフォルト（4スロット）
+  shotBaseField?: string,      // ショット率の基準（確定金額）。未指定なら primary KPI の sourceField
+  stockBaseField?: string,     // ストック率の基準（月額）フィールド
   taxRate: number,             // 一律 10
-  baseAmountField?: string,    // 報酬率をかける「金額」フィールド。未指定なら primary KPI の sourceField
-  rewardStatusCode?: string,   // 報酬確定の基準ステータス（未指定なら primary KPI の statusFilter）
+  paymentTiming: 'same'|'next'|'next2'|'closing', // 当月/翌月/翌々月/締め日
+  closingDay?: number,         // paymentTiming='closing' のときの締め日
 }
 ```
 
-**PartnerBusinessLink**（新設カラム、代理店×事業ごとの上書き）
-- `directRewardType String?`（'rate'|'fixed'）, `directRewardValue Decimal(12,2)?`
-- `indirectRewardType String?`, `indirectRewardValue Decimal(12,2)?`
-- **既存 `commissionRate` は削除**。ただし移行マイグレーションで `commission_rate` が非NULLの行は `directRewardType='rate'` / `directRewardValue=commission_rate` へコピーしてから列を落とす（率で運用中のため安全）
+**PartnerBusinessLink**（代理店×事業ごとの上書き）
+- `rewardSlots Json?` = RewardSlots（部分上書き。事業デフォルトにマージ）
+- `paymentTiming String?` / `closingDay Int?` = 支払い月の**代理店特例**
+- （Phase0 の flat 列 directReward*/indirectReward* は rewardSlots.shot.direct 等へ統合）
 
-**Project**（新設カラム、案件別上書き＝直・間接とも）
-- `directRewardOverride Json?` = `{type, value}` | null
-- `indirectRewardOverride Json?` = `{type, value}` | null
-- 未設定なら リンク → 事業デフォルト にフォールバック
-- `revenueConfirmedAt DateTime?` = **収益確定ラッチ**。`isRevenueConfirmed` ステータスへの遷移時に自動セット、手動リセットのみ解除。報酬対象判定＋計上月に使用（sortOrder 非依存）
+**Project**（案件別上書き）
+- `rewardOverride Json?` = RewardSlots（部分上書き）
+- `revenueConfirmedAt DateTime?` = **収益確定ラッチ**（既存）。ショット発生＆ストック開始
+- `cancelledAt DateTime?` = **解約日**（新規）。ストック終了。null=継続中
+- `stockTermMonths Int?` = ストック固定期間（将来用。null=解約日まで）
+- `paymentTimingOverride Json?` = 案件別の支払い月上書き（任意）
 
 **BusinessStatusDefinition**（新設カラム）
 - `isRevenueConfirmed Boolean` = このステータスに変わると `Project.revenueConfirmedAt` を自動セットする「収益確定トリガー」。失注には付けない
