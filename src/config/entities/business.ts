@@ -197,6 +197,12 @@ export const businessDetailConfig: EntityDetailConfig = {
       config: {},
     },
     {
+      key: 'rewardConfig',
+      label: '代理店報酬設定',
+      component: 'custom',
+      config: {},
+    },
+    {
       key: 'fileCategories',
       label: 'ファイルカテゴリ',
       component: 'custom',
