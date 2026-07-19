@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Link2, Building2, Plus } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { RewardSettingInput } from '@/components/features/business/reward-setting-input';
-import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
+import { parseRewardSlots, unsetHintFor, type RewardSlots, type RewardSetting } from '@/lib/reward-slots';
 
 // ============================================
 // 型定義
@@ -60,6 +61,17 @@ export function LinkPartnerToBusinessDialog({
 }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // 事業デフォルトの実際の値（未設定スロットのヒント表示に使う）
+  const { data: businessData } = useQuery({
+    queryKey: ['business-reward-defaults', businessId],
+    queryFn: () =>
+      apiClient.get<{ businessConfig: { rewardConfig?: { defaults?: unknown } } | null }>(
+        `/businesses/${businessId}`,
+      ),
+    enabled: open,
+  });
+  const businessDefaults = parseRewardSlots(businessData?.businessConfig?.rewardConfig?.defaults);
 
   // --- ステップ1: 代理店選択 ---
   const [partnerSearch, setPartnerSearch] = useState('');
@@ -438,13 +450,13 @@ export function LinkPartnerToBusinessDialog({
                       label="直紹介"
                       value={rewardSlots.shot?.direct}
                       onChange={(v) => updateSlot('shot', 'direct', v)}
-                      unsetHint="事業デフォルトを使用"
+                      unsetHint={unsetHintFor(businessDefaults.shot?.direct)}
                     />
                     <RewardSettingInput
                       label="間接（上位代理店）"
                       value={rewardSlots.shot?.indirect}
                       onChange={(v) => updateSlot('shot', 'indirect', v)}
-                      unsetHint="事業デフォルトを使用"
+                      unsetHint={unsetHintFor(businessDefaults.shot?.indirect)}
                     />
                   </div>
                 </div>
@@ -455,13 +467,13 @@ export function LinkPartnerToBusinessDialog({
                       label="直紹介"
                       value={rewardSlots.stock?.direct}
                       onChange={(v) => updateSlot('stock', 'direct', v)}
-                      unsetHint="事業デフォルトを使用"
+                      unsetHint={unsetHintFor(businessDefaults.stock?.direct)}
                     />
                     <RewardSettingInput
                       label="間接（上位代理店）"
                       value={rewardSlots.stock?.indirect}
                       onChange={(v) => updateSlot('stock', 'indirect', v)}
-                      unsetHint="事業デフォルトを使用"
+                      unsetHint={unsetHintFor(businessDefaults.stock?.indirect)}
                     />
                   </div>
                 </div>

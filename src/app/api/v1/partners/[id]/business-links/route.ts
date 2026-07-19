@@ -8,6 +8,7 @@ import { handleApiError, ApiError } from '@/lib/error-handler';
 import { requireInternalUser } from '@/lib/authz';
 import { inheritBusinessHierarchyOnLink } from '@/lib/business-partner-hierarchy';
 import { serializeRewardLinkFields, rewardLinkInputSchema } from '@/lib/reward-link-serializer';
+import { parseRewardSlots } from '@/lib/reward-slots';
 
 // ============================================
 // GET /api/v1/partners/:id/business-links
@@ -35,7 +36,7 @@ export async function GET(
     const links = await prisma.partnerBusinessLink.findMany({
       where: { partnerId },
       include: {
-        business: { select: { businessName: true, businessCode: true } },
+        business: { select: { businessName: true, businessCode: true, businessConfig: true } },
         businessParent: { select: { id: true, partnerCode: true, partnerName: true } },
       },
       orderBy: { createdAt: 'asc' },
@@ -43,24 +44,28 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: links.map((l) => ({
-        id: l.id,
-        partnerId: l.partnerId,
-        businessId: l.businessId,
-        businessName: l.business.businessName,
-        businessCode: l.business.businessCode,
-        linkStatus: l.linkStatus,
-        ...serializeRewardLinkFields(l),
-        contactPerson: l.contactPerson,
-        linkCustomData: l.linkCustomData,
-        businessTier: l.businessTier,
-        businessTierNumber: l.businessTierNumber,
-        businessParentId: l.businessParentId,
-        businessParentName: l.businessParent?.partnerName ?? null,
-        businessParentCode: l.businessParent?.partnerCode ?? null,
-        createdAt: l.createdAt.toISOString(),
-        updatedAt: l.updatedAt.toISOString(),
-      })),
+      data: links.map((l) => {
+        const bizConfig = l.business.businessConfig as { rewardConfig?: { defaults?: unknown } } | null;
+        return {
+          id: l.id,
+          partnerId: l.partnerId,
+          businessId: l.businessId,
+          businessName: l.business.businessName,
+          businessCode: l.business.businessCode,
+          linkStatus: l.linkStatus,
+          ...serializeRewardLinkFields(l),
+          businessDefaultRewardSlots: parseRewardSlots(bizConfig?.rewardConfig?.defaults),
+          contactPerson: l.contactPerson,
+          linkCustomData: l.linkCustomData,
+          businessTier: l.businessTier,
+          businessTierNumber: l.businessTierNumber,
+          businessParentId: l.businessParentId,
+          businessParentName: l.businessParent?.partnerName ?? null,
+          businessParentCode: l.businessParent?.partnerCode ?? null,
+          createdAt: l.createdAt.toISOString(),
+          updatedAt: l.updatedAt.toISOString(),
+        };
+      }),
     });
   } catch (error) {
     return handleApiError(error);

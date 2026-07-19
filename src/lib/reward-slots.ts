@@ -53,6 +53,21 @@ export function parseRewardSlots(value: unknown): RewardSlots {
   return result.success ? result.data : {};
 }
 
+/** 表示用: RewardSetting を "15%" / "¥5,000" のような短い文字列にする */
+export function formatRewardSetting(setting: RewardSetting): string {
+  return setting.type === 'rate' ? `${setting.value}%` : `¥${setting.value.toLocaleString()}`;
+}
+
+/**
+ * スロットのチェックを外した時のヒント文言。事業デフォルトが実際に設定されて
+ * いるか（フォールバック先に値が入るか）で出し分ける。事業デフォルトが未設定
+ * なのに「デフォルトを使用」とだけ表示すると、実際は報酬0円になることが
+ * 伝わらず誤解を招くため、実効値または「報酬は発生しません」を明示する。
+ */
+export function unsetHintFor(fallback: RewardSetting | undefined): string {
+  return fallback ? `事業デフォルトを使用（${formatRewardSetting(fallback)}）` : '未設定（報酬は発生しません）';
+}
+
 /**
  * 3層（事業デフォルト→リンク→案件）の RewardSlots をマージする。
  * スロット単位（shot.direct 等）で、後勝ちで上書きする。

@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useBusiness } from '@/hooks/use-business';
 import { BusinessParentPartnerSelect } from './business-parent-partner-select';
 import { LinkRewardSettingsDialog } from './link-reward-settings-dialog';
-import type { RewardSlots } from '@/lib/reward-slots';
+import { formatRewardSetting, type RewardSlots } from '@/lib/reward-slots';
 
 // ============================================
 // 型定義
@@ -42,6 +42,7 @@ interface PartnerBusinessLink {
   businessCode: string;
   linkStatus: string;
   rewardSlots: RewardSlots | null;
+  businessDefaultRewardSlots: RewardSlots;
   paymentTiming: string | null;
   closingDay: number | null;
   contactPerson: string | null;
@@ -67,19 +68,32 @@ interface Props {
 // ヘルパー
 // ============================================
 
-/** テーブル表示用に報酬設定を短く要約する（例: "ショット直20%, ストック直10%"） */
-function summarizeRewardSlots(slots: RewardSlots | null): string {
-  if (!slots) return '-';
+const REWARD_SLOT_LABELS: Record<'shot' | 'stock', Record<'direct' | 'indirect', string>> = {
+  shot: { direct: 'ショット直', indirect: 'ショット間接' },
+  stock: { direct: 'ストック直', indirect: 'ストック間接' },
+};
+
+/**
+ * テーブル表示用に報酬設定を短く要約する。
+ * リンク自身の上書きが無いスロットは、事業デフォルトに実際に値があるかを見て
+ * 「デフォルトを継承した実効値」と「本当に何も設定が無い」を区別する
+ * （事業デフォルトが未設定なのに「デフォルトを使用」と表示すると誤解を招くため）。
+ */
+function summarizeRewardSlots(linkSlots: RewardSlots | null, businessDefaults: RewardSlots): string {
   const parts: string[] = [];
-  const label = (setting: { type: string; value: number } | undefined, prefix: string) => {
-    if (!setting) return;
-    parts.push(`${prefix}${setting.type === 'rate' ? `${setting.value}%` : `¥${setting.value.toLocaleString()}`}`);
-  };
-  label(slots.shot?.direct, 'ショット直:');
-  label(slots.shot?.indirect, 'ショット間接:');
-  label(slots.stock?.direct, 'ストック直:');
-  label(slots.stock?.indirect, 'ストック間接:');
-  return parts.length > 0 ? parts.join(', ') : '未設定（事業デフォルトを使用）';
+  for (const kind of ['shot', 'stock'] as const) {
+    for (const side of ['direct', 'indirect'] as const) {
+      const override = linkSlots?.[kind]?.[side];
+      const fallback = businessDefaults[kind]?.[side];
+      const label = REWARD_SLOT_LABELS[kind][side];
+      if (override) {
+        parts.push(`${label}:${formatRewardSetting(override)}`);
+      } else if (fallback) {
+        parts.push(`${label}:${formatRewardSetting(fallback)}（デフォルト）`);
+      }
+    }
+  }
+  return parts.length > 0 ? parts.join(', ') : '未設定';
 }
 
 // ============================================
@@ -334,7 +348,9 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                       onClick={() => setRewardDialogLinkId(link.id)}
                     >
                       <Pencil className="mr-1.5 h-3 w-3 shrink-0" />
-                      <span className="truncate">{summarizeRewardSlots(link.rewardSlots)}</span>
+                      <span className="truncate">
+                        {summarizeRewardSlots(link.rewardSlots, link.businessDefaultRewardSlots)}
+                      </span>
                     </Button>
                   </TableCell>
 
@@ -446,6 +462,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
             onOpenChange={(open) => !open && setRewardDialogLinkId(null)}
             linkId={editingLink.id}
             businessName={editingLink.businessName}
+            businessDefaults={editingLink.businessDefaultRewardSlots}
             currentSlots={editingLink.rewardSlots}
             currentPaymentTiming={editingLink.paymentTiming}
             currentClosingDay={editingLink.closingDay}

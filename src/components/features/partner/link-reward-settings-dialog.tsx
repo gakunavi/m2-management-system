@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { RewardSettingInput } from '@/components/features/business/reward-setting-input';
-import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
+import { unsetHintFor, type RewardSlots, type RewardSetting } from '@/lib/reward-slots';
 
 // ============================================
 // 代理店×事業リンクの報酬設定（4スロット + 支払いタイミング特例）
@@ -31,6 +31,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   linkId: number;
   businessName: string;
+  /** 事業デフォルトの実際の値。チェックを外したスロットのフォールバック先を具体的に示す */
+  businessDefaults: RewardSlots;
   currentSlots: RewardSlots | null;
   currentPaymentTiming: string | null;
   currentClosingDay: number | null;
@@ -46,6 +48,7 @@ export function LinkRewardSettingsDialog({
   open,
   onOpenChange,
   businessName,
+  businessDefaults,
   currentSlots,
   currentPaymentTiming,
   currentClosingDay,
@@ -103,13 +106,13 @@ export function LinkRewardSettingsDialog({
                 label="直紹介"
                 value={slots.shot?.direct}
                 onChange={(v) => updateSlot('shot', 'direct', v)}
-                unsetHint="事業デフォルトを使用"
+                unsetHint={unsetHintFor(businessDefaults.shot?.direct)}
               />
               <RewardSettingInput
                 label="間接（上位代理店）"
                 value={slots.shot?.indirect}
                 onChange={(v) => updateSlot('shot', 'indirect', v)}
-                unsetHint="事業デフォルトを使用"
+                unsetHint={unsetHintFor(businessDefaults.shot?.indirect)}
               />
             </div>
           </div>
@@ -121,13 +124,13 @@ export function LinkRewardSettingsDialog({
                 label="直紹介"
                 value={slots.stock?.direct}
                 onChange={(v) => updateSlot('stock', 'direct', v)}
-                unsetHint="事業デフォルトを使用"
+                unsetHint={unsetHintFor(businessDefaults.stock?.direct)}
               />
               <RewardSettingInput
                 label="間接（上位代理店）"
                 value={slots.stock?.indirect}
                 onChange={(v) => updateSlot('stock', 'indirect', v)}
-                unsetHint="事業デフォルトを使用"
+                unsetHint={unsetHintFor(businessDefaults.stock?.indirect)}
               />
             </div>
           </div>
