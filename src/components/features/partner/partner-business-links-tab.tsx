@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -79,7 +79,7 @@ function summarizeRewardSlots(slots: RewardSlots | null): string {
   label(slots.shot?.indirect, 'ショット間接:');
   label(slots.stock?.direct, 'ストック直:');
   label(slots.stock?.indirect, 'ストック間接:');
-  return parts.length > 0 ? parts.join(', ') : '事業デフォルト';
+  return parts.length > 0 ? parts.join(', ') : '未設定（事業デフォルトを使用）';
 }
 
 // ============================================
@@ -327,12 +327,15 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
                   {/* 報酬設定（ショット/ストック×直/間接 の4スロット + 支払いタイミング特例） */}
                   <TableCell>
-                    <button
-                      className="text-sm hover:underline cursor-pointer text-left"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs font-normal justify-start max-w-full"
                       onClick={() => setRewardDialogLinkId(link.id)}
                     >
-                      {summarizeRewardSlots(link.rewardSlots)}
-                    </button>
+                      <Pencil className="mr-1.5 h-3 w-3 shrink-0" />
+                      <span className="truncate">{summarizeRewardSlots(link.rewardSlots)}</span>
+                    </Button>
                   </TableCell>
 
                   {/* 担当者/窓口 */}
