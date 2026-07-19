@@ -199,26 +199,42 @@ SheetJS で提供テンプレ「見積書」シート構造を再現:
 - **Sonnet 理由**: 既存のConfig駆動・タブ・インラインPATCHパターンの踏襲。パターンが確立しており Sonnet の実装効率が活きる
 - 依存: Phase 0
 
-### Phase 3 — 内部の報酬集計画面　【モデル: Sonnet 5】
+### Phase 3 — 内部の報酬集計画面　【モデル: Sonnet 5】　✅完了(2026-07-19)
 - 期間指定 → 代理店別 直/間接/合計 の一覧、ドリルダウン、`GET /rewards`
 - **Sonnet 理由**: 既存の一覧/フィルタ/テーブル基盤（EntityListTemplate等）を再利用する画面実装
 - 依存: Phase 1
+- 実装: `reward-helpers.ts` に `getRewardEntriesForPeriod`（支払い対象月で絞り込み。発生月レンジは2ヶ月分マージンを取って計算）+ `filterEntriesByPaymentMonth`（純粋関数、単体テスト3件追加）。`GET /rewards`（代理店別集計）・`GET /rewards/preview`（ドリルダウン）を新設し、`/rewards`画面（月次レポートの単一月選択パターンを踏襲）で検証。実DB（MG-0008, 提案金額450万円×直紹介15%=¥675,000）でブラウザ実測、正しい月のみ計上・前月は¥0になることを確認
+- 注: `feature/accounting-pipeline`ブランチに同名不関連の「会計パイプライン」（着金エントリ・分配明細）機能が別途存在するため、画面パスは`/accounting`ではなく`/rewards`を採用（将来のマージ衝突回避）
 
-### Phase 4 — 締め・確定 & スナップショット　【モデル: Opus 4.8（コア）＋ Sonnet（UI）】
+### Phase 4 — 締め・確定 & スナップショット　【モデル: Opus 4.8（コア）＋ Sonnet（UI）】　✅完了(2026-07-19)
 - `POST /rewards/statements` で期間確定 → RewardStatement/RewardEntry 生成、楽観ロック、二重確定防止、トランザクション
 - **Opus 理由**: スナップショットの整合性・確定の冪等性・同時実行はデータ整合クリティカル。確定後の不変性保証も
 - UI（確定ボタン・状態表示）は Sonnet
 - 依存: Phase 1, 3
+- 実装（コア・Opus）: `RewardEntry.sourceMonth`列を追加（監査trail用、確定後は不変のため後付け不可）。`POST /rewards/statements`（`src/app/api/v1/rewards/statements/route.ts`）はライブ計算(`getRewardEntriesForPeriod`)を唯一の真実の源とし、明細書＋明細行を単一トランザクションで原子作成。二重確定/同時確定は`@@unique([businessId,partnerId,periodMonth])`違反(P2002)を409に変換（実際に同時リクエストで検証：1件成功・1件409、DBに重複なし）。明細書番号は`{事業コード}-{YYYYMM}-{代理店コード}`で決定的に採番（カウンタ不要、衝突原理的に回避）。`reward-helpers.ts`に`computeStatementTotals`/`generateStatementNo`を追加、単体テスト8件追加
+- 実装（UI・Sonnet）: `GET /rewards/statements`（一覧）・`/rewards/statements/[id]`（詳細）を追加。`/rewards`画面に確定ボタン・確定済みバッジ・確定済み明細書一覧を追加、`/rewards/statements/[id]`に明細書詳細ページを新設。ブラウザ実操作で確定→バッジ即時反映→詳細ページ表示まで一気通貫で検証済み
+- 未確定事項（要ユーザー確認）: 明細書番号のフォーマット（現状は連番でなく事業コード×年月×代理店コードの決定的採番）
 
-### Phase 5 — xlsx 明細書生成　【モデル: Sonnet 5（雛形は Haiku 可）】
+### Phase 5 — xlsx 明細書生成　【モデル: Sonnet 5（雛形は Haiku 可）】　✅完了(2026-07-19)
 - `reward-statement-xlsx.ts`、テンプレ構造の再現、`GET /rewards/statements/[id]/xlsx`
 - **Sonnet 理由**: データ形状が Phase 4 で確定していれば、テンプレ埋め込みは定型作業。セル配置の初期雛形は Haiku でも可
 - 依存: Phase 4
+- **実装時に判明した技術的制約**: 導入済みの `xlsx`(SheetJS Community Edition) は罫線・書式を書き込めないことを実測で確認（read→write ラウンドトリップだけで styles.xml が 68KB→1.6KB に消失）。ユーザー確認の上、`exceljs` を追加導入し、原本テンプレートを読み込んでセルの値だけを差し替える方式に変更（罫線・フォント・109件の結合セルすべてほぼそのまま保持されることを実測で確認。styles.xmlは68KB→23.5KBに圧縮されるが実質的な書式情報は保持）
+- 実装: `src/lib/templates/reward-statement-template.xlsx`（原本テンプレート同梱）+ `src/lib/reward-statement-xlsx.ts`（生成関数）+ `GET /rewards/statements/[id]/xlsx`。他用途シート（契約書等）は出力から除去、シート名を「支払明細書」に変更。テンプレートの数式セル（小計/税/合計/お支払い金額）は確定済みスナップショットの値で直接上書き（Excel再計算に依存しない）
+- 明細行は22〜39行目の固定18行（`exceljs`の`duplicateRow`で動的に行を増やすと結合セル範囲が値の移動に追従しないバグを実測で確認したため、動的な行挿入は不採用）。19件以上ある場合は最終行に「ほか n件（合算）」として合算表示（金額の正確性は保たれる。内訳はWeb明細画面で確認可能）
+- `next.config.js`に`outputFileTracingIncludes`を追加し、standaloneビルドでテンプレートファイルが確実に含まれるようにした
+- ブラウザで実際にxlsxをダウンロードし、罫線・フォント・結合セルの保持とデータの正確性（宛先・金額・明細行）を検証済み
+- **未確定事項（要ユーザー確認）**: 「お振込年月日」欄は実際の振込予定日を保持するフィールドが本システムに無いため空欄のまま出力（運用側で手動記入を想定）
 
-### Phase 6 — 代理店ポータルの報酬表示　【モデル: Sonnet 5】
+### Phase 6 — 代理店ポータルの報酬表示　【モデル: Sonnet 5】　✅完了(2026-07-19)
 - `portal/rewards` API＋ポータルUI、許可リスト追加、当月ライブ＋過去確定、直/間接内訳
 - **Sonnet 理由**: 既存ポータル（summary/documents）と同じ認可・スコープ・表示パターン
 - 依存: Phase 1, 4
+- 実装: `GET /api/v1/portal/rewards?businessId=`（当月ライブ計算＋過去確定明細を返す）。`partner-api-allowlist.ts`に追加。`/portal/rewards`画面（見込み報酬サマリー・当月内訳・確定済み履歴）＋ナビゲーション追加
+- **スコープ設計**: 既存の`portal/partner-ranking`（下位代理店の成績が見えるためadmin限定）と同じ考え方を踏襲し、**partner_admin=自分＋配下（`getBusinessPartnerScope`）、partner_staff=自分の代理店のみ**に差別化（配下の報酬明細を一般スタッフに見せない）。プラン上は両ロール同一スコープとも読めたため、要ご確認
+- ブラウザで両ロールを実ログインして検証: partner_adminは自分＋配下(田村健一)の直/間接内訳・確定済み明細2件が見え、partner_staffは自分の代理店の分（配下除く）のみ・確定済み明細1件のみ見えることを確認
+- **検証中に発見・修正したバグ**: 間接報酬の「経由代理店名」解決が、受取代理店のみのIDセットから代理店名を引いていたため、スコープが狭い場合（partner_staff等）に経由元の代理店名が欠落していた。`sourcePartnerId`も名前解決対象に含めるよう修正し、再検証で解消を確認
+- 代理店への明細書xlsxダウンロードは意図的に含めない（既存の「代理店への添付は手動」という設計方針を踏襲。確定済み明細は金額のみ表示し、実際の明細書は既存の請求書アップロード運用で別途共有する想定）
 
 ### 補助タスク　【モデル: Haiku 4.5】
 - ナビ追加、許可リスト1行追加、seed に報酬設定サンプル、リンク一覧への率カラム表示配線 等の機械的作業
@@ -253,6 +269,13 @@ SheetJS で提供テンプレ「見積書」シート構造を再現:
 - 円未満切り捨て、消費税は外税10%（`calcTax`）
 - 間接報酬は「親リンクが存在し間接設定がある」場合に発生（親の linkStatus 非アクティブ時の扱いは未確定）
 
+## 5.7 全体監査で発見・対応した事項（2026-07-19、Opus）
+- 🔴**修正済（金銭バグ）**: 案件報酬タブ（project-reward-tab）の日付ヘルパーが UTC 素朴処理で、JST基準の計算エンジンと不整合だった。JST早朝帯(00:00〜09:00 JST=前日UTC15:00〜24:00)に月境界付近で収益確定した案件は、報酬タブ保存で計上月が1ヶ月後退し得た（例: JST 7/1 08:00 確定を保存すると6月へ移動）。ヘルパーをJST基準に修正し、ブラウザ+DB実測で月・日保持を確認
+- ✅**対応済（UX非対称の解消）**: 新規リンク作成ダイアログ（link-partner-to-business-dialog）を編集ダイアログと同じ4スロット + 支払月特例のフル設定に差し替え。旧「手数料率（%）」単一入力と `commissionRate` 変数を完全撤去（コードベース全体から `commissionRate` 参照ゼロ）。実DBで全4スロット + paymentTiming の保存を検証済み
+- ⚪**意図的な将来対応（確認）**: ①`Project.stockTermMonths`（ストック固定期間）はスキーマ・計算エンジン・マイグレーション対応済みだがUI未実装（プラン通り「カラムだけ用意」）。②案件別の支払月上書き（`paymentTimingOverride`）は未実装（プランで任意扱い。支払月特例は事業・代理店リンクレベルでのみ可）。③明細書番号は連番でなく決定的採番（事業コード×年月×代理店コード）
+- ✅**対応済（テストカバレッジ）**: 報酬タブの日付ヘルパーを `src/lib/jst-date.ts` に共有util化（`isoToJstDateInput`/`jstDateInputToIso`）+ 単体テスト8件（月ズレバグの回帰テスト含む）。締め(POST /rewards/statements)の並行確定安全経路（P2002→409変換・他エラーは500伝播）のルートテスト6件を追加（実DB制約の統合テストは既存基盤がモック方式のため不可、DB制約自体はブラウザ手動＋スキーマで担保）
+- ✅**確認OK**: 全 reward 系API（内部6本＋portal1本）に認可あり／partner許可リスト整合／スキーマドリフトなし／seed に報酬設定サンプルあり／console.log 残存なし／xlsxテンプレートgit管理下／commissionRate等の旧列参照は作成ダイアログ以外に残存なし
+
 
 ---
 
@@ -263,7 +286,7 @@ SheetJS で提供テンプレ「見積書」シート構造を再現:
 2. ✅反映: 「金額」が円とは限らない（台数KPIあり）→ `rewardConfig.baseAmountField` で明示
 3. ✅**解決済**: 報酬対象は `BusinessStatusDefinition.isRevenueConfirmed=true` のステータスの案件で判定（exact-status-match は使わない）。事業ごとに受注・納品完了・入金済など「収益確定」ステータスに複数チェック可 → 案件が受注→納品と進んでも、それらを確定扱いにしておけば報酬は維持。失注は付けないので除外。Phase 0 でフラグ列を追加済み。計上月は収益確定日フィールド→無ければ `projectStatusChangedAt`→締めスナップショットで固定
 4. ✅確認済: 金額は number 型で格納（seed）。文字列保存の事業がないか本番スポット確認
-5. ⚠️反映予定: 計上日(dateField)未設定の受注案件は月=null で**黙って除外**→報酬0。締め画面で「計上日未設定の受注案件」を警告表示する
+5. ✅**対応済(2026-07-19)**: 実装（`revenueConfirmedAt`ラッチ方式）では「計上日未設定」の形は「営業ステータスは収益確定対象(isRevenueConfirmed=true)だが`revenueConfirmedAt`がnull」というケースに相当する。CSVインポート・DB直接操作・過去の不具合（本セッションで実際に発見したラッチバグ）等でステータス変更PATCHを経由しないと発生しうる。この状態の案件は報酬計算から静かに除外され、一度その月を確定すると後から気づいても遡って反映できないため、`GET /api/v1/rewards/warnings?businessId=`で検出し`/rewards`画面に警告バナー表示する機能を追加。実際にMG-0006を「won」だが`revenueConfirmedAt=null`の状態に再現してブラウザで警告表示→リンクから案件詳細への遷移→復旧後に警告消失を確認済み。ルートテスト6件追加
 
 **中程度**
 6. 間接報酬で子の売上額が親に見える（`RewardEntry.sourcePartnerId` + `baseAmount`）。オーバーライド報酬の性質上妥当だが、ポータルで親に見せる粒度（金額 or 報酬額のみ）を決める
