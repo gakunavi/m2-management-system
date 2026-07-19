@@ -241,9 +241,19 @@ export async function PATCH(
 
     // 収益確定日・解約日: リクエストに明示指定があればそれを優先（手動での訂正/リセット）。
     // 指定が無く、かつ今回のステータス変更で自動確定した場合のみ自動セット値を使う。
+    //
+    // 注意: 汎用編集フォーム（use-entity-form）はGETで取得した全フィールドをそのまま
+    // 送り返す実装のため、revenueConfirmedAt を一切編集していなくても body には
+    // 既存値と同じ値（多くは null）が明示的に含まれる。これを「手動指定」と区別せずに
+    // 扱うと、ステータス変更による自動ラッチが毎回この値で上書きされてしまう。
+    // そのため、既存値と異なる場合のみ「手動指定」とみなす。
     const { revenueConfirmedAt: manualRevenueConfirmedAt, cancelledAt: manualCancelledAt, rewardOverride, ...restUpdateData } = updateData;
-    const resolvedRevenueConfirmedAt =
-      manualRevenueConfirmedAt !== undefined ? (manualRevenueConfirmedAt ? new Date(manualRevenueConfirmedAt) : null) : autoRevenueConfirmedAt;
+    const existingRevenueConfirmedIso = existing.revenueConfirmedAt ? existing.revenueConfirmedAt.toISOString() : null;
+    const isManualRevenueConfirmedChange =
+      manualRevenueConfirmedAt !== undefined && manualRevenueConfirmedAt !== existingRevenueConfirmedIso;
+    const resolvedRevenueConfirmedAt = isManualRevenueConfirmedChange
+      ? (manualRevenueConfirmedAt ? new Date(manualRevenueConfirmedAt) : null)
+      : autoRevenueConfirmedAt;
 
     const updated = await prisma.project.update({
       where: { id: projectId },
