@@ -15,10 +15,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { RewardSettingInput } from '@/components/features/business/reward-setting-input';
+import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
 
 // ============================================
 // 型定義
 // ============================================
+
+type PaymentTiming = 'same' | 'next' | 'next2' | 'closing';
+
+const PAYMENT_TIMING_LABELS: Record<PaymentTiming, string> = {
+  same: '当月（確定と同じ月）',
+  next: '翌月',
+  next2: '翌々月',
+  closing: '締め日基準',
+};
 
 interface PartnerCandidate {
   id: number;
@@ -63,9 +74,16 @@ export function LinkPartnerToBusinessDialog({
   const [selectedParent, setSelectedParent] = useState<PartnerCandidate | null>(null);
   const [asPrimary, setAsPrimary] = useState(false);
 
-  // --- 追加情報 ---
-  const [commissionRate, setCommissionRate] = useState('');
+  // --- 追加情報（報酬設定は編集ダイアログと同じ4スロット + 支払い月特例）---
+  const [rewardSlots, setRewardSlots] = useState<RewardSlots>({});
+  const [useTimingOverride, setUseTimingOverride] = useState(false);
+  const [paymentTiming, setPaymentTiming] = useState<PaymentTiming>('same');
+  const [closingDay, setClosingDay] = useState<number | null>(null);
   const [contactPerson, setContactPerson] = useState('');
+
+  const updateSlot = (kind: 'shot' | 'stock', side: 'direct' | 'indirect', value: RewardSetting | undefined) => {
+    setRewardSlots((prev) => ({ ...prev, [kind]: { ...prev[kind], [side]: value } }));
+  };
 
   const [submitting, setSubmitting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -81,7 +99,10 @@ export function LinkPartnerToBusinessDialog({
       setParentCandidates([]);
       setSelectedParent(null);
       setAsPrimary(false);
-      setCommissionRate('');
+      setRewardSlots({});
+      setUseTimingOverride(false);
+      setPaymentTiming('same');
+      setClosingDay(null);
       setContactPerson('');
     }
   }, [open]);
@@ -158,9 +179,9 @@ export function LinkPartnerToBusinessDialog({
         body: JSON.stringify({
           businessId,
           linkStatus: 'active',
-          rewardSlots: commissionRate
-            ? { shot: { direct: { type: 'rate', value: parseFloat(commissionRate) } } }
-            : null,
+          rewardSlots: Object.keys(rewardSlots).length > 0 ? rewardSlots : null,
+          paymentTiming: useTimingOverride ? paymentTiming : null,
+          closingDay: useTimingOverride && paymentTiming === 'closing' ? closingDay : null,
           contactPerson: contactPerson || null,
         }),
       });
@@ -394,20 +415,7 @@ export function LinkPartnerToBusinessDialog({
 
           {/* ===== 追加情報 ===== */}
           {selectedPartner && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">手数料率（%）</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={commissionRate}
-                  onChange={(e) => setCommissionRate(e.target.value)}
-                  placeholder="例: 10.00"
-                  className="h-8 text-sm"
-                />
-              </div>
+            <div className="space-y-3">
               <div className="space-y-1">
                 <Label className="text-xs">担当者</Label>
                 <Input
@@ -416,6 +424,84 @@ export function LinkPartnerToBusinessDialog({
                   placeholder="担当者名"
                   className="h-8 text-sm"
                 />
+              </div>
+
+              {/* 報酬設定（4スロット。未設定のスロットは事業デフォルトにフォールバック）*/}
+              <div className="border-t pt-3 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  報酬設定（未設定の項目は事業デフォルトを使用します。あとから編集も可能です）
+                </p>
+                <div>
+                  <h4 className="text-xs font-medium mb-1">ショット報酬（契約確定時に1回）</h4>
+                  <div className="pl-2">
+                    <RewardSettingInput
+                      label="直紹介"
+                      value={rewardSlots.shot?.direct}
+                      onChange={(v) => updateSlot('shot', 'direct', v)}
+                      unsetHint="事業デフォルトを使用"
+                    />
+                    <RewardSettingInput
+                      label="間接（上位代理店）"
+                      value={rewardSlots.shot?.indirect}
+                      onChange={(v) => updateSlot('shot', 'indirect', v)}
+                      unsetHint="事業デフォルトを使用"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-xs font-medium mb-1">ストック報酬（契約継続中は毎月）</h4>
+                  <div className="pl-2">
+                    <RewardSettingInput
+                      label="直紹介"
+                      value={rewardSlots.stock?.direct}
+                      onChange={(v) => updateSlot('stock', 'direct', v)}
+                      unsetHint="事業デフォルトを使用"
+                    />
+                    <RewardSettingInput
+                      label="間接（上位代理店）"
+                      value={rewardSlots.stock?.indirect}
+                      onChange={(v) => updateSlot('stock', 'indirect', v)}
+                      unsetHint="事業デフォルトを使用"
+                    />
+                  </div>
+                </div>
+
+                <div className="border-t pt-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useTimingOverride}
+                      onChange={(e) => setUseTimingOverride(e.target.checked)}
+                    />
+                    この代理店だけ支払い対象月を変更する
+                  </label>
+                  {useTimingOverride && (
+                    <div className="pl-6 mt-2 space-y-2">
+                      <select
+                        className="border rounded px-2 py-1 text-sm w-full"
+                        value={paymentTiming}
+                        onChange={(e) => setPaymentTiming(e.target.value as PaymentTiming)}
+                      >
+                        {Object.entries(PAYMENT_TIMING_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                      {paymentTiming === 'closing' && (
+                        <div>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            className="border rounded px-2 py-1 text-sm w-24"
+                            value={closingDay ?? ''}
+                            onChange={(e) => setClosingDay(e.target.value ? Number(e.target.value) : null)}
+                          />
+                          <span className="text-sm text-muted-foreground ml-2">日締め</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
