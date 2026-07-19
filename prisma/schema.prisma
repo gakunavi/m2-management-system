@@ -390,6 +390,7 @@ model RewardEntry {
   projectId           Int?     @map("project_id")
   rewardKind          String   @map("reward_kind") @db.VarChar(10) // shot | stock
   entryType           String   @map("entry_type") @db.VarChar(10) // direct | indirect
+  sourceMonth         String   @map("source_month") @db.VarChar(7) // 発生月 YYYY-MM（確定後は不変。監査用に必須）
   sourcePartnerId     Int?     @map("source_partner_id") // indirect のとき、成果を出した配下代理店
   projectNoSnapshot   String?  @map("project_no_snapshot") @db.VarChar(30)
   customerNameSnapshot String? @map("customer_name_snapshot") @db.VarChar(255)
