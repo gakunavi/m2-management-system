@@ -1,4 +1,4 @@
-import { LayoutDashboard, Briefcase, Users, Building2, UserCog, FolderKanban, BarChart3, BookOpen, MessageSquare, FileBarChart, Megaphone, Bot, Settings, CheckSquare } from 'lucide-react';
+import { LayoutDashboard, Briefcase, Users, Building2, UserCog, FolderKanban, BarChart3, BookOpen, MessageSquare, FileBarChart, Megaphone, Bot, Settings, CheckSquare, Banknote } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -49,6 +49,12 @@ export const mainNavSections: NavSection[] = [
       { label: '月次レポート', href: '/reports', icon: FileBarChart },
     ],
   },
+  {
+    label: '経理',
+    items: [
+      { label: '報酬管理', href: '/rewards', icon: Banknote, requiresBusiness: true },
+    ],
+  },
 ];
 
 // ============================================
@@ -92,6 +98,7 @@ export const partnerNavSections: NavSection[] = [
     items: [
       { label: '契約一覧', href: '/portal/projects', icon: FolderKanban, requiresBusiness: true },
       { label: '案件ムーブメント', href: '/portal/movements', icon: BarChart3, requiresBusiness: true },
+      { label: '報酬', href: '/portal/rewards', icon: Banknote, requiresBusiness: true },
     ],
   },
   {

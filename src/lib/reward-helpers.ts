@@ -439,3 +439,93 @@ export async function calculateBusinessRewardEntries(
   }
   return result;
 }
+
+// ============================================
+// 支払い対象月での期間絞り込み（内部集計・締め共通）
+// ============================================
+
+/** 明細を支払い対象月(paymentMonth)が [fromMonth, toMonth] に入るものだけに絞り込む（純粋関数） */
+export function filterEntriesByPaymentMonth(
+  entries: ComputedRewardEntry[],
+  fromMonth: string,
+  toMonth: string,
+): ComputedRewardEntry[] {
+  return entries.filter(
+    (e) => compareMonth(e.paymentMonth, fromMonth) >= 0 && compareMonth(e.paymentMonth, toMonth) <= 0,
+  );
+}
+
+/**
+ * 支払い対象月(paymentMonth)が [fromMonth, toMonth] に入る明細を計算する。
+ *
+ * calculateBusinessRewardEntries は「発生月(sourceMonth)」の範囲を受け取るが、
+ * 支払いタイミング（翌々月・締め日）により発生月と支払い対象月は最大2ヶ月ずれる。
+ * そのため発生月レンジは fromMonth の2ヶ月前まで広げて計算し、支払い対象月で絞り込む。
+ * （支払い対象月は発生月より前になることはないため、発生月レンジの上限は toMonth で足りる）
+ */
+export async function getRewardEntriesForPeriod(
+  prisma: PrismaClient,
+  businessId: number,
+  fromMonth: string,
+  toMonth: string,
+): Promise<ComputedRewardEntry[]> {
+  const sourceFrom = addMonths(fromMonth, -2);
+  const entries = await calculateBusinessRewardEntries(prisma, businessId, sourceFrom, toMonth);
+  return filterEntriesByPaymentMonth(entries, fromMonth, toMonth);
+}
+
+// ============================================
+// 締め（確定）スナップショット用ヘルパー（純粋関数）
+// ============================================
+
+/** 明細書1通ぶんの金額集計（直/間接/小計/税/総計）。全て円未満切り捨て前提の整数円。 */
+export interface RewardStatementTotals {
+  totalDirect: number;
+  totalIndirect: number;
+  subtotal: number;
+  taxAmount: number;
+  grandTotal: number;
+}
+
+/**
+ * 対象代理店ぶんの明細行から明細書の金額を集計する（純粋関数）。
+ * subtotal = 直 + 間接、taxAmount = calcTax(subtotal)（外税・切り捨て）、grandTotal = subtotal + tax。
+ * 明細が空（¥0）でも 0 埋めの totals を返す（¥0 明細書も正当）。
+ */
+export function computeStatementTotals(
+  entries: ComputedRewardEntry[],
+  taxRate: number,
+): RewardStatementTotals {
+  let totalDirect = 0;
+  let totalIndirect = 0;
+  for (const e of entries) {
+    if (e.entryType === 'direct') totalDirect += e.rewardAmount;
+    else totalIndirect += e.rewardAmount;
+  }
+  const subtotal = totalDirect + totalIndirect;
+  const taxAmount = calcTax(subtotal, taxRate);
+  const grandTotal = subtotal + taxAmount;
+  return { totalDirect, totalIndirect, subtotal, taxAmount, grandTotal };
+}
+
+/**
+ * 支払明細書番号を採番する（純粋・決定的）。
+ *
+ * 採番方針: 連番カウンタ（採番テーブルやシーケンス）を新設せず、
+ * `事業コード-YYYYMM-代理店コード` で決定的に導出する。
+ * RewardStatement は @@unique([businessId, partnerId, periodMonth]) により
+ * 「事業×代理店×対象月」が一意で、businessCode・partnerCode はいずれも DB 上ユニーク。
+ * よってこの3要素から作る番号も自然に衝突せず、採番時の競合（シーケンス採番の
+ * 同時実行・飛び番・二重採番）を原理的に回避できる。追加インフラ不要。
+ * （連番形式が業務要件で必要になれば、将来カウンタ列を足して差し替え可能）
+ *
+ * 注: この採番規則は plan 5.「Phase 4 で確定」項目。ユーザー最終確認は未了。
+ */
+export function generateStatementNo(
+  businessCode: string,
+  periodMonth: string,
+  partnerCode: string,
+): string {
+  const ym = periodMonth.replace('-', '');
+  return `${businessCode}-${ym}-${partnerCode}`;
+}

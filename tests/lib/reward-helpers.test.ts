@@ -10,9 +10,13 @@ import {
   calcTax,
   getStockActiveMonths,
   computeProjectEntries,
+  filterEntriesByPaymentMonth,
+  computeStatementTotals,
+  generateStatementNo,
   type RewardConfig,
   type ProjectRewardInput,
   type LinkRewardInput,
+  type ComputedRewardEntry,
 } from '@/lib/reward-helpers';
 import type { RewardSlots } from '@/lib/reward-slots';
 
@@ -296,5 +300,110 @@ describe('computeProjectEntries - 代理店特例の支払いタイミング', (
     const link: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: 'next', closingDay: null };
     const e = computeProjectEntries(projBase, link, null, cfg, '2026-01', '2026-12');
     expect(e[0].paymentMonth).toBe('2026-04'); // 確定3月→特例で翌月
+  });
+});
+
+describe('filterEntriesByPaymentMonth', () => {
+  const mk = (paymentMonth: string): ComputedRewardEntry => ({
+    projectId: 1,
+    projectNo: 'P-1',
+    customerName: null,
+    rewardKind: 'shot',
+    entryType: 'direct',
+    partnerId: 100,
+    sourcePartnerId: null,
+    baseAmount: 1000,
+    rewardType: 'rate',
+    rate: 10,
+    rewardAmount: 100,
+    sourceMonth: '2026-01',
+    paymentMonth,
+  });
+
+  it('範囲内の paymentMonth のみ残す', () => {
+    const entries = [mk('2026-01'), mk('2026-02'), mk('2026-03'), mk('2026-04')];
+    const result = filterEntriesByPaymentMonth(entries, '2026-02', '2026-03');
+    expect(result.map((e) => e.paymentMonth)).toEqual(['2026-02', '2026-03']);
+  });
+
+  it('境界値（fromMonth/toMonth と同月）を含む', () => {
+    const entries = [mk('2026-02'), mk('2026-03')];
+    expect(filterEntriesByPaymentMonth(entries, '2026-02', '2026-02')).toHaveLength(1);
+    expect(filterEntriesByPaymentMonth(entries, '2026-03', '2026-03')).toHaveLength(1);
+  });
+
+  it('範囲外なら空配列', () => {
+    const entries = [mk('2026-01')];
+    expect(filterEntriesByPaymentMonth(entries, '2026-02', '2026-03')).toHaveLength(0);
+  });
+});
+
+// ============================================
+// 締め（確定）スナップショット用ヘルパー
+// ============================================
+describe('computeStatementTotals', () => {
+  const mk = (entryType: 'direct' | 'indirect', rewardAmount: number): ComputedRewardEntry => ({
+    projectId: 1,
+    projectNo: 'P-1',
+    customerName: null,
+    rewardKind: 'shot',
+    entryType,
+    partnerId: 100,
+    sourcePartnerId: null,
+    baseAmount: 0,
+    rewardType: 'rate',
+    rate: null,
+    rewardAmount,
+    sourceMonth: '2026-01',
+    paymentMonth: '2026-01',
+  });
+
+  it('直/間接を分けて集計し、外税10%・総計を出す', () => {
+    const totals = computeStatementTotals([mk('direct', 100000), mk('indirect', 25000)], 10);
+    expect(totals).toEqual({
+      totalDirect: 100000,
+      totalIndirect: 25000,
+      subtotal: 125000,
+      taxAmount: 12500,
+      grandTotal: 137500,
+    });
+  });
+
+  it('税は小計に対して切り捨て（各行ではなく合計に一度だけ）', () => {
+    // 小計 12345 → 税 1234.5 → 1234
+    const totals = computeStatementTotals([mk('direct', 12345)], 10);
+    expect(totals.taxAmount).toBe(1234);
+    expect(totals.grandTotal).toBe(13579);
+  });
+
+  it('明細ゼロ（¥0明細書）は全て0', () => {
+    expect(computeStatementTotals([], 10)).toEqual({
+      totalDirect: 0,
+      totalIndirect: 0,
+      subtotal: 0,
+      taxAmount: 0,
+      grandTotal: 0,
+    });
+  });
+
+  it('間接のみでも直は0で集計', () => {
+    const totals = computeStatementTotals([mk('indirect', 5000)], 10);
+    expect(totals).toMatchObject({ totalDirect: 0, totalIndirect: 5000, subtotal: 5000, taxAmount: 500 });
+  });
+});
+
+describe('generateStatementNo', () => {
+  it('事業コード-YYYYMM-代理店コード の決定的な番号', () => {
+    expect(generateStatementNo('MG', '2026-07', 'AG-0001')).toBe('MG-202607-AG-0001');
+  });
+  it('同じ3要素なら常に同一（決定的）', () => {
+    expect(generateStatementNo('MG', '2026-07', 'AG-0001')).toBe(
+      generateStatementNo('MG', '2026-07', 'AG-0001'),
+    );
+  });
+  it('対象月の異なる番号は衝突しない', () => {
+    expect(generateStatementNo('MG', '2026-07', 'AG-0001')).not.toBe(
+      generateStatementNo('MG', '2026-08', 'AG-0001'),
+    );
   });
 });
