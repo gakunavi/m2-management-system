@@ -616,6 +616,12 @@ export const projectDetailConfig: EntityDetailConfig = {
       component: 'custom',
       config: {},
     },
+    {
+      key: 'reward',
+      label: '代理店報酬',
+      component: 'custom',
+      config: {},
+    },
   ],
 
   actions: {

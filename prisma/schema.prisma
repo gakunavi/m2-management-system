@@ -63,6 +63,7 @@ model User {
   ownedTaskTags       TaskTag[]            @relation("TaskTagOwner")
   taskNotifyTargets   TaskNotifyTarget[]
   createdTaskColumns  TaskColumn[]         @relation("TaskColumnCreator")
+  confirmedRewardStatements RewardStatement[] @relation("RewardStatementConfirmer")
   createdTaskBoards   TaskBoard[]          @relation("TaskBoardCreator")
   taskBoardMembers    TaskBoardMember[]
   taskAttachments     TaskAttachment[]    @relation("TaskAttachmentUploader")
@@ -103,6 +104,7 @@ model Business {
   chatConversations            ChatConversation[]
   tasks                        Task[]
   taskColumns                  TaskColumn[]
+  rewardStatements             RewardStatement[]
 
   @@index([businessIsActive, businessSortOrder])
   @@index([businessCode, businessIsActive], map: "idx_businesses_code_active")
@@ -119,6 +121,9 @@ model BusinessStatusDefinition {
   statusColor     String?  @map("status_color") @db.VarChar(20)
   statusIsFinal   Boolean  @default(false) @map("status_is_final")
   statusIsLost    Boolean  @default(false) @map("status_is_lost")
+  /// このステータスの案件を代理店報酬の対象（収益確定）とみなすか。
+  /// 失注には付けない。受注・納品完了・入金済など「確定」ステータスに付ける。
+  isRevenueConfirmed Boolean @default(false) @map("is_revenue_confirmed")
   statusSortOrder Int      @default(0) @map("status_sort_order")
   statusIsActive  Boolean  @default(true) @map("status_is_active")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -315,7 +320,15 @@ model PartnerBusinessLink {
   partnerId          Int      @map("partner_id")
   businessId         Int      @map("business_id")
   linkStatus         String   @default("active") @map("link_status") @db.VarChar(20)
-  commissionRate     Decimal? @map("commission_rate") @db.Decimal(5, 2)
+  // 代理店×事業ごとの報酬上書き（未設定なら事業デフォルト rewardConfig にフォールバック）
+  // type: 'rate'(率%) | 'fixed'(固定額円)。value は Decimal(12,2) で率・固定額の両方を保持
+  // 報酬設定の代理店×事業別上書き（RewardSlots 構造の部分JSON）
+  // { shot?: { direct?: {type,value}, indirect?: {type,value} },
+  //   stock?: { direct?: {type,value}, indirect?: {type,value} } }
+  rewardSlots         Json?    @map("reward_slots")
+  // 支払い対象月の代理店特例（未設定なら事業デフォルト）
+  paymentTiming       String?  @map("payment_timing") @db.VarChar(20) // same|next|next2|closing
+  closingDay          Int?     @map("closing_day")
   contactPerson      String?  @map("contact_person") @db.VarChar(100)
   linkCustomData     Json     @default("{}") @map("link_custom_data")
   businessTier       String?  @map("business_tier") @db.VarChar(50)
@@ -332,6 +345,68 @@ model PartnerBusinessLink {
   @@index([businessId, businessTier], map: "idx_partner_business_links_biz_tier")
   @@index([businessParentId], map: "idx_partner_business_links_biz_parent")
   @@map("partner_business_links")
+}
+
+// ============================================
+// 代理店報酬（支払明細書）
+// ============================================
+
+/// 締め単位＝支払明細書1通（事業×代理店×対象月）
+model RewardStatement {
+  id            Int      @id @default(autoincrement())
+  businessId    Int      @map("business_id")
+  partnerId     Int      @map("partner_id")
+  periodMonth   String   @map("period_month") @db.VarChar(7) // YYYY-MM
+  status        String   @default("draft") @map("status") @db.VarChar(20) // draft | confirmed
+  statementNo   String?  @map("statement_no") @db.VarChar(50) // 発行番号
+  totalDirect   Decimal  @default(0) @map("total_direct") @db.Decimal(12, 2)
+  totalIndirect Decimal  @default(0) @map("total_indirect") @db.Decimal(12, 2)
+  subtotal      Decimal  @default(0) @map("subtotal") @db.Decimal(12, 2)
+  taxAmount     Decimal  @default(0) @map("tax_amount") @db.Decimal(12, 2)
+  grandTotal    Decimal  @default(0) @map("grand_total") @db.Decimal(12, 2)
+  fileStorageKey String? @map("file_storage_key") @db.VarChar(500)
+  fileUrl       String?  @map("file_url") @db.VarChar(500)
+  confirmedAt   DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  confirmedBy   Int?     @map("confirmed_by")
+  version       Int      @default(1)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  business      Business @relation(fields: [businessId], references: [id])
+  partner       Partner  @relation("RewardStatementPartner", fields: [partnerId], references: [id], onDelete: Cascade)
+  confirmer     User?    @relation("RewardStatementConfirmer", fields: [confirmedBy], references: [id])
+  entries       RewardEntry[]
+
+  @@unique([businessId, partnerId, periodMonth])
+  @@index([businessId, periodMonth], map: "idx_reward_statements_biz_period")
+  @@index([partnerId], map: "idx_reward_statements_partner")
+  @@map("reward_statements")
+}
+
+/// 支払明細書の明細行（案件1件＝ショット/ストック × 直/間接 の1行）
+model RewardEntry {
+  id                  Int      @id @default(autoincrement())
+  statementId         Int      @map("statement_id")
+  projectId           Int?     @map("project_id")
+  rewardKind          String   @map("reward_kind") @db.VarChar(10) // shot | stock
+  entryType           String   @map("entry_type") @db.VarChar(10) // direct | indirect
+  sourceMonth         String   @map("source_month") @db.VarChar(7) // 発生月 YYYY-MM（確定後は不変。監査用に必須）
+  sourcePartnerId     Int?     @map("source_partner_id") // indirect のとき、成果を出した配下代理店
+  projectNoSnapshot   String?  @map("project_no_snapshot") @db.VarChar(30)
+  customerNameSnapshot String? @map("customer_name_snapshot") @db.VarChar(255)
+  baseAmount          Decimal  @default(0) @map("base_amount") @db.Decimal(12, 2) // 案件金額
+  rewardType          String   @map("reward_type") @db.VarChar(10) // rate | fixed
+  rate                Decimal? @map("rate") @db.Decimal(5, 2) // rate のときの率%
+  rewardAmount        Decimal  @default(0) @map("reward_amount") @db.Decimal(12, 2)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  statement           RewardStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  project             Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  sourcePartner       Partner?        @relation("RewardEntrySourcePartner", fields: [sourcePartnerId], references: [id])
+
+  @@index([statementId], map: "idx_reward_entries_statement")
+  @@index([projectId], map: "idx_reward_entries_project")
+  @@map("reward_entries")
 }
 
 model Partner {
@@ -377,6 +452,8 @@ model Partner {
   documents              BusinessDocument[]   @relation("PartnerDocuments")
   businessLinks          PartnerBusinessLink[]
   businessLinkChildren   PartnerBusinessLink[] @relation("BusinessLinkParent")
+  rewardStatements       RewardStatement[]     @relation("RewardStatementPartner")
+  rewardEntrySources     RewardEntry[]         @relation("RewardEntrySourcePartner")
 
   @@index([partnerCode, partnerIsActive], map: "idx_partners_code_active")
   @@index([partnerName], map: "idx_partners_name")
@@ -482,7 +559,19 @@ model Project {
   updatedBy                 Int?              @map("updated_by")
   projectAssignedUserName   String?           @map("project_assigned_user_name") @db.VarChar(100)
   projectRenovationNumber   String?           @map("project_renovation_number") @db.VarChar(100)
+  // 案件別の報酬上書き（直・間接とも）。{ type: 'rate'|'fixed', value: number } | null
+  // 案件別の報酬上書き（RewardSlots 構造の部分JSON。ショット/ストック×直/間接）
+  rewardOverride            Json?             @map("reward_override")
+  // ストック報酬の終了。解約日（null=継続中）
+  cancelledAt               DateTime?         @map("cancelled_at") @db.Timestamptz(6)
+  // ストック固定期間（月数）。将来用。null=解約日まで
+  stockTermMonths           Int?              @map("stock_term_months")
+  /// 収益確定日（代理店報酬のラッチ）。収益確定フラグ付きステータスに変わった時点で
+  /// 自動セットされ、その後のステータス変更では自動で外れない（手動リセットのみ）。
+  /// null=未確定。報酬対象判定と計上月はこの日付で行う（編集可＝過去月の計上も可能）。
+  revenueConfirmedAt        DateTime?         @map("revenue_confirmed_at") @db.Timestamptz(6)
   movements                 ProjectMovement[]
+  rewardEntries             RewardEntry[]
   files                     ProjectFile[]
   comments                  ProjectComment[]
   reminders                 ProjectReminder[]
@@ -495,6 +584,7 @@ model Project {
   updater                   User?             @relation("ProjectUpdater", fields: [updatedBy], references: [id])
 
   @@index([businessId, projectSalesStatus], map: "idx_projects_business_status")
+  @@index([businessId, revenueConfirmedAt], map: "idx_projects_revenue_confirmed")
   @@index([customerId], map: "idx_projects_customer_id")
   @@index([partnerId], map: "idx_projects_partner_id")
   @@index([projectAssignedUserId], map: "idx_projects_assigned_user_id")

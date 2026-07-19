@@ -10,6 +10,7 @@ import { createNotificationsForUsers } from '@/lib/notification-helper';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
+import { rewardSlotsSchema } from '@/lib/reward-slots';
 
 const updateProjectSchema = z.object({
   customerId: z.number().int().positive().optional(),
@@ -26,6 +27,12 @@ const updateProjectSchema = z.object({
   projectNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
   projectCustomData: z.record(z.unknown()).optional(),
   portalVisible: z.boolean().optional(),
+  // 代理店報酬（Phase2）: 収益確定日・解約日は手動での訂正/上書きを許可する
+  // （自動セットは下記ステータス変更ロジックで行う）
+  revenueConfirmedAt: z.string().datetime().optional().nullable(),
+  cancelledAt: z.string().datetime().optional().nullable(),
+  stockTermMonths: z.number().int().positive().optional().nullable(),
+  rewardOverride: rewardSlotsSchema.optional().nullable(),
   version: z.number().int().min(1),
 });
 
@@ -185,7 +192,10 @@ export async function PATCH(
 
     const existing = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, version: true, projectSalesStatus: true, projectCustomData: true, businessId: true },
+      select: {
+        id: true, version: true, projectSalesStatus: true, projectCustomData: true, businessId: true,
+        revenueConfirmedAt: true,
+      },
     });
     if (!existing) throw ApiError.notFound('案件が見つかりません');
     if (existing.version !== version) {
@@ -194,12 +204,18 @@ export async function PATCH(
 
     // 営業ステータスの確認（変更時のみ）
     let statusChangedAt: Date | undefined;
+    // 代理店報酬の収益確定ラッチ: isRevenueConfirmed なステータスに変わった時点で自動セット。
+    // 既にセット済みなら触らない（ステータスを戻しても自動では外れない）。
+    let autoRevenueConfirmedAt: Date | undefined;
     if (projectSalesStatus && projectSalesStatus !== existing.projectSalesStatus) {
       const statusDef = await prisma.businessStatusDefinition.findFirst({
         where: { businessId: existing.businessId, statusCode: projectSalesStatus, statusIsActive: true },
       });
       if (!statusDef) throw ApiError.badRequest('指定された営業ステータスが見つかりません');
       statusChangedAt = new Date();
+      if (statusDef.isRevenueConfirmed && !existing.revenueConfirmedAt) {
+        autoRevenueConfirmedAt = statusChangedAt;
+      }
     }
 
     // projectCustomData のディープマージ
@@ -223,10 +239,29 @@ export async function PATCH(
       }
     }
 
+    // 収益確定日・解約日: リクエストに明示指定があればそれを優先（手動での訂正/リセット）。
+    // 指定が無く、かつ今回のステータス変更で自動確定した場合のみ自動セット値を使う。
+    //
+    // 注意: 汎用編集フォーム（use-entity-form）はGETで取得した全フィールドをそのまま
+    // 送り返す実装のため、revenueConfirmedAt を一切編集していなくても body には
+    // 既存値と同じ値（多くは null）が明示的に含まれる。これを「手動指定」と区別せずに
+    // 扱うと、ステータス変更による自動ラッチが毎回この値で上書きされてしまう。
+    // そのため、既存値と異なる場合のみ「手動指定」とみなす。
+    const { revenueConfirmedAt: manualRevenueConfirmedAt, cancelledAt: manualCancelledAt, rewardOverride, ...restUpdateData } = updateData;
+    const existingRevenueConfirmedIso = existing.revenueConfirmedAt ? existing.revenueConfirmedAt.toISOString() : null;
+    const isManualRevenueConfirmedChange =
+      manualRevenueConfirmedAt !== undefined && manualRevenueConfirmedAt !== existingRevenueConfirmedIso;
+    const resolvedRevenueConfirmedAt = isManualRevenueConfirmedChange
+      ? (manualRevenueConfirmedAt ? new Date(manualRevenueConfirmedAt) : null)
+      : autoRevenueConfirmedAt;
+
     const updated = await prisma.project.update({
       where: { id: projectId },
       data: {
-        ...updateData,
+        ...restUpdateData,
+        ...(manualCancelledAt !== undefined && { cancelledAt: manualCancelledAt ? new Date(manualCancelledAt) : null }),
+        ...(rewardOverride !== undefined && { rewardOverride: (rewardOverride ?? {}) as Prisma.InputJsonValue }),
+        ...(resolvedRevenueConfirmedAt !== undefined && { revenueConfirmedAt: resolvedRevenueConfirmedAt }),
         ...(projectSalesStatus !== undefined && { projectSalesStatus }),
         ...(statusChangedAt && { projectStatusChangedAt: statusChangedAt }),
         ...(mergedCustomData !== undefined && { projectCustomData: mergedCustomData as Prisma.InputJsonValue }),

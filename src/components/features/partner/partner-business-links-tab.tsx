@@ -27,6 +27,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/hooks/use-toast';
 import { useBusiness } from '@/hooks/use-business';
 import { BusinessParentPartnerSelect } from './business-parent-partner-select';
+import { LinkRewardSettingsDialog } from './link-reward-settings-dialog';
+import type { RewardSlots } from '@/lib/reward-slots';
 
 // ============================================
 // 型定義
@@ -39,7 +41,9 @@ interface PartnerBusinessLink {
   businessName: string;
   businessCode: string;
   linkStatus: string;
-  commissionRate: number | null;
+  rewardSlots: RewardSlots | null;
+  paymentTiming: string | null;
+  closingDay: number | null;
   contactPerson: string | null;
   linkCustomData: Record<string, unknown>;
   businessTier: string | null;
@@ -60,6 +64,25 @@ interface Props {
 }
 
 // ============================================
+// ヘルパー
+// ============================================
+
+/** テーブル表示用に報酬設定を短く要約する（例: "ショット直20%, ストック直10%"） */
+function summarizeRewardSlots(slots: RewardSlots | null): string {
+  if (!slots) return '-';
+  const parts: string[] = [];
+  const label = (setting: { type: string; value: number } | undefined, prefix: string) => {
+    if (!setting) return;
+    parts.push(`${prefix}${setting.type === 'rate' ? `${setting.value}%` : `¥${setting.value.toLocaleString()}`}`);
+  };
+  label(slots.shot?.direct, 'ショット直:');
+  label(slots.shot?.indirect, 'ショット間接:');
+  label(slots.stock?.direct, 'ストック直:');
+  label(slots.stock?.indirect, 'ストック間接:');
+  return parts.length > 0 ? parts.join(', ') : '事業デフォルト';
+}
+
+// ============================================
 // コンポーネント
 // ============================================
 
@@ -72,9 +95,10 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   const [deletingLinkId, setDeletingLinkId] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<{
     linkId: number;
-    field: 'commissionRate' | 'contactPerson';
+    field: 'contactPerson';
   } | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [rewardDialogLinkId, setRewardDialogLinkId] = useState<number | null>(null);
 
   // 事業リンク一覧取得
   const { data: links = [], isLoading } = useQuery<PartnerBusinessLink[]>({
@@ -172,7 +196,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
   const startEditing = (
     linkId: number,
-    field: 'commissionRate' | 'contactPerson',
+    field: 'contactPerson',
     currentValue: string | number | null,
   ) => {
     setEditingField({ linkId, field });
@@ -181,13 +205,19 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
 
   const commitEdit = () => {
     if (!editingField) return;
-    const { linkId, field } = editingField;
-    if (field === 'commissionRate') {
-      const num = editValue !== '' ? Number(editValue) : null;
-      updateMutation.mutate({ linkId, data: { commissionRate: num } });
-    } else {
-      updateMutation.mutate({ linkId, data: { contactPerson: editValue || null } });
-    }
+    const { linkId } = editingField;
+    updateMutation.mutate({ linkId, data: { contactPerson: editValue || null } });
+  };
+
+  // 報酬設定ダイアログの保存（4スロット + 支払いタイミング特例を一括更新）
+  const handleSaveRewardSettings = (
+    linkId: number,
+    data: { rewardSlots: RewardSlots; paymentTiming: string | null; closingDay: number | null },
+  ) => {
+    updateMutation.mutate(
+      { linkId, data },
+      { onSuccess: () => setRewardDialogLinkId(null) },
+    );
   };
 
   // 事業別親代理店を選択 → 階層を自動判定（API側）
@@ -258,7 +288,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                 <TableHead>事業名</TableHead>
                 <TableHead>事業コード</TableHead>
                 <TableHead>ステータス</TableHead>
-                <TableHead>紹介手数料率</TableHead>
+                <TableHead>報酬設定</TableHead>
                 <TableHead>担当者/窓口</TableHead>
                 <TableHead>事業別親代理店</TableHead>
                 <TableHead>事業別階層</TableHead>
@@ -295,35 +325,14 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                     </Select>
                   </TableCell>
 
-                  {/* 手数料率 */}
+                  {/* 報酬設定（ショット/ストック×直/間接 の4スロット + 支払いタイミング特例） */}
                   <TableCell>
-                    {editingField?.linkId === link.id && editingField.field === 'commissionRate' ? (
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="100"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') commitEdit();
-                            if (e.key === 'Escape') setEditingField(null);
-                          }}
-                          className="h-7 w-[80px] text-sm"
-                          autoFocus
-                        />
-                        <span className="text-sm text-muted-foreground">%</span>
-                      </div>
-                    ) : (
-                      <button
-                        className="text-sm hover:underline cursor-pointer text-left"
-                        onClick={() => startEditing(link.id, 'commissionRate', link.commissionRate)}
-                      >
-                        {link.commissionRate != null ? `${link.commissionRate}%` : '-'}
-                      </button>
-                    )}
+                    <button
+                      className="text-sm hover:underline cursor-pointer text-left"
+                      onClick={() => setRewardDialogLinkId(link.id)}
+                    >
+                      {summarizeRewardSlots(link.rewardSlots)}
+                    </button>
                   </TableCell>
 
                   {/* 担当者/窓口 */}
@@ -423,6 +432,25 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
         }}
         isLoading={deleteMutation.isPending}
       />
+
+      {/* 報酬設定ダイアログ */}
+      {(() => {
+        const editingLink = links.find((l) => l.id === rewardDialogLinkId);
+        if (!editingLink) return null;
+        return (
+          <LinkRewardSettingsDialog
+            open={rewardDialogLinkId !== null}
+            onOpenChange={(open) => !open && setRewardDialogLinkId(null)}
+            linkId={editingLink.id}
+            businessName={editingLink.businessName}
+            currentSlots={editingLink.rewardSlots}
+            currentPaymentTiming={editingLink.paymentTiming}
+            currentClosingDay={editingLink.closingDay}
+            onSave={(data) => handleSaveRewardSettings(editingLink.id, data)}
+            isSaving={updateMutation.isPending}
+          />
+        );
+      })()}
     </div>
   );
 }

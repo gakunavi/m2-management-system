@@ -15,6 +15,7 @@ import { ProjectMovementsTab } from '@/components/features/project/project-movem
 import { ProjectFilesTab } from '@/components/features/project/project-files-tab';
 import { ProjectCommentsTab } from '@/components/features/project/project-comments-tab';
 import { ProjectRemindersTab } from '@/components/features/project/project-reminders-tab';
+import { ProjectRewardTab } from '@/components/features/project/project-reward-tab';
 
 interface Props {
   id: string;
@@ -34,9 +35,10 @@ const INTERNAL_CUSTOM_TABS = {
   customerInfo: ProjectCustomerInfoTab,
   partnerInfo: ProjectPartnerInfoTab,
   otherProjects: ProjectOtherProjectsTab,
+  reward: ProjectRewardTab,
 };
 
-const INTERNAL_ONLY_TAB_KEYS = new Set(['reminders', 'comments', 'customerInfo', 'partnerInfo', 'otherProjects']);
+const INTERNAL_ONLY_TAB_KEYS = new Set(['reminders', 'comments', 'customerInfo', 'partnerInfo', 'otherProjects', 'reward']);
 
 export function ProjectDetailClient({ id }: Props) {
   const router = useRouter();

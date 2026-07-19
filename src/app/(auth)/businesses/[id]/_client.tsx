@@ -7,6 +7,7 @@ import { MovementTemplatesTab } from '@/components/features/business/movement-te
 import { ProjectFieldsTab } from '@/components/features/business/project-fields-tab';
 import { EntityFieldsTab } from '@/components/features/business/entity-fields-tab';
 import { RevenueRecognitionSettings } from '@/components/features/business/revenue-recognition-settings';
+import { RewardConfigSettings } from '@/components/features/business/reward-config-settings';
 import { FileCategoriesTab } from '@/components/features/business/file-categories-tab';
 import { SalesTargetsTab } from '@/components/features/business/sales-targets-tab';
 
@@ -34,6 +35,7 @@ export function BusinessDetailClient({ id }: Props) {
         customerFields: CustomerFieldsTab,
         partnerFields: PartnerFieldsTab,
         revenueRecognition: RevenueRecognitionSettings,
+        rewardConfig: RewardConfigSettings,
         fileCategories: FileCategoriesTab,
         salesTargets: SalesTargetsTab,
       }}

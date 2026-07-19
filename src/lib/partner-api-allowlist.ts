@@ -38,7 +38,7 @@ const ALLOWLIST: readonly AllowRule[] = [
 
   // --- 代理店ポータル本体 ---
   {
-    pattern: /^\/api\/v1\/portal\/(summary|revenue-trend|pipeline|projects|movements|documents)$/,
+    pattern: /^\/api\/v1\/portal\/(summary|revenue-trend|pipeline|projects|movements|documents|rewards)$/,
     methods: ['GET'],
     roles: BOTH,
   },

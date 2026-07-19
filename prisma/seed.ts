@@ -189,6 +189,15 @@ async function main() {
               unit: '#台',
             },
           ],
+          // 代理店報酬の事業デフォルト（MOAG＝ショットのみ）
+          rewardConfig: {
+            defaults: {
+              shot: { direct: { type: 'rate', value: 15 }, indirect: { type: 'rate', value: 5 } },
+            },
+            shotBaseField: 'proposed_amount',
+            taxRate: 10,
+            paymentTiming: 'same',
+          },
         } as unknown as Prisma.InputJsonValue,
         businessSortOrder: 1,
       },
@@ -262,6 +271,17 @@ async function main() {
               unit: '¥#',
             },
           ],
+          // 代理店報酬の事業デフォルト（サービスA＝ショット＋ストック、翌月払い）
+          rewardConfig: {
+            defaults: {
+              shot: { direct: { type: 'rate', value: 20 }, indirect: { type: 'rate', value: 5 } },
+              stock: { direct: { type: 'rate', value: 10 }, indirect: { type: 'rate', value: 3 } },
+            },
+            shotBaseField: 'total_contract_value',
+            stockBaseField: 'monthly_fee',
+            taxRate: 10,
+            paymentTiming: 'next',
+          },
         } as unknown as Prisma.InputJsonValue,
         businessSortOrder: 2,
       },
@@ -580,15 +600,16 @@ async function main() {
     // ============================================
     await tx.partnerBusinessLink.createMany({
       data: [
-        // MOAG事業
-        { partnerId: partner1.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, commissionRate: new Prisma.Decimal(15) },
-        { partnerId: partner2.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, commissionRate: new Prisma.Decimal(10) },
-        { partnerId: partner3.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-2', businessParentId: partner1.id, commissionRate: new Prisma.Decimal(8) },
-        { partnerId: partner4.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '2', businessParentId: null, commissionRate: new Prisma.Decimal(12) },
-        // サービスA事業
-        { partnerId: partner1.id, businessId: businessB.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, commissionRate: new Prisma.Decimal(20) },
-        { partnerId: partner2.id, businessId: businessB.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, commissionRate: new Prisma.Decimal(12) },
-      ],
+        // MOAG事業（shot.direct=直紹介率、shot.indirect=1次店が配下の成果から得る間接率）
+        // サービスA事業(businessB)はストック報酬も設定してストックの検証データにする
+        { partnerId: partner1.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, rewardSlots: { shot: { direct: { type: 'rate', value: 15 }, indirect: { type: 'rate', value: 5 } } } },
+        { partnerId: partner2.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, rewardSlots: { shot: { direct: { type: 'rate', value: 10 } } } },
+        { partnerId: partner3.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-2', businessParentId: partner1.id, rewardSlots: { shot: { direct: { type: 'rate', value: 8 } } } },
+        { partnerId: partner4.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '2', businessParentId: null, rewardSlots: { shot: { direct: { type: 'rate', value: 12 } } } },
+        // サービスA事業（ショット＋ストック）
+        { partnerId: partner1.id, businessId: businessB.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, paymentTiming: 'next', rewardSlots: { shot: { direct: { type: 'rate', value: 20 }, indirect: { type: 'rate', value: 5 } }, stock: { direct: { type: 'rate', value: 10 }, indirect: { type: 'rate', value: 3 } } } },
+        { partnerId: partner2.id, businessId: businessB.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, rewardSlots: { shot: { direct: { type: 'rate', value: 12 } }, stock: { direct: { type: 'fixed', value: 3000 } } } },
+      ] as unknown as Prisma.PartnerBusinessLinkCreateManyInput[],
     });
 
     // 10. 代理店担当者
@@ -649,7 +670,7 @@ async function main() {
       data: { businessId: businessA.id, statusCode: 'nego', statusLabel: '交渉中', statusPriority: 50, statusColor: '#f59e0b', statusIsFinal: false, statusIsLost: false, statusSortOrder: 3, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
-      data: { businessId: businessA.id, statusCode: 'won', statusLabel: '受注', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, statusSortOrder: 4, statusIsActive: true },
+      data: { businessId: businessA.id, statusCode: 'won', statusLabel: '受注', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, isRevenueConfirmed: true, statusSortOrder: 4, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
       data: { businessId: businessA.id, statusCode: 'lost', statusLabel: '失注', statusPriority: 10, statusColor: '#ef4444', statusIsFinal: true, statusIsLost: true, statusSortOrder: 5, statusIsActive: true },
@@ -666,7 +687,7 @@ async function main() {
       data: { businessId: businessB.id, statusCode: 'trial', statusLabel: 'トライアル', statusPriority: 60, statusColor: '#f59e0b', statusIsFinal: false, statusIsLost: false, statusSortOrder: 3, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
-      data: { businessId: businessB.id, statusCode: 'contract', statusLabel: '契約済', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, statusSortOrder: 4, statusIsActive: true },
+      data: { businessId: businessB.id, statusCode: 'contract', statusLabel: '契約済', statusPriority: 90, statusColor: '#22c55e', statusIsFinal: true, statusIsLost: false, isRevenueConfirmed: true, statusSortOrder: 4, statusIsActive: true },
     });
     await tx.businessStatusDefinition.create({
       data: { businessId: businessB.id, statusCode: 'lost', statusLabel: '失注', statusPriority: 10, statusColor: '#ef4444', statusIsFinal: true, statusIsLost: true, statusSortOrder: 5, statusIsActive: true },
