@@ -69,6 +69,7 @@ describe('ポータルに必要なAPIは許可する', () => {
     ['/api/v1/portal/projects', 'GET'],
     ['/api/v1/portal/movements', 'GET'],
     ['/api/v1/portal/documents', 'GET'],
+    ['/api/v1/portal/rewards', 'GET'],
     ['/api/v1/businesses', 'GET'],
     ['/api/v1/announcements', 'GET'],
     ['/api/v1/reports/partner-monthly', 'GET'],
