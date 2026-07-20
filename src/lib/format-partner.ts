@@ -1,3 +1,5 @@
+import { formatRewardSetting, type RewardSlots } from '@/lib/reward-slots';
+
 // ============================================
 // 代理店レスポンス整形（共通）
 // route.ts / [id]/route.ts で共用
@@ -58,8 +60,9 @@ export interface PartnerRow {
  * 代理店レスポンスを整形する
  * @param p - Prisma からの代理店データ
  * @param targetBusinessId - 指定時、事業別の階層情報で partnerTier/partnerTierNumber を上書き
+ * @param resolvedRewardSlots - 指定時、一覧列表示用に事業デフォルト+リンク上書きをマージ済みの報酬スロットを4列へ展開
  */
-export function formatPartner(p: PartnerRow, targetBusinessId?: number) {
+export function formatPartner(p: PartnerRow, targetBusinessId?: number, resolvedRewardSlots?: RewardSlots | null) {
   const representative = p.contacts?.find((ct) => ct.contactIsRepresentative) ?? null;
   const primaryContact = p.contacts?.find((ct) => ct.contactIsPrimary) ?? null;
 
@@ -116,5 +119,9 @@ export function formatPartner(p: PartnerRow, targetBusinessId?: number) {
     businessLinkIds: p.businessLinks?.map((bl) => bl.businessId) ?? [],
     partnerCustomData,
     linkCustomData,
+    rewardShotDirect: resolvedRewardSlots?.shot?.direct ? formatRewardSetting(resolvedRewardSlots.shot.direct) : null,
+    rewardShotIndirect: resolvedRewardSlots?.shot?.indirect ? formatRewardSetting(resolvedRewardSlots.shot.indirect) : null,
+    rewardStockDirect: resolvedRewardSlots?.stock?.direct ? formatRewardSetting(resolvedRewardSlots.stock.direct) : null,
+    rewardStockIndirect: resolvedRewardSlots?.stock?.indirect ? formatRewardSetting(resolvedRewardSlots.stock.indirect) : null,
   };
 }

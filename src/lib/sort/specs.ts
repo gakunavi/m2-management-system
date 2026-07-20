@@ -79,6 +79,8 @@ export const PROJECT_SORT_SPEC: SortSpec = {
   projectAssignedUserName: { kind: 'db' },
   projectNotes: { kind: 'db' },
   portalVisible: { kind: 'db' },
+  revenueConfirmedAt: { kind: 'db' },
+  cancelledAt: { kind: 'db' },
   updatedAt: { kind: 'db' },
   createdAt: { kind: 'db' },
   // リレーション越し（顧客）

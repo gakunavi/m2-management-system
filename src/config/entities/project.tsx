@@ -1,5 +1,6 @@
 import type { EntityListConfig, EntityDetailConfig, EntityFormConfig } from '@/types/config';
 import { projectBaseSchema } from '@/lib/validations/project';
+import { isoToJstDateInput } from '@/lib/jst-date';
 
 // ============================================
 // 案件一覧 Config（ベース）
@@ -290,6 +291,43 @@ export const projectListConfig: EntityListConfig = {
         field: 'partnerFolderUrl',
         extraBody: (row) => ({ version: row.partnerVersion as number }),
       },
+    },
+    // ── 報酬情報 ──
+    {
+      key: 'revenueConfirmedAt',
+      label: '収益確定日',
+      width: 120,
+      sortable: true,
+      defaultVisible: false,
+      group: '報酬情報',
+      render: (value) => (value ? isoToJstDateInput(value as string) : '-'),
+    },
+    {
+      key: 'cancelledAt',
+      label: '解約日',
+      width: 120,
+      sortable: true,
+      defaultVisible: false,
+      group: '報酬情報',
+      render: (value) => (value ? isoToJstDateInput(value as string) : '-'),
+    },
+    {
+      key: 'rewardShotDirect',
+      label: 'ショット報酬（直紹介）',
+      width: 150,
+      align: 'right',
+      defaultVisible: false,
+      group: '報酬情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'rewardShotIndirect',
+      label: 'ショット報酬（間接）',
+      width: 150,
+      align: 'right',
+      defaultVisible: false,
+      group: '報酬情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
     },
     // ── システム ──
     { key: 'updatedAt', label: '更新日時', width: 150, sortable: true, group: 'システム情報' },

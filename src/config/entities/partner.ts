@@ -157,6 +157,11 @@ export const partnerListConfig: EntityListConfig = {
       edit: { type: 'checkbox' },
       render: (value) => (value ? '有効' : '無効'),
     },
+    // ── 報酬情報（選択中の事業デフォルト+リンク上書きをマージした実効値。事業未選択時は "-"） ──
+    { key: 'rewardShotDirect', label: 'ショット報酬（直紹介）', width: 150, align: 'right', defaultVisible: false, group: '報酬情報', render: (v) => (v as string | null) ?? '-' },
+    { key: 'rewardShotIndirect', label: 'ショット報酬（間接）', width: 150, align: 'right', defaultVisible: false, group: '報酬情報', render: (v) => (v as string | null) ?? '-' },
+    { key: 'rewardStockDirect', label: 'ストック報酬（直紹介）', width: 150, align: 'right', defaultVisible: false, group: '報酬情報', render: (v) => (v as string | null) ?? '-' },
+    { key: 'rewardStockIndirect', label: 'ストック報酬（間接）', width: 150, align: 'right', defaultVisible: false, group: '報酬情報', render: (v) => (v as string | null) ?? '-' },
     // ── システム ──
     { key: 'updatedAt', label: '更新日時', width: 150, sortable: true, group: 'システム' },
     { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false, group: 'システム' },

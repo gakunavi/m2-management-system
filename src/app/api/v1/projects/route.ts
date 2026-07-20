@@ -13,6 +13,7 @@ import { formatProject } from '@/lib/format-project';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
+import { calculateShotRewardsByProject } from '@/lib/reward-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 const createProjectSchema = z.object({
@@ -286,6 +287,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 列設定用: 事業ごとのショット報酬額（直紹介・間接）を計算し、案件IDでまとめる
+    const shotRewardsByProject = new Map<number, { direct: number | null; indirect: number | null }>();
+    if (businessIds.length > 0) {
+      const perBusiness = await Promise.all(
+        businessIds.map((bizId) => calculateShotRewardsByProject(prisma, bizId)),
+      );
+      for (const m of perBusiness) {
+        m.forEach((amounts, projectId) => shotRewardsByProject.set(projectId, amounts));
+      }
+    }
+
     // 1案件をフラット展開込みでフォーマット（ソート対象フィールドは全てフラットに展開）
     const formatRow = (p: (typeof filteredProjects)[number]) => {
       const formatted = formatProject(p);
@@ -334,6 +346,8 @@ export async function GET(request: NextRequest) {
         partnerFlat.partnerVersion = partner.version ?? null;
       }
 
+      const shotReward = shotRewardsByProject.get(p.id);
+
       return {
         ...formatted,
         ...flatCustom,
@@ -345,6 +359,8 @@ export async function GET(request: NextRequest) {
         partnerCustomData: partnerGlobalData,
         projectSalesStatusLabel: status?.label ?? null,
         projectSalesStatusColor: status?.color ?? null,
+        rewardShotDirect: shotReward?.direct ?? null,
+        rewardShotIndirect: shotReward?.indirect ?? null,
         // アプリ側ソート(status戦略)のキーに使用
         businessId: p.businessId,
       };

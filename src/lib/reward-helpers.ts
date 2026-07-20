@@ -351,25 +351,94 @@ export function computeProjectEntries(
 // DB ラッパー：事業ぶんの報酬明細を計算
 // ============================================
 
+type LinkRow = {
+  partnerId: number;
+  rewardSlots: unknown;
+  paymentTiming: string | null;
+  closingDay: number | null;
+  businessParentId: number | null;
+};
+
+type ConfirmedProjectRow = {
+  id: number;
+  projectNo: string;
+  partnerId: number | null;
+  projectExpectedCloseMonth: string | null;
+  projectCustomData: unknown;
+  revenueConfirmedAt: Date | null;
+  cancelledAt: Date | null;
+  stockTermMonths: number | null;
+  rewardOverride: unknown;
+  customer: { customerName: string | null } | null;
+};
+
+interface BusinessRewardContext {
+  config: RewardConfig;
+  linkByPartner: Map<number, LinkRow>;
+  projects: ConfirmedProjectRow[];
+}
+
+function toLinkInput(l: LinkRow | undefined): LinkRewardInput | null {
+  return l
+    ? {
+        partnerId: l.partnerId,
+        rewardSlots: parseRewardSlots(l.rewardSlots),
+        paymentTiming: (l.paymentTiming as PaymentTiming | null) ?? null,
+        closingDay: l.closingDay,
+      }
+    : null;
+}
+
+/** 担当代理店の直リンクと、その親代理店（間接）のリンクを解決する */
+function resolveResponsibleAndParentLinks(
+  partnerId: number | null,
+  linkByPartner: Map<number, LinkRow>,
+): { responsibleLink: LinkRewardInput | null; parentLink: LinkRewardInput | null } {
+  const responsibleLink = partnerId != null ? toLinkInput(linkByPartner.get(partnerId)) : null;
+  const rawResponsible = partnerId != null ? linkByPartner.get(partnerId) : undefined;
+  const parentLink =
+    rawResponsible?.businessParentId != null
+      ? toLinkInput(linkByPartner.get(rawResponsible.businessParentId))
+      : null;
+  return { responsibleLink, parentLink };
+}
+
+/** 案件行(DB) → computeProjectEntries が要求する ProjectRewardInput へ変換 */
+function toProjectRewardInput(p: ConfirmedProjectRow): ProjectRewardInput {
+  const confirmed = p.revenueConfirmedAt ? toJstMonthDay(p.revenueConfirmedAt) : null;
+  const cancelled = p.cancelledAt ? toJstMonthDay(p.cancelledAt) : null;
+  return {
+    id: p.id,
+    projectNo: p.projectNo,
+    customerName: p.customer?.customerName ?? null,
+    partnerId: p.partnerId,
+    projectExpectedCloseMonth: p.projectExpectedCloseMonth,
+    projectCustomData: p.projectCustomData,
+    revenueConfirmedMonth: confirmed?.month ?? null,
+    revenueConfirmedDay: confirmed?.day ?? null,
+    cancelledMonth: cancelled?.month ?? null,
+    stockTermMonths: p.stockTermMonths,
+    rewardOverride: parseRewardSlots(p.rewardOverride),
+  };
+}
+
 /**
- * 事業の確定済み案件から、発生月レンジ [sourceFrom, sourceTo] の報酬明細を計算する。
- * 返り値は明細のフラットリスト（支払い月での集計・締めは呼び出し側 / 別Phase）。
+ * 事業の報酬設定・代理店リンク・確定済み案件をまとめて取得する共通ロード処理。
+ * calculateBusinessRewardEntries（期間指定の明細計算）と
+ * calculateShotRewardsByProject（一覧列表示用のショット報酬額のみの計算）の両方が使う。
  */
-export async function calculateBusinessRewardEntries(
+async function loadBusinessRewardContext(
   prisma: PrismaClient,
   businessId: number,
-  sourceFrom: string,
-  sourceTo: string,
-): Promise<ComputedRewardEntry[]> {
+): Promise<BusinessRewardContext | null> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
     select: { businessConfig: true },
   });
-  if (!business) return [];
+  if (!business) return null;
   const config = getRewardConfig(business.businessConfig);
-  if (!config) return [];
+  if (!config) return null;
 
-  // 事業の全リンク（担当・親の解決用）
   const links = await prisma.partnerBusinessLink.findMany({
     where: { businessId },
     select: {
@@ -380,20 +449,9 @@ export async function calculateBusinessRewardEntries(
       businessParentId: true,
     },
   });
-  const linkByPartner = new Map<number, (typeof links)[number]>();
+  const linkByPartner = new Map<number, LinkRow>();
   for (const l of links) linkByPartner.set(l.partnerId, l);
 
-  const toLinkInput = (l: (typeof links)[number] | undefined): LinkRewardInput | null =>
-    l
-      ? {
-          partnerId: l.partnerId,
-          rewardSlots: parseRewardSlots(l.rewardSlots),
-          paymentTiming: (l.paymentTiming as PaymentTiming | null) ?? null,
-          closingDay: l.closingDay,
-        }
-      : null;
-
-  // 確定済み案件を取得
   const projects = await prisma.project.findMany({
     where: { businessId, revenueConfirmedAt: { not: null }, projectIsActive: true },
     select: {
@@ -410,32 +468,64 @@ export async function calculateBusinessRewardEntries(
     },
   });
 
+  return { config, linkByPartner, projects };
+}
+
+/**
+ * 事業の確定済み案件から、発生月レンジ [sourceFrom, sourceTo] の報酬明細を計算する。
+ * 返り値は明細のフラットリスト（支払い月での集計・締めは呼び出し側 / 別Phase）。
+ */
+export async function calculateBusinessRewardEntries(
+  prisma: PrismaClient,
+  businessId: number,
+  sourceFrom: string,
+  sourceTo: string,
+): Promise<ComputedRewardEntry[]> {
+  const ctx = await loadBusinessRewardContext(prisma, businessId);
+  if (!ctx) return [];
+
   const result: ComputedRewardEntry[] = [];
-  for (const p of projects) {
-    const confirmed = p.revenueConfirmedAt ? toJstMonthDay(p.revenueConfirmedAt) : null;
-    const cancelled = p.cancelledAt ? toJstMonthDay(p.cancelledAt) : null;
+  for (const p of ctx.projects) {
+    const input = toProjectRewardInput(p);
+    const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(p.partnerId, ctx.linkByPartner);
+    result.push(...computeProjectEntries(input, responsibleLink, parentLink, ctx.config, sourceFrom, sourceTo));
+  }
+  return result;
+}
 
-    const responsibleLink = p.partnerId != null ? toLinkInput(linkByPartner.get(p.partnerId)) : null;
-    const rawResponsible = p.partnerId != null ? linkByPartner.get(p.partnerId) : undefined;
-    const parentLink = rawResponsible?.businessParentId != null
-      ? toLinkInput(linkByPartner.get(rawResponsible.businessParentId))
-      : null;
+/**
+ * 案件一覧の列表示用: 事業内の確定済み案件それぞれについて、
+ * ショット報酬額（直紹介・間接）だけを計算する。
+ *
+ * ストックと違い、ショットは発生月がちょうど収益確定月の1回だけなので、
+ * 月レンジ指定は不要（各案件ごとに「確定月＝確定月」の1ヶ月レンジで計算すればよい）。
+ * 一覧のページング単位（最大100件程度）で呼ばれる想定。
+ */
+export async function calculateShotRewardsByProject(
+  prisma: PrismaClient,
+  businessId: number,
+): Promise<Map<number, { direct: number | null; indirect: number | null }>> {
+  const result = new Map<number, { direct: number | null; indirect: number | null }>();
+  const ctx = await loadBusinessRewardContext(prisma, businessId);
+  if (!ctx) return result;
 
-    const input: ProjectRewardInput = {
-      id: p.id,
-      projectNo: p.projectNo,
-      customerName: p.customer?.customerName ?? null,
-      partnerId: p.partnerId,
-      projectExpectedCloseMonth: p.projectExpectedCloseMonth,
-      projectCustomData: p.projectCustomData,
-      revenueConfirmedMonth: confirmed?.month ?? null,
-      revenueConfirmedDay: confirmed?.day ?? null,
-      cancelledMonth: cancelled?.month ?? null,
-      stockTermMonths: p.stockTermMonths,
-      rewardOverride: parseRewardSlots(p.rewardOverride),
-    };
+  for (const p of ctx.projects) {
+    const input = toProjectRewardInput(p);
+    if (!input.revenueConfirmedMonth) continue;
+    const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(p.partnerId, ctx.linkByPartner);
+    const entries = computeProjectEntries(
+      input,
+      responsibleLink,
+      parentLink,
+      ctx.config,
+      input.revenueConfirmedMonth,
+      input.revenueConfirmedMonth,
+    ).filter((e) => e.rewardKind === 'shot');
 
-    result.push(...computeProjectEntries(input, responsibleLink, parentLink, config, sourceFrom, sourceTo));
+    result.set(p.id, {
+      direct: entries.find((e) => e.entryType === 'direct')?.rewardAmount ?? null,
+      indirect: entries.find((e) => e.entryType === 'indirect')?.rewardAmount ?? null,
+    });
   }
   return result;
 }

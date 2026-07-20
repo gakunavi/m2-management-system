@@ -16,6 +16,10 @@ const { mockGetServerSession, mockPrisma } = vi.hoisted(() => ({
     business: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    partnerBusinessLink: {
+      findMany: vi.fn(),
     },
     customer: {
       findFirst: vi.fn(),
@@ -79,6 +83,9 @@ describe('GET /api/v1/projects', () => {
     vi.clearAllMocks();
     // formula 計算用の事業取得モック（デフォルト: formula フィールドなし）
     mockPrisma.business.findMany.mockResolvedValue([]);
+    // ショット報酬列計算用（デフォルト: 報酬設定なし＝rewardConfig 未設定）
+    mockPrisma.business.findUnique.mockResolvedValue(null);
+    mockPrisma.partnerBusinessLink.findMany.mockResolvedValue([]);
   });
 
   it('未認証の場合は 401 を返す', async () => {

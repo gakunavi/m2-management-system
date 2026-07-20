@@ -16,6 +16,7 @@ import {
   whereBoolean,
 } from '@/lib/filter-helper';
 import { generateTierNumber, validateTierHierarchy, calculateTierFromParent } from '@/lib/partner-hierarchy';
+import { parseRewardSlots, mergeRewardSlots } from '@/lib/reward-slots';
 
 // ============================================
 // 代理店コード採番ロジック
@@ -138,6 +139,7 @@ export async function GET(request: NextRequest) {
               businessTier: true,
               businessTierNumber: true,
               linkCustomData: true,
+              rewardSlots: true,
             },
           },
         },
@@ -146,7 +148,26 @@ export async function GET(request: NextRequest) {
 
     const targetBusinessId = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
 
-    let data = partners.map((p) => formatPartner(p, targetBusinessId));
+    // 列設定用: 選択中の事業デフォルト報酬スロットを取得し、代理店ごとにリンク上書きとマージ
+    let businessDefaultRewardSlots: ReturnType<typeof parseRewardSlots> | null = null;
+    if (targetBusinessId != null) {
+      const targetBusiness = await prisma.business.findUnique({
+        where: { id: targetBusinessId },
+        select: { businessConfig: true },
+      });
+      const bizConfig = targetBusiness?.businessConfig as { rewardConfig?: { defaults?: unknown } } | null;
+      businessDefaultRewardSlots = parseRewardSlots(bizConfig?.rewardConfig?.defaults);
+    }
+
+    let data = partners.map((p) => {
+      const resolvedRewardSlots = businessDefaultRewardSlots
+        ? mergeRewardSlots(
+            businessDefaultRewardSlots,
+            parseRewardSlots(p.businessLinks.find((bl) => bl.businessId === targetBusinessId)?.rewardSlots),
+          )
+        : null;
+      return formatPartner(p, targetBusinessId, resolvedRewardSlots);
+    });
     if (needsAppSort) {
       data = applyAppSort(data, appSortItems, sortSpec).slice(
         (page - 1) * pageSize,
