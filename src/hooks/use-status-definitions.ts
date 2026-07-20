@@ -11,6 +11,7 @@ export interface StatusDefinition {
   statusColor: string | null;
   statusIsFinal: boolean;
   statusIsLost: boolean;
+  isRevenueConfirmed: boolean;
   statusSortOrder: number;
   statusIsActive: boolean;
 }

@@ -12,6 +12,7 @@ const updateSchema = z.object({
   statusIsFinal: z.boolean().optional(),
   statusIsLost: z.boolean().optional(),
   statusIsActive: z.boolean().optional(),
+  isRevenueConfirmed: z.boolean().optional(),
 });
 
 // ============================================

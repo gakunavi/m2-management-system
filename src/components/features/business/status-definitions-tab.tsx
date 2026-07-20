@@ -56,6 +56,12 @@ const STATUS_COLUMNS: SortableItemColumn<StatusDefinition>[] = [
     width: 60,
     render: (value) => (value ? '✓' : '-'),
   },
+  {
+    key: 'isRevenueConfirmed',
+    label: '収益確定',
+    width: 70,
+    render: (value) => (value ? '✓' : '-'),
+  },
 ];
 
 const STATUS_FORM_FIELDS: SortableItemFormField[] = [
@@ -113,6 +119,12 @@ const STATUS_FORM_FIELDS: SortableItemFormField[] = [
     key: 'statusIsActive',
     label: '有効',
     type: 'checkbox',
+  },
+  {
+    key: 'isRevenueConfirmed',
+    label: '収益確定ステータス',
+    type: 'checkbox',
+    description: 'この案件を代理店報酬の対象（収益確定）とみなす。受注・納品完了・入金済など「確定」ステータスに設定。失注ステータスには設定しない。',
   },
 ];
 

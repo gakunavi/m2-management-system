@@ -78,6 +78,7 @@ export async function POST(
       statusColor: string | null;
       statusIsFinal: boolean;
       statusIsLost: boolean;
+      isRevenueConfirmed: boolean;
       statusSortOrder: number;
       statusIsActive: boolean;
     }
@@ -117,6 +118,7 @@ export async function POST(
       const statusColor = row.statusColor?.trim() || null;
       const statusIsFinal = row.statusIsFinal === '1' || row.statusIsFinal?.toLowerCase() === 'true';
       const statusIsLost = row.statusIsLost === '1' || row.statusIsLost?.toLowerCase() === 'true';
+      const isRevenueConfirmed = row.isRevenueConfirmed === '1' || row.isRevenueConfirmed?.toLowerCase() === 'true';
       const statusIsActiveRaw = row.statusIsActive?.trim();
       const statusIsActive =
         statusIsActiveRaw === '' || statusIsActiveRaw === undefined
@@ -132,6 +134,7 @@ export async function POST(
         statusColor,
         statusIsFinal,
         statusIsLost,
+        isRevenueConfirmed,
         statusSortOrder: isNaN(statusSortOrder) ? 0 : statusSortOrder,
         statusIsActive,
       });
@@ -161,6 +164,7 @@ export async function POST(
                   statusColor: row.statusColor,
                   statusIsFinal: row.statusIsFinal,
                   statusIsLost: row.statusIsLost,
+                  isRevenueConfirmed: row.isRevenueConfirmed,
                   statusSortOrder: row.statusSortOrder,
                   statusIsActive: row.statusIsActive,
                 },
@@ -176,6 +180,7 @@ export async function POST(
                   statusColor: row.statusColor,
                   statusIsFinal: row.statusIsFinal,
                   statusIsLost: row.statusIsLost,
+                  isRevenueConfirmed: row.isRevenueConfirmed,
                   statusSortOrder: row.statusSortOrder,
                   statusIsActive: row.statusIsActive,
                 },

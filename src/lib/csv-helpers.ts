@@ -190,6 +190,7 @@ export const STATUS_DEFINITION_TEMPLATE_COLUMNS: readonly CsvTemplateDef[] = [
   { key: 'statusColor', label: '表示色', example: '#22c55e' },
   { key: 'statusIsFinal', label: '最終ステータス', example: '0' },
   { key: 'statusIsLost', label: '失注ステータス', example: '0' },
+  { key: 'isRevenueConfirmed', label: '収益確定ステータス', example: '0' },
   { key: 'statusSortOrder', label: '表示順', example: '0' },
   { key: 'statusIsActive', label: '有効フラグ', example: '1' },
 ] as const;

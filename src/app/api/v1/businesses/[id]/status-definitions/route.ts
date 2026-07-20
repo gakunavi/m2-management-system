@@ -12,6 +12,7 @@ const createSchema = z.object({
   statusColor: z.string().max(20).optional().nullable(),
   statusIsFinal: z.boolean().default(false),
   statusIsLost: z.boolean().default(false),
+  isRevenueConfirmed: z.boolean().default(false),
 });
 
 // ============================================
