@@ -64,7 +64,9 @@ function changeText(current: number, previous: ProfitTotals | null, pick: (t: Pr
   if (!previous) return null;
   const prev = pick(previous);
   if (prev === 0) return { text: '前月データなし', type: 'neutral' };
-  const rate = Math.round(((current - prev) / prev) * 1000) / 10;
+  // 分母は絶対値。粗利がマイナスの月を基準にすると符号が反転し、
+  // 悪化しているのに「+200%」と出てしまうため
+  const rate = Math.round(((current - prev) / Math.abs(prev)) * 1000) / 10;
   return {
     text: `${rate > 0 ? '+' : ''}${rate.toFixed(1)}% 前月比`,
     type: resolveChangeType(current, prev),

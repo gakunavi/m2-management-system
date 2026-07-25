@@ -140,6 +140,22 @@ export function RewardConfigSettings({ entityId }: Props) {
         代理店への報酬の事業デフォルトを設定します。代理店ごと・案件ごとに個別の上書きが可能です。
       </p>
 
+      <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+        <p>
+          <strong className="text-foreground">直紹介</strong>: 案件に紐づく担当代理店へ支払う分。
+          通常はこちらに設定します。
+        </p>
+        <p>
+          <strong className="text-foreground">間接（上位代理店）</strong>: 担当代理店の
+          <strong className="text-foreground">親代理店</strong>へ支払う分（代理店階層の二次報酬）。
+          親代理店が設定されていない場合は発生しません。
+        </p>
+        <p>
+          ダッシュボードの「代理店報酬」で直紹介が¥0・間接だけに金額が出ている場合、
+          直紹介に入れるべき料率が間接の欄に入っている可能性があります。
+        </p>
+      </div>
+
       <div className="space-y-4">
         <div>
           <h4 className="text-sm font-medium mb-2">ショット報酬（契約確定時に1回）</h4>

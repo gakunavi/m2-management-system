@@ -306,6 +306,23 @@ describe('computeProjectFinancials', () => {
     expect(f.rewardShotDirect).toBe(1); // 10 × 10%（報酬は従来どおり amount 基準）
   });
 
+  it('プライマリKPIが数量でも、取り分は報酬と同じ金額フィールドを基準にする', () => {
+    // プライマリKPIが「受注見込み数」のような数量フィールドのケース。
+    // 取り分がKPI基準になると 3 × 20% = 0.6 → 切り捨てで 0 円になってしまう
+    const countBasis: ProfitBasis = { ...basis, sourceField: 'units', label: '【合計】受注見込み数' };
+    const f = computeProjectFinancials(
+      { ...project, projectCustomData: { amount: 7_200_000, units: 3 } },
+      responsible,
+      parent,
+      config, // shotBaseField: 'amount'（金額）
+      countBasis,
+      true,
+    );
+    expect(f.companyRevenueShot).toBe(1_440_000); // 7,200,000 × 20%
+    expect(f.rewardShotDirect).toBe(720_000); // 7,200,000 × 10%
+    expect(f.grossProfitShot).toBe(576_000); // 1,440,000 − 720,000 − 144,000
+  });
+
   it('自社売上が 0 なら粗利率は null（0除算を返さない）', () => {
     const f = computeProjectFinancials(
       { ...project, projectCustomData: { amount: 0, monthly: 0 } },
@@ -417,6 +434,16 @@ describe('computeMonthlyPL', () => {
     expect(months[0].companyRevenue).toBe(0);
     expect(months[0].grossProfit).toBe(-62_500);
     expect(months[0].grossMargin).toBeNull();
+  });
+
+  it('プライマリKPIが数量でも、取扱高・自社売上は金額フィールドで集計する', () => {
+    const ctx = makeContext();
+    ctx.projects[0].projectCustomData = { amount: 7_200_000, units: 3, monthly: 0 };
+    const countBasis: ProfitBasis = { ...basis, sourceField: 'units' };
+    const months = computeMonthlyPL(ctx, countBasis, '2026-03', '2026-03');
+    expect(months[0].gmv).toBe(7_200_000); // 台数(3)ではなく金額
+    expect(months[0].companyRevenue).toBe(1_440_000);
+    expect(months[0].grossProfit).toBe(576_000);
   });
 
   it('案件数は月ごとの実数（重複カウントしない）', () => {

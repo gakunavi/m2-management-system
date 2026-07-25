@@ -260,12 +260,14 @@ export function computeProjectFinancials(
   const hasResponsible = project.partnerId != null;
   const hasParent = parentLink != null;
 
-  // 取り分の基準は「事業設定の明示指定 → KPIのsourceField → 報酬の基準」の順で解決する
-  const shotShareBase = amountOf(
-    config.companyShare.shotBaseField ?? basis?.sourceField ?? config.shotBaseField,
-  );
+  // 取り分・報酬とも同じ「取扱高」に対して掛けるので、基準フィールドは共通にする。
+  // 順序は 取り分の明示指定 → 報酬の基準 → KPIのsourceField。
+  //
+  // KPIのsourceField を先に見てはいけない。プライマリKPIが「受注見込み数」の
+  // ような数量フィールドだと、取り分だけが台数(例:3)を基準に計算されて
+  // 3 × 20% = 0（切り捨て）になり、報酬（金額基準）と桁がまるで合わなくなる。
+  const shotShareBase = amountOf(resolveCompanyShareBaseField(config, 'shot') ?? basis?.sourceField ?? null);
   const stockShareBase = amountOf(resolveCompanyShareBaseField(config, 'stock'));
-  // 報酬の基準は従来どおり報酬設定のフィールド（KPIタブや取り分設定の影響を受けない）
   const shotRewardBase = amountOf(config.shotBaseField ?? basis?.sourceField ?? null);
   const stockRewardBase = amountOf(config.stockBaseField);
 
@@ -474,11 +476,14 @@ export function computeMonthlyPL(
     // --- 売上側: ショット（計上月に1回）---
     if (compareMonth(month, fromMonth) >= 0 && compareMonth(month, toMonth) <= 0) {
       const b = bucketFor(month);
-      b.gmv += amountOf(basis.sourceField);
+      // 取扱高は報酬の基準金額と同じフィールドから取る。KPIのsourceField を
+      // 優先すると、プライマリKPIが数量（受注見込み数など）の事業で取扱高が
+      // 台数になってしまい、報酬と桁が合わなくなる
+      b.gmv += amountOf(ctx.config.shotBaseField ?? basis.sourceField);
       if (share.shot) {
         b.companyRevenue += applyRewardSetting(
           share.shot,
-          amountOf(ctx.config.companyShare.shotBaseField ?? basis.sourceField ?? ctx.config.shotBaseField),
+          amountOf(resolveCompanyShareBaseField(ctx.config, 'shot') ?? basis.sourceField),
         );
       }
       markProject(month, project.id);

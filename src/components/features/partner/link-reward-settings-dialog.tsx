@@ -98,6 +98,13 @@ export function LinkRewardSettingsDialog({
           <p className="text-xs text-muted-foreground">
             チェックを外した項目は事業デフォルトの設定にフォールバックします。
           </p>
+          <p className="text-xs text-muted-foreground">
+            <strong className="text-foreground">直紹介</strong>＝この代理店が担当する案件で
+            この代理店へ支払う分（通常はこちら）。
+            <strong className="text-foreground">間接</strong>＝この代理店の
+            <strong className="text-foreground">配下代理店</strong>が担当した案件で、
+            上位であるこの代理店へ支払う分。
+          </p>
 
           <div>
             <h4 className="text-sm font-medium mb-1">ショット報酬（契約確定時に1回）</h4>
