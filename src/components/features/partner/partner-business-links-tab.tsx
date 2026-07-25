@@ -69,12 +69,12 @@ interface Props {
 // ============================================
 
 const REWARD_SLOT_LABELS: Record<'shot' | 'stock', Record<'direct' | 'indirect', string>> = {
-  shot: { direct: 'ショット直', indirect: 'ショット間接' },
-  stock: { direct: 'ストック直', indirect: 'ストック間接' },
+  shot: { direct: 'ショット直', indirect: 'ショット上位代理店' },
+  stock: { direct: 'ストック直', indirect: 'ストック上位代理店' },
 };
 
 /**
- * テーブル表示用に報酬設定を短く要約する。
+ * テーブル表示用に手数料設定を短く要約する。
  * リンク自身の上書きが無いスロットは、事業デフォルトに実際に値があるかを見て
  * 「デフォルトを継承した実効値」と「本当に何も設定が無い」を区別する
  * （事業デフォルトが未設定なのに「デフォルトを使用」と表示すると誤解を招くため）。
@@ -223,7 +223,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
     updateMutation.mutate({ linkId, data: { contactPerson: editValue || null } });
   };
 
-  // 報酬設定ダイアログの保存（4スロット + 支払いタイミング特例を一括更新）
+  // 手数料設定ダイアログの保存（4スロット + 支払いタイミング特例を一括更新）
   const handleSaveRewardSettings = (
     linkId: number,
     data: { rewardSlots: RewardSlots; paymentTiming: string | null; closingDay: number | null },
@@ -302,7 +302,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                 <TableHead>事業名</TableHead>
                 <TableHead>事業コード</TableHead>
                 <TableHead>ステータス</TableHead>
-                <TableHead>報酬設定</TableHead>
+                <TableHead>手数料設定</TableHead>
                 <TableHead>担当者/窓口</TableHead>
                 <TableHead>事業別親代理店</TableHead>
                 <TableHead>事業別階層</TableHead>
@@ -339,7 +339,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
                     </Select>
                   </TableCell>
 
-                  {/* 報酬設定（ショット/ストック×直/間接 の4スロット + 支払いタイミング特例） */}
+                  {/* 手数料設定（ショット/ストック×直/上位代理店 の4スロット + 支払いタイミング特例） */}
                   <TableCell>
                     <Button
                       variant="outline"
@@ -452,7 +452,7 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
         isLoading={deleteMutation.isPending}
       />
 
-      {/* 報酬設定ダイアログ */}
+      {/* 手数料設定ダイアログ */}
       {(() => {
         const editingLink = links.find((l) => l.id === rewardDialogLinkId);
         if (!editingLink) return null;

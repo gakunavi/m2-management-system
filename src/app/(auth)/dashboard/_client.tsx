@@ -245,7 +245,7 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
         hideYearSelector={isMonthMode}
       />
 
-      {/* 収益（自社売上・代理店報酬・粗利） */}
+      {/* 収益（自社売上・代理店支払手数料・粗利） */}
       <ProfitSection data={profit} isLoading={profitLoading} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

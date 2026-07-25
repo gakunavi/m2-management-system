@@ -12,7 +12,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import type { PortalRewardResponse } from '@/types/reward';
 
 const KIND_LABELS = { shot: 'ショット', stock: 'ストック' } as const;
-const ENTRY_TYPE_LABELS = { direct: '直紹介', indirect: '間接' } as const;
+const ENTRY_TYPE_LABELS = { direct: '担当代理店', indirect: '上位代理店' } as const;
 
 export function PortalRewardsClient() {
   const router = useRouter();
@@ -50,11 +50,11 @@ export function PortalRewardsClient() {
             </p>
             <div className="grid grid-cols-3 gap-4 mt-4">
               <div>
-                <div className="text-xs text-muted-foreground">直紹介</div>
+                <div className="text-xs text-muted-foreground">担当代理店</div>
                 <div className="text-lg font-semibold">{formatCurrency(data.live.directTotal)}</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">間接</div>
+                <div className="text-xs text-muted-foreground">上位代理店</div>
                 <div className="text-lg font-semibold">{formatCurrency(data.live.indirectTotal)}</div>
               </div>
               <div>
@@ -122,8 +122,8 @@ export function PortalRewardsClient() {
                   <tr className="border-b bg-muted">
                     <th className="text-left p-3 font-medium">対象月</th>
                     <th className="text-left p-3 font-medium">代理店</th>
-                    <th className="text-right p-3 font-medium">直紹介</th>
-                    <th className="text-right p-3 font-medium">間接</th>
+                    <th className="text-right p-3 font-medium">担当代理店</th>
+                    <th className="text-right p-3 font-medium">上位代理店</th>
                     <th className="text-right p-3 font-medium">合計（税込）</th>
                     <th className="text-left p-3 font-medium">確定日</th>
                   </tr>

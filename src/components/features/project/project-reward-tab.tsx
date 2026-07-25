@@ -11,7 +11,7 @@ import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
 import type { CompanyShare } from '@/lib/company-share';
 
 // ============================================
-// 案件の代理店報酬（収益確定・解約日・案件別上書き）
+// 案件の代理店支払手数料（収益確定・解約日・案件別上書き）
 // ============================================
 // 収益確定日はステータス変更で自動セットされる（ラッチ）。ここでは
 // 誤セットの訂正・過去日での確定・手動リセットのみを扱う。
@@ -80,7 +80,7 @@ export function ProjectRewardTab({ entityId }: Props) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', String(entityId)] });
-      toast({ message: '報酬設定を保存しました', type: 'success' });
+      toast({ message: '手数料設定を保存しました', type: 'success' });
     },
     onError: (error: Error) => {
       toast({ message: error.message, type: 'error' });
@@ -147,7 +147,7 @@ export function ProjectRewardTab({ entityId }: Props) {
       <div>
         <h4 className="text-sm font-medium mb-1">解約日</h4>
         <p className="text-xs text-muted-foreground mb-2">
-          設定すると、ストック報酬（毎月発生）はこの月までで停止します。
+          設定すると、ストック手数料（毎月発生）はこの月までで停止します。
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -165,33 +165,33 @@ export function ProjectRewardTab({ entityId }: Props) {
       </div>
 
       <div>
-        <h4 className="text-sm font-medium mb-1">この案件だけの報酬上書き</h4>
+        <h4 className="text-sm font-medium mb-1">この案件だけの手数料上書き</h4>
         <p className="text-xs text-muted-foreground mb-2">
           チェックを外した項目は、代理店リンク設定・事業デフォルトの順にフォールバックします。
         </p>
         <div className="pl-2">
-          <div className="text-xs font-medium text-muted-foreground mb-0.5">ショット報酬</div>
+          <div className="text-xs font-medium text-muted-foreground mb-0.5">ショット手数料</div>
           <RewardSettingInput
-            label="直紹介"
+            label="担当代理店"
             value={override.shot?.direct}
             onChange={(v) => updateSlot('shot', 'direct', v)}
             unsetHint="リンク/事業デフォルトを使用"
           />
           <RewardSettingInput
-            label="間接（上位代理店）"
+            label="上位代理店"
             value={override.shot?.indirect}
             onChange={(v) => updateSlot('shot', 'indirect', v)}
             unsetHint="リンク/事業デフォルトを使用"
           />
-          <div className="text-xs font-medium text-muted-foreground mb-0.5 mt-2">ストック報酬</div>
+          <div className="text-xs font-medium text-muted-foreground mb-0.5 mt-2">ストック手数料</div>
           <RewardSettingInput
-            label="直紹介"
+            label="担当代理店"
             value={override.stock?.direct}
             onChange={(v) => updateSlot('stock', 'direct', v)}
             unsetHint="リンク/事業デフォルトを使用"
           />
           <RewardSettingInput
-            label="間接（上位代理店）"
+            label="上位代理店"
             value={override.stock?.indirect}
             onChange={(v) => updateSlot('stock', 'indirect', v)}
             unsetHint="リンク/事業デフォルトを使用"
@@ -225,7 +225,7 @@ export function ProjectRewardTab({ entityId }: Props) {
       <div>
         <h4 className="text-sm font-medium mb-1">この案件の収益（保存済みの内容で計算）</h4>
         <p className="text-xs text-muted-foreground mb-2">
-          粗利 = 自社売上 − 代理店報酬（直紹介＋間接、税抜）。
+          粗利 = 自社売上 − 代理店支払手数料（担当代理店＋上位代理店、税抜）。
           金額は売上KPIの対象ステータス・計上月に合致する案件でのみ表示されます
           （合致しない場合は「-」）。
         </p>
@@ -250,12 +250,12 @@ export function ProjectRewardTab({ entityId }: Props) {
                 <td className="py-1 text-right">{yen(project.companyRevenueStock)}</td>
               </tr>
               <tr className="border-t">
-                <td className="py-1 pr-6">代理店報酬（直紹介）</td>
+                <td className="py-1 pr-6">代理店支払手数料（担当代理店）</td>
                 <td className="py-1 pr-6 text-right">{yen(project.rewardShotDirect)}</td>
                 <td className="py-1 text-right">{yen(project.rewardStockDirect)}</td>
               </tr>
               <tr className="border-t">
-                <td className="py-1 pr-6">代理店報酬（間接）</td>
+                <td className="py-1 pr-6">代理店支払手数料（上位代理店）</td>
                 <td className="py-1 pr-6 text-right">{yen(project.rewardShotIndirect)}</td>
                 <td className="py-1 text-right">{yen(project.rewardStockIndirect)}</td>
               </tr>

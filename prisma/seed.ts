@@ -189,7 +189,7 @@ async function main() {
               unit: '#台',
             },
           ],
-          // 代理店報酬の事業デフォルト（MOAG＝ショットのみ）
+          // 代理店支払手数料の事業デフォルト（MOAG＝ショットのみ）
           rewardConfig: {
             defaults: {
               shot: { direct: { type: 'rate', value: 15 }, indirect: { type: 'rate', value: 5 } },
@@ -271,7 +271,7 @@ async function main() {
               unit: '¥#',
             },
           ],
-          // 代理店報酬の事業デフォルト（サービスA＝ショット＋ストック、翌月払い）
+          // 代理店支払手数料の事業デフォルト（サービスA＝ショット＋ストック、翌月払い）
           rewardConfig: {
             defaults: {
               shot: { direct: { type: 'rate', value: 20 }, indirect: { type: 'rate', value: 5 } },
@@ -600,8 +600,8 @@ async function main() {
     // ============================================
     await tx.partnerBusinessLink.createMany({
       data: [
-        // MOAG事業（shot.direct=直紹介率、shot.indirect=1次店が配下の成果から得る間接率）
-        // サービスA事業(businessB)はストック報酬も設定してストックの検証データにする
+        // MOAG事業（shot.direct=担当代理店率、shot.indirect=1次店が配下の成果から得る上位代理店率）
+        // サービスA事業(businessB)はストック手数料も設定してストックの検証データにする
         { partnerId: partner1.id, businessId: businessA.id, linkStatus: 'active', businessTier: '1次代理店', businessTierNumber: '1', businessParentId: null, rewardSlots: { shot: { direct: { type: 'rate', value: 15 }, indirect: { type: 'rate', value: 5 } } } },
         { partnerId: partner2.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-1', businessParentId: partner1.id, rewardSlots: { shot: { direct: { type: 'rate', value: 10 } } } },
         { partnerId: partner3.id, businessId: businessA.id, linkStatus: 'active', businessTier: '2次代理店', businessTierNumber: '1-2', businessParentId: partner1.id, rewardSlots: { shot: { direct: { type: 'rate', value: 8 } } } },

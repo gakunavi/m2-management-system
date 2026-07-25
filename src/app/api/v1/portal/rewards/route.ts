@@ -41,11 +41,11 @@ export async function GET(request: NextRequest) {
 
     const month = getCurrentMonth();
 
-    // 当月ライブ（未締めの計算値。事業に報酬設定が無い場合は空扱い）
+    // 当月ライブ（未締めの計算値。事業に手数料設定が無い場合は空扱い）
     const allEntries = await getRewardEntriesForPeriod(prisma, businessId, month, month);
     const entries = allEntries.filter((e) => scopeIds.includes(e.partnerId));
 
-    // 受取代理店(partnerId)だけでなく、間接報酬の経由元(sourcePartnerId)の名前解決にも使うため両方集める
+    // 受取代理店(partnerId)だけでなく、上位代理店手数料の経由元(sourcePartnerId)の名前解決にも使うため両方集める
     const partnerIds = Array.from(
       new Set([
         ...entries.map((e) => e.partnerId),

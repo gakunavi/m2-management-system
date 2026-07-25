@@ -5,7 +5,7 @@ import { parseRewardSlots, rewardSlotsSchema, type RewardSlots } from '@/lib/rew
 // PartnerBusinessLink の報酬フィールド 共通シリアライザ / バリデーション
 // ============================================
 //
-// 代理店×事業リンクの報酬上書き（RewardSlots）と支払いタイミング特例を
+// 代理店×事業リンクの手数料上書き（RewardSlots）と支払いタイミング特例を
 // API 応答/入力で扱うための共通定義。
 
 export interface RewardLinkFields {
@@ -22,7 +22,7 @@ export function serializeRewardLinkFields(link: RewardLinkFields) {
   };
 }
 
-/** 報酬設定の入力バリデーション（create/update 共通） */
+/** 手数料設定の入力バリデーション（create/update 共通） */
 export const rewardLinkInputSchema = {
   rewardSlots: rewardSlotsSchema.nullable().optional(),
   paymentTiming: z.enum(['same', 'next', 'next2', 'closing']).nullable().optional(),

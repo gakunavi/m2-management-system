@@ -36,8 +36,8 @@ import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 // 用語:
 //   取扱高(GMV)   顧客が支払う総額
 //   自社売上       取扱高 × 自社取り分（事業デフォルト→案件別上書きで解決）
-//   代理店報酬     直紹介＋間接。税抜（消費税は預り金なので粗利から引かない）
-//   粗利           自社売上 − 代理店報酬。粗利率 = 粗利 ÷ 自社売上
+//   代理店支払手数料     担当代理店＋上位代理店。税抜（消費税は預り金なので粗利から引かない）
+//   粗利           自社売上 − 代理店支払手数料。粗利率 = 粗利 ÷ 自社売上
 //
 // 「経常利益」は販管費・営業外まで含む全社の数字で、事業別・案件別には配賦なしに
 // 出せない。ここで扱うのは粗利（売上総利益）までとする。
@@ -122,7 +122,7 @@ function recognitionMonthOf(project: ProjectRewardInput, basis: ProfitBasis): st
 /**
  * 計上月を revenueConfirmedMonth に差し替えた入力を作る。
  *
- * ストック展開（getStockActiveMonths）と報酬明細計算（computeProjectEntries）は
+ * ストック展開（getStockActiveMonths）と支払明細計算（computeProjectEntries）は
  * どちらも revenueConfirmedMonth を起点にしている。ダッシュボードでは
  * 収益確定日ではなくKPIの計上月を起点にしたいので、同じ関数を使い回すために
  * ここで起点だけを差し替える。解約日・固定期間の扱いは変わらない。
@@ -145,6 +145,8 @@ export interface ProjectFinancials {
   // --- ショット（計上月に1回）---
   rewardShotDirect: number | null;
   rewardShotIndirect: number | null;
+  /** 担当代理店＋上位代理店の合計。「いくら支払うか」だけ見たいとき用 */
+  rewardShotTotal: number | null;
   companyRevenueShot: number | null;
   grossProfitShot: number | null;
   grossMarginShot: number | null; // %
@@ -152,6 +154,7 @@ export interface ProjectFinancials {
   // --- ストック（契約継続中は毎月。1ヶ月あたりの金額）---
   rewardStockDirect: number | null;
   rewardStockIndirect: number | null;
+  rewardStockTotal: number | null;
   companyRevenueStock: number | null;
   grossProfitStock: number | null;
   grossMarginStock: number | null; // %
@@ -164,11 +167,13 @@ export const EMPTY_FINANCIALS: ProjectFinancials = {
   companyShareIsOverridden: false,
   rewardShotDirect: null,
   rewardShotIndirect: null,
+  rewardShotTotal: null,
   companyRevenueShot: null,
   grossProfitShot: null,
   grossMarginShot: null,
   rewardStockDirect: null,
   rewardStockIndirect: null,
+  rewardStockTotal: null,
   companyRevenueStock: null,
   grossProfitStock: null,
   grossMarginStock: null,
@@ -288,14 +293,16 @@ export function computeProjectFinancials(
   const companyRevenueShot = revenueOf(share.shot, shotShareBase);
   const companyRevenueStock = revenueOf(share.stock, stockShareBase);
 
+  // 「いくら支払うか」の合計。どちらのスロットも未設定なら null（¥0 と区別する）
+  const totalOf = (a: number | null, b: number | null): number | null =>
+    a === null && b === null ? null : (a ?? 0) + (b ?? 0);
+  const rewardShotTotal = totalOf(rewardShotDirect, rewardShotIndirect);
+  const rewardStockTotal = totalOf(rewardStockDirect, rewardStockIndirect);
+
   const grossProfitShot =
-    companyRevenueShot === null
-      ? null
-      : companyRevenueShot - (rewardShotDirect ?? 0) - (rewardShotIndirect ?? 0);
+    companyRevenueShot === null ? null : companyRevenueShot - (rewardShotTotal ?? 0);
   const grossProfitStock =
-    companyRevenueStock === null
-      ? null
-      : companyRevenueStock - (rewardStockDirect ?? 0) - (rewardStockIndirect ?? 0);
+    companyRevenueStock === null ? null : companyRevenueStock - (rewardStockTotal ?? 0);
 
   return {
     companyShareShotLabel: share.shot ? formatRewardSetting(share.shot) : null,
@@ -303,11 +310,13 @@ export function computeProjectFinancials(
     companyShareIsOverridden: isOverridden,
     rewardShotDirect,
     rewardShotIndirect,
+    rewardShotTotal,
     companyRevenueShot,
     grossProfitShot,
     grossMarginShot: calcMargin(grossProfitShot, companyRevenueShot),
     rewardStockDirect,
     rewardStockIndirect,
+    rewardStockTotal,
     companyRevenueStock,
     grossProfitStock,
     grossMarginStock: calcMargin(grossProfitStock, companyRevenueStock),

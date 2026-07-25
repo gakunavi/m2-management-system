@@ -6,7 +6,7 @@ import { rewardSettingSchema, type RewardSetting } from '@/lib/reward-slots';
 // ============================================
 //
 // 取扱高（顧客が支払う総額）のうち、自社の売上になる分を表す。
-// 代理店報酬（RewardSlots）と同じ RewardSetting = { type, value } を使い、
+// 代理店支払手数料（RewardSlots）と同じ RewardSetting = { type, value } を使い、
 // ショット（契約確定時に1回）/ストック（継続中は毎月）の2スロットを持つ。
 //
 // 2層で解決する（代理店に依存しないので代理店リンク層は無い）:

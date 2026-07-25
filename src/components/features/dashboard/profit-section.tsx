@@ -17,7 +17,7 @@ import { CHART_COLORS, CHART_DEFAULTS, formatCurrency, formatYAxis } from './cha
 import type { ProfitResponse, ProfitTotals } from '@/types/dashboard';
 
 // ============================================
-// 収益セクション（自社売上・代理店報酬・粗利）
+// 収益セクション（自社売上・代理店支払手数料・粗利）
 // ============================================
 //
 // 取扱高（顧客が支払う総額）と自社売上（取り分適用後）は別物なので、
@@ -127,7 +127,7 @@ function ChartTooltip({
 
 const SERIES_LABELS: Record<string, string> = {
   companyRevenue: '自社売上',
-  rewardTotal: '代理店報酬',
+  rewardTotal: '代理店支払手数料',
   grossProfit: '粗利',
 };
 
@@ -153,7 +153,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
       <div className="rounded-lg border bg-card p-5">
         <h3 className="font-semibold mb-1">収益（自社売上・粗利）</h3>
         <p className="text-sm text-muted-foreground">
-          事業マスタの「代理店報酬」設定にある<strong>自社取り分</strong>が未設定のため表示できません。
+          事業マスタの「代理店支払手数料」設定にある<strong>自社取り分</strong>が未設定のため表示できません。
           取扱高のうち自社の売上になる割合を設定すると、自社売上・粗利・粗利率が表示されます。
         </p>
       </div>
@@ -173,16 +173,16 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
           accent="border-l-primary"
         />
         <ProfitCard
-          label="代理店報酬"
+          label="代理店支払手数料"
           value={formatCurrency(totals.rewardTotal, true)}
-          sub={`直紹介 ${formatCurrency(totals.rewardDirect, true)} / 間接 ${formatCurrency(totals.rewardIndirect, true)}`}
+          sub="代理店へ支払う手数料の合計"
           change={changeText(totals.rewardTotal, previous, (t) => t.rewardTotal)}
           accent="border-l-warning"
         />
         <ProfitCard
           label="粗利"
           value={formatCurrency(totals.grossProfit, true)}
-          sub="自社売上 − 代理店報酬（税抜）"
+          sub="自社売上 − 代理店支払手数料（税抜）"
           change={changeText(totals.grossProfit, previous, (t) => t.grossProfit)}
           accent="border-l-success"
         />
@@ -256,7 +256,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                   <th className="text-left font-normal py-2 pr-4">事業</th>
                   <th className="text-right font-normal py-2 pr-4">取扱高</th>
                   <th className="text-right font-normal py-2 pr-4">自社売上</th>
-                  <th className="text-right font-normal py-2 pr-4">代理店報酬</th>
+                  <th className="text-right font-normal py-2 pr-4">代理店支払手数料</th>
                   <th className="text-right font-normal py-2 pr-4">粗利</th>
                   <th className="text-right font-normal py-2">粗利率</th>
                 </tr>

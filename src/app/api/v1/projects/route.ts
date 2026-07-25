@@ -293,7 +293,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 列設定用: 事業ごとの報酬額（ショット/ストック × 直紹介/間接）・自社売上・粗利を
+    // 列設定用: 事業ごとの報酬額（ショット/ストック × 担当代理店/上位代理店）・自社売上・粗利を
     // 計算し、案件IDでまとめる
     const financialsByProject = new Map<number, ProjectFinancials>();
     if (businessIds.length > 0) {

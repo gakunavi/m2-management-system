@@ -38,8 +38,8 @@ export function RewardPartnerSummaryTable({ data, grandTotal, selectedPartnerId,
           <thead className="sticky top-0 z-20 bg-muted">
             <tr className="border-b bg-muted">
               <th className="text-left p-3 font-medium">代理店</th>
-              <th className="text-right p-3 font-medium">直紹介</th>
-              <th className="text-right p-3 font-medium">間接</th>
+              <th className="text-right p-3 font-medium">担当代理店</th>
+              <th className="text-right p-3 font-medium">上位代理店</th>
               <th className="text-right p-3 font-medium">合計</th>
               <th className="text-right p-3 font-medium">件数</th>
             </tr>

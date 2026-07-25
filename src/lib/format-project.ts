@@ -26,7 +26,7 @@ export function formatProject(project: ProjectWithRelations) {
     projectNotes: project.projectNotes,
     projectCustomData: project.projectCustomData,
     projectStatusChangedAt: project.projectStatusChangedAt?.toISOString() ?? null,
-    // 代理店報酬（ショット確定・ストック開始/終了の判定に使う）
+    // 代理店支払手数料（ショット確定・ストック開始/終了の判定に使う）
     revenueConfirmedAt: project.revenueConfirmedAt?.toISOString() ?? null,
     cancelledAt: project.cancelledAt?.toISOString() ?? null,
     stockTermMonths: project.stockTermMonths ?? null,

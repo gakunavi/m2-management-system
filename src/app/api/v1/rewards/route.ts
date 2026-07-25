@@ -11,7 +11,7 @@ import type { RewardPartnerSummary, RewardSummaryResponse } from '@/types/reward
 // ============================================
 // GET /api/v1/rewards?businessId=&month=
 // ============================================
-// 対象月（支払い対象月）の代理店別 直紹介/間接/合計 の内部集計。
+// 対象月（支払い対象月）の代理店別 担当代理店/上位代理店/合計 の内部集計。
 // 締め（確定）前のライブ計算のみを扱う（Phase 4 で締め機能を追加）。
 
 export async function GET(request: NextRequest) {

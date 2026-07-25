@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
     if (!partner) throw ApiError.notFound('代理店が見つかりません');
 
     const config = getRewardConfig(business.businessConfig);
-    if (!config) throw ApiError.badRequest('この事業には報酬設定がありません');
+    if (!config) throw ApiError.badRequest('この事業には手数料設定がありません');
 
     // ライブ再計算（唯一の真実の源）→ 対象代理店ぶんに絞る。
     // 明細ゼロ（¥0）でも確定は許可する（正式な¥0明細書が必要なケースがある）。

@@ -198,7 +198,7 @@ export const businessDetailConfig: EntityDetailConfig = {
     },
     {
       key: 'rewardConfig',
-      label: '代理店報酬設定',
+      label: '代理店支払手数料設定',
       component: 'custom',
       config: {},
     },

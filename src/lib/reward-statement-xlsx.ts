@@ -26,7 +26,7 @@ const ITEM_FIRST_ROW = 22;
 const ITEM_MAX_ROWS = 18; // 22〜39行目
 
 const KIND_LABELS = { shot: 'ショット', stock: 'ストック' } as const;
-const ENTRY_TYPE_LABELS = { direct: '直紹介', indirect: '間接' } as const;
+const ENTRY_TYPE_LABELS = { direct: '担当代理店', indirect: '上位代理店' } as const;
 
 export interface RewardStatementXlsxEntry {
   projectNoSnapshot: string | null;

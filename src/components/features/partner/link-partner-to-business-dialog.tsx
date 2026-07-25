@@ -86,7 +86,7 @@ export function LinkPartnerToBusinessDialog({
   const [selectedParent, setSelectedParent] = useState<PartnerCandidate | null>(null);
   const [asPrimary, setAsPrimary] = useState(false);
 
-  // --- 追加情報（報酬設定は編集ダイアログと同じ4スロット + 支払い月特例）---
+  // --- 追加情報（手数料設定は編集ダイアログと同じ4スロット + 支払い月特例）---
   const [rewardSlots, setRewardSlots] = useState<RewardSlots>({});
   const [useTimingOverride, setUseTimingOverride] = useState(false);
   const [paymentTiming, setPaymentTiming] = useState<PaymentTiming>('same');
@@ -438,22 +438,22 @@ export function LinkPartnerToBusinessDialog({
                 />
               </div>
 
-              {/* 報酬設定（4スロット。未設定のスロットは事業デフォルトにフォールバック）*/}
+              {/* 手数料設定（4スロット。未設定のスロットは事業デフォルトにフォールバック）*/}
               <div className="border-t pt-3 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  報酬設定（未設定の項目は事業デフォルトを使用します。あとから編集も可能です）
+                  手数料設定（未設定の項目は事業デフォルトを使用します。あとから編集も可能です）
                 </p>
                 <div>
-                  <h4 className="text-xs font-medium mb-1">ショット報酬（契約確定時に1回）</h4>
+                  <h4 className="text-xs font-medium mb-1">ショット手数料（契約確定時に1回）</h4>
                   <div className="pl-2">
                     <RewardSettingInput
-                      label="直紹介"
+                      label="担当代理店"
                       value={rewardSlots.shot?.direct}
                       onChange={(v) => updateSlot('shot', 'direct', v)}
                       unsetHint={unsetHintFor(businessDefaults.shot?.direct)}
                     />
                     <RewardSettingInput
-                      label="間接（上位代理店）"
+                      label="上位代理店"
                       value={rewardSlots.shot?.indirect}
                       onChange={(v) => updateSlot('shot', 'indirect', v)}
                       unsetHint={unsetHintFor(businessDefaults.shot?.indirect)}
@@ -461,16 +461,16 @@ export function LinkPartnerToBusinessDialog({
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-xs font-medium mb-1">ストック報酬（契約継続中は毎月）</h4>
+                  <h4 className="text-xs font-medium mb-1">ストック手数料（契約継続中は毎月）</h4>
                   <div className="pl-2">
                     <RewardSettingInput
-                      label="直紹介"
+                      label="担当代理店"
                       value={rewardSlots.stock?.direct}
                       onChange={(v) => updateSlot('stock', 'direct', v)}
                       unsetHint={unsetHintFor(businessDefaults.stock?.direct)}
                     />
                     <RewardSettingInput
-                      label="間接（上位代理店）"
+                      label="上位代理店"
                       value={rewardSlots.stock?.indirect}
                       onChange={(v) => updateSlot('stock', 'indirect', v)}
                       unsetHint={unsetHintFor(businessDefaults.stock?.indirect)}

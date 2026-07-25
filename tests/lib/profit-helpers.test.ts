@@ -209,6 +209,7 @@ describe('computeProjectFinancials', () => {
     // 報酬 直10% = 50,000 / 間接2% = 10,000
     expect(f.rewardShotDirect).toBe(50_000);
     expect(f.rewardShotIndirect).toBe(10_000);
+    expect(f.rewardShotTotal).toBe(60_000); // 支払額の合計
     // 粗利 100,000 - 60,000 = 40,000（40.0%）
     expect(f.grossProfitShot).toBe(40_000);
     expect(f.grossMarginShot).toBe(40);
@@ -219,7 +220,8 @@ describe('computeProjectFinancials', () => {
     const f = computeProjectFinancials(project, responsible, parent, config, basis, true);
     expect(f.companyRevenueStock).toBe(10_000); // 50,000 × 20%
     expect(f.rewardStockDirect).toBe(2_500); // 50,000 × 5%
-    expect(f.rewardStockIndirect).toBeNull(); // 間接ストックは未設定
+    expect(f.rewardStockIndirect).toBeNull(); // 上位代理店ぶんは未設定
+    expect(f.rewardStockTotal).toBe(2_500); // 片方だけでも合計は出す
     expect(f.grossProfitStock).toBe(7_500);
     expect(f.grossMarginStock).toBe(75);
   });
@@ -279,7 +281,7 @@ describe('computeProjectFinancials', () => {
     expect(f.companyRevenueShot).toBeNull();
     expect(f.grossProfitShot).toBeNull();
     expect(f.companyShareShotLabel).toBeNull();
-    // 報酬は取り分と無関係に計算される
+    // 支払手数料は取り分と無関係に計算される
     expect(f.rewardShotDirect).toBe(50_000);
   });
 

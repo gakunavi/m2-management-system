@@ -14,7 +14,7 @@ interface Props {
 }
 
 const KIND_LABELS = { shot: 'ショット', stock: 'ストック' } as const;
-const ENTRY_TYPE_LABELS = { direct: '直紹介', indirect: '間接' } as const;
+const ENTRY_TYPE_LABELS = { direct: '担当代理店', indirect: '上位代理店' } as const;
 
 export function RewardPreviewPanel({ data, isLoading, existingStatement, onConfirm, isConfirming }: Props) {
   if (isLoading) {
@@ -46,7 +46,7 @@ export function RewardPreviewPanel({ data, isLoading, existingStatement, onConfi
         <div>
           <h3 className="font-semibold">{data.partnerName} の明細</h3>
           <p className="text-xs text-muted-foreground mt-1">
-            直紹介 {formatCurrency(data.directTotal)} ／ 間接 {formatCurrency(data.indirectTotal)} ／ 合計{' '}
+            担当代理店 {formatCurrency(data.directTotal)} ／ 上位代理店 {formatCurrency(data.indirectTotal)} ／ 合計{' '}
             {formatCurrency(data.total)}
           </p>
         </div>

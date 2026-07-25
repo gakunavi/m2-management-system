@@ -14,13 +14,13 @@ import {
 } from '@/lib/company-share';
 
 // ============================================
-// 代理店報酬 計算エンジン
+// 代理店支払手数料 計算エンジン
 // ============================================
 //
-// ショット報酬（契約確定時に1回）とストック報酬（継続中は毎月）を計算する。
-// - 報酬設定は RewardSlots（ショット/ストック × 直/間接）を3層マージで解決
+// ショット手数料（契約確定時に1回）とストック手数料（継続中は毎月）を計算する。
+// - 手数料設定は RewardSlots（ショット/ストック × 直/上位代理店）を3層マージで解決
 //   （事業デフォルト rewardConfig.defaults → 代理店リンク rewardSlots → 案件 rewardOverride）
-// - 2段オーバーライド: 案件の担当代理店に「直」、その親代理店に「間接」
+// - 2段オーバーライド: 案件の担当代理店に「直」、その親代理店に「上位代理店」
 // - 収益確定（revenueConfirmedAt）でショット発生＆ストック開始、解約（cancelledAt）で終了
 // - 支払い対象月は 当月/翌月/翌々月/締め日 ルールで確定月から算出（代理店特例あり）
 // - 金額は円未満切り捨て
@@ -47,7 +47,7 @@ export interface ProjectRewardInput {
   id: number;
   projectNo: string;
   customerName: string | null;
-  partnerId: number | null; // 担当代理店（直紹介）
+  partnerId: number | null; // 担当代理店（担当代理店）
   projectExpectedCloseMonth: string | null;
   projectCustomData: unknown;
   revenueConfirmedMonth: string | null; // 収益確定月（YYYY-MM）。null=未確定
@@ -58,7 +58,7 @@ export interface ProjectRewardInput {
   companyShareOverride: CompanyShare | null; // 案件別の自社取り分上書き
 }
 
-/** 代理店×事業リンク（報酬設定・支払いタイミング特例） */
+/** 代理店×事業リンク（手数料設定・支払いタイミング特例） */
 export interface LinkRewardInput {
   partnerId: number;
   rewardSlots: RewardSlots | null;
@@ -74,7 +74,7 @@ export interface ComputedRewardEntry {
   rewardKind: RewardKind;
   entryType: RewardEntryType;
   partnerId: number; // 受取代理店
-  sourcePartnerId: number | null; // 間接のとき、成果を出した担当代理店
+  sourcePartnerId: number | null; // 上位代理店のとき、成果を出した担当代理店
   baseAmount: number; // 基準額（ショット=確定金額 / ストック=月額）
   rewardType: 'rate' | 'fixed';
   rate: number | null; // rate のときの率%
@@ -146,7 +146,7 @@ export function applyPaymentTiming(
 }
 
 // ============================================
-// 報酬設定の取得・適用
+// 手数料設定の取得・適用
 // ============================================
 
 /** businessConfig から rewardConfig を取り出す（既定値付き） */
@@ -197,7 +197,7 @@ export function resolveCompanyShareBaseField(
   return config.companyShare.stockBaseField ?? config.stockBaseField;
 }
 
-/** 報酬設定を基準額に適用（率→⌊base×率⌋ / 固定→⌊value⌋、円未満切り捨て） */
+/** 手数料設定を基準額に適用（率→⌊base×率⌋ / 固定→⌊value⌋、円未満切り捨て） */
 export function applyRewardSetting(setting: RewardSetting, baseAmount: number): number {
   if (setting.type === 'rate') {
     return Math.floor((baseAmount * setting.value) / 100);
@@ -211,10 +211,10 @@ export function calcTax(subtotal: number, taxRate: number): number {
 }
 
 // ============================================
-// 純粋計算：1案件の報酬明細
+// 純粋計算：1案件の支払明細
 // ============================================
 
-/** 直紹介ぶんのスロット解決（事業デフォルト→担当リンク→案件上書き） */
+/** 担当代理店ぶんのスロット解決（事業デフォルト→担当リンク→案件上書き） */
 function resolveDirect(
   kind: RewardKind,
   config: RewardConfig,
@@ -225,7 +225,7 @@ function resolveDirect(
   return merged[kind]?.direct;
 }
 
-/** 間接ぶんのスロット解決（事業デフォルト→親リンク→案件上書き） */
+/** 上位代理店ぶんのスロット解決（事業デフォルト→親リンク→案件上書き） */
 function resolveIndirect(
   kind: RewardKind,
   config: RewardConfig,
@@ -236,7 +236,7 @@ function resolveIndirect(
   return merged[kind]?.indirect;
 }
 
-/** 1案件について、4スロット全ての報酬設定を解決した結果（未設定は undefined） */
+/** 1案件について、4スロット全ての手数料設定を解決した結果（未設定は undefined） */
 export interface ResolvedProjectRewardSettings {
   shotDirect: RewardSetting | undefined;
   shotIndirect: RewardSetting | undefined;
@@ -245,8 +245,8 @@ export interface ResolvedProjectRewardSettings {
 }
 
 /**
- * 1案件に適用される報酬設定を4スロットぶん解決する（純粋関数）。
- * 明細計算を通さずに「この案件のストック報酬は月いくらか」を出したい
+ * 1案件に適用される手数料設定を4スロットぶん解決する（純粋関数）。
+ * 明細計算を通さずに「この案件のストック手数料は月いくらか」を出したい
  * 一覧列表示などで使う。
  */
 export function resolveProjectRewardSettings(
@@ -310,7 +310,7 @@ export function getStockActiveMonths(
 }
 
 /**
- * 1案件の報酬明細を、発生月レンジ [sourceFrom, sourceTo] で計算する（純粋関数）。
+ * 1案件の支払明細を、発生月レンジ [sourceFrom, sourceTo] で計算する（純粋関数）。
  * ショット＝確定月がレンジ内なら1回。ストック＝有効な各発生月ぶん。
  */
 export function computeProjectEntries(
@@ -402,7 +402,7 @@ export function computeProjectEntries(
 }
 
 // ============================================
-// DB ラッパー：事業ぶんの報酬明細を計算
+// DB ラッパー：事業ぶんの支払明細を計算
 // ============================================
 
 export type LinkRow = {
@@ -447,7 +447,7 @@ function toLinkInput(l: LinkRow | undefined): LinkRewardInput | null {
     : null;
 }
 
-/** 担当代理店の直リンクと、その親代理店（間接）のリンクを解決する */
+/** 担当代理店の直リンクと、その親代理店（上位代理店）のリンクを解決する */
 export function resolveResponsibleAndParentLinks(
   partnerId: number | null,
   linkByPartner: Map<number, LinkRow>,
@@ -482,7 +482,7 @@ export function toProjectRewardInput(p: ConfirmedProjectRow): ProjectRewardInput
 }
 
 /**
- * 事業の報酬設定・代理店リンク・案件をまとめて取得する共通ロード処理。
+ * 事業の手数料設定・代理店リンク・案件をまとめて取得する共通ロード処理。
  * calculateBusinessRewardEntries（期間指定の明細計算）・月次P/L計算・
  * 一覧列表示用の案件別収益計算がいずれもこれを使う。
  *
@@ -547,7 +547,7 @@ export async function loadBusinessRewardContext(
 }
 
 /**
- * 事業の確定済み案件から、発生月レンジ [sourceFrom, sourceTo] の報酬明細を計算する。
+ * 事業の確定済み案件から、発生月レンジ [sourceFrom, sourceTo] の支払明細を計算する。
  * 返り値は明細のフラットリスト（支払い月での集計・締めは呼び出し側 / 別Phase）。
  */
 export async function calculateBusinessRewardEntries(
@@ -606,7 +606,7 @@ export async function getRewardEntriesForPeriod(
 // 締め（確定）スナップショット用ヘルパー（純粋関数）
 // ============================================
 
-/** 明細書1通ぶんの金額集計（直/間接/小計/税/総計）。全て円未満切り捨て前提の整数円。 */
+/** 明細書1通ぶんの金額集計（直/上位代理店/小計/税/総計）。全て円未満切り捨て前提の整数円。 */
 export interface RewardStatementTotals {
   totalDirect: number;
   totalIndirect: number;
@@ -617,7 +617,7 @@ export interface RewardStatementTotals {
 
 /**
  * 対象代理店ぶんの明細行から明細書の金額を集計する（純粋関数）。
- * subtotal = 直 + 間接、taxAmount = calcTax(subtotal)（外税・切り捨て）、grandTotal = subtotal + tax。
+ * subtotal = 直 + 上位代理店、taxAmount = calcTax(subtotal)（外税・切り捨て）、grandTotal = subtotal + tax。
  * 明細が空（¥0）でも 0 埋めの totals を返す（¥0 明細書も正当）。
  */
 export function computeStatementTotals(

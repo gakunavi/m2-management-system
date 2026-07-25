@@ -14,7 +14,7 @@ interface Props {
 }
 
 const KIND_LABELS = { shot: 'ショット', stock: 'ストック' } as const;
-const ENTRY_TYPE_LABELS = { direct: '直紹介', indirect: '間接' } as const;
+const ENTRY_TYPE_LABELS = { direct: '担当代理店', indirect: '上位代理店' } as const;
 
 export function RewardStatementDetailClient({ id }: Props) {
   const { data, isLoading } = useQuery({
@@ -27,7 +27,7 @@ export function RewardStatementDetailClient({ id }: Props) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="報酬明細書"
+        title="支払明細書"
         breadcrumbs={[{ label: '報酬管理', href: '/rewards' }, { label: data.statementNo ?? `#${data.id}` }]}
         actions={
           <Button asChild size="sm" variant="outline">
@@ -109,11 +109,11 @@ export function RewardStatementDetailClient({ id }: Props) {
         </div>
         <div className="border-t p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
           <div>
-            <div className="text-muted-foreground text-xs">直紹介 合計</div>
+            <div className="text-muted-foreground text-xs">担当代理店 合計</div>
             <div className="font-medium">{formatCurrency(data.totalDirect)}</div>
           </div>
           <div>
-            <div className="text-muted-foreground text-xs">間接 合計</div>
+            <div className="text-muted-foreground text-xs">上位代理店 合計</div>
             <div className="font-medium">{formatCurrency(data.totalIndirect)}</div>
           </div>
           <div>

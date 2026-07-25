@@ -292,14 +292,14 @@ export const projectListConfig: EntityListConfig = {
         extraBody: (row) => ({ version: row.partnerVersion as number }),
       },
     },
-    // ── 報酬情報 ──
+    // ── 手数料情報 ──
     {
       key: 'revenueConfirmedAt',
       label: '収益確定日',
       width: 120,
       sortable: true,
       defaultVisible: false,
-      group: '報酬情報',
+      group: '手数料情報',
       render: (value) => (value ? isoToJstDateInput(value as string) : '-'),
     },
     {
@@ -308,48 +308,67 @@ export const projectListConfig: EntityListConfig = {
       width: 120,
       sortable: true,
       defaultVisible: false,
-      group: '報酬情報',
+      group: '手数料情報',
       render: (value) => (value ? isoToJstDateInput(value as string) : '-'),
     },
     {
       key: 'rewardShotDirect',
-      label: 'ショット報酬（直紹介）',
+      label: 'ショット手数料（担当代理店）',
       width: 150,
       align: 'right',
       defaultVisible: false,
-      group: '報酬情報',
+      group: '手数料情報',
       render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
     },
     {
       key: 'rewardShotIndirect',
-      label: 'ショット報酬（間接）',
+      label: 'ショット手数料（上位代理店）',
       width: 150,
       align: 'right',
       defaultVisible: false,
-      group: '報酬情報',
+      group: '手数料情報',
       render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
     },
     {
       key: 'rewardStockDirect',
-      label: 'ストック報酬（直紹介）/月',
+      label: 'ストック手数料（担当代理店）/月',
       width: 170,
       align: 'right',
       defaultVisible: false,
-      group: '報酬情報',
+      group: '手数料情報',
       render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
     },
     {
       key: 'rewardStockIndirect',
-      label: 'ストック報酬（間接）/月',
+      label: 'ストック手数料（上位代理店）/月',
       width: 170,
       align: 'right',
       defaultVisible: false,
-      group: '報酬情報',
+      group: '手数料情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    // 内訳が不要な場合はこの合計列だけ表示すればよい
+    {
+      key: 'rewardShotTotal',
+      label: 'ショット手数料（合計）',
+      width: 160,
+      align: 'right',
+      defaultVisible: false,
+      group: '手数料情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'rewardStockTotal',
+      label: 'ストック手数料（合計）/月',
+      width: 180,
+      align: 'right',
+      defaultVisible: false,
+      group: '手数料情報',
       render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
     },
     // ── 収益情報（自社取り分・自社売上・粗利）──
     // 取り分は事業デフォルト → 案件別上書き で解決した実効値。編集は案件詳細の
-    // 「報酬」タブ（案件別）／事業マスタの報酬設定（デフォルト）で行う。
+    // 「報酬」タブ（案件別）／事業マスタの手数料設定（デフォルト）で行う。
     {
       key: 'companyShareShotLabel',
       label: '自社取り分（ショット）',
@@ -755,7 +774,7 @@ export const projectDetailConfig: EntityDetailConfig = {
     },
     {
       key: 'reward',
-      label: '代理店報酬',
+      label: '代理店支払手数料',
       component: 'custom',
       config: {},
     },

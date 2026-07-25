@@ -33,7 +33,7 @@ const updateProjectSchema = z.object({
   projectNotes: z.string().max(2000).optional().nullable().or(z.literal('')),
   projectCustomData: z.record(z.unknown()).optional(),
   portalVisible: z.boolean().optional(),
-  // 代理店報酬（Phase2）: 収益確定日・解約日は手動での訂正/上書きを許可する
+  // 代理店支払手数料（Phase2）: 収益確定日・解約日は手動での訂正/上書きを許可する
   // （自動セットは下記ステータス変更ロジックで行う）
   revenueConfirmedAt: z.string().datetime().optional().nullable(),
   cancelledAt: z.string().datetime().optional().nullable(),
@@ -225,7 +225,7 @@ export async function PATCH(
 
     // 営業ステータスの確認（変更時のみ）
     let statusChangedAt: Date | undefined;
-    // 代理店報酬の収益確定ラッチ: isRevenueConfirmed なステータスに変わった時点で自動セット。
+    // 代理店支払手数料の収益確定ラッチ: isRevenueConfirmed なステータスに変わった時点で自動セット。
     // 既にセット済みなら触らない（ステータスを戻しても自動では外れない）。
     let autoRevenueConfirmedAt: Date | undefined;
     if (projectSalesStatus && projectSalesStatus !== existing.projectSalesStatus) {

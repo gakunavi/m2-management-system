@@ -26,7 +26,7 @@ export function RewardConfirmationWarningBanner({ data }: Props) {
             {data.length}件の案件で収益確定日が未設定です（報酬計算から除外されています）
           </p>
           <p className="text-xs text-amber-800 mt-0.5">
-            営業ステータスは収益確定対象ですが、収益確定日が入っていません。案件詳細の「代理店報酬」タブから確定日を設定してください。
+            営業ステータスは収益確定対象ですが、収益確定日が入っていません。案件詳細の「代理店支払手数料」タブから確定日を設定してください。
           </p>
           <ul className="mt-2 space-y-1">
             {data.map((w) => (

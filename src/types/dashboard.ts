@@ -112,7 +112,7 @@ export interface RevenueTrendResponse {
 }
 
 // --- 収益（自社売上・粗利）---
-// 取扱高(GMV) → 自社売上（取り分適用後）→ 粗利（自社売上 − 代理店報酬）。
+// 取扱高(GMV) → 自社売上（取り分適用後）→ 粗利（自社売上 − 代理店支払手数料）。
 // すべて発生月ベース（支払月ではない）。
 
 export interface ProfitTotals {

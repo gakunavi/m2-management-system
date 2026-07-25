@@ -27,7 +27,7 @@ export const dynamic = 'force-dynamic';
 // GET /api/v1/dashboard/profit
 // ============================================
 //
-// 自社売上・代理店報酬・粗利を返す。
+// 自社売上・代理店支払手数料・粗利を返す。
 // 期間パラメータは /dashboard/summary と同じ（month / startMonth+endMonth / period=all）。
 //
 // 計上基準はダッシュボードの売上KPI（プライマリKPI）と同じ:

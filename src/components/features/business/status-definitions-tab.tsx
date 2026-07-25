@@ -124,7 +124,7 @@ const STATUS_FORM_FIELDS: SortableItemFormField[] = [
     key: 'isRevenueConfirmed',
     label: '収益確定ステータス',
     type: 'checkbox',
-    description: 'この案件を代理店報酬の対象（収益確定）とみなす。受注・納品完了・入金済など「確定」ステータスに設定。失注ステータスには設定しない。',
+    description: 'この案件を代理店支払手数料の対象（収益確定）とみなす。受注・納品完了・入金済など「確定」ステータスに設定。失注ステータスには設定しない。',
   },
 ];
 

@@ -13,7 +13,7 @@ import { RewardSettingInput } from '@/components/features/business/reward-settin
 import { unsetHintFor, type RewardSlots, type RewardSetting } from '@/lib/reward-slots';
 
 // ============================================
-// 代理店×事業リンクの報酬設定（4スロット + 支払いタイミング特例）
+// 代理店×事業リンクの手数料設定（4スロット + 支払いタイミング特例）
 // ============================================
 // 事業デフォルトへの上書き。チェックを外したスロットは事業デフォルトにフォールバックする。
 
@@ -91,7 +91,7 @@ export function LinkRewardSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>報酬設定（{businessName}）</DialogTitle>
+          <DialogTitle>手数料設定（{businessName}）</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -99,24 +99,24 @@ export function LinkRewardSettingsDialog({
             チェックを外した項目は事業デフォルトの設定にフォールバックします。
           </p>
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">直紹介</strong>＝この代理店が担当する案件で
+            <strong className="text-foreground">担当代理店</strong>＝この代理店が担当する案件で
             この代理店へ支払う分（通常はこちら）。
-            <strong className="text-foreground">間接</strong>＝この代理店の
+            <strong className="text-foreground">上位代理店</strong>＝この代理店の
             <strong className="text-foreground">配下代理店</strong>が担当した案件で、
             上位であるこの代理店へ支払う分。
           </p>
 
           <div>
-            <h4 className="text-sm font-medium mb-1">ショット報酬（契約確定時に1回）</h4>
+            <h4 className="text-sm font-medium mb-1">ショット手数料（契約確定時に1回）</h4>
             <div className="pl-2">
               <RewardSettingInput
-                label="直紹介"
+                label="担当代理店"
                 value={slots.shot?.direct}
                 onChange={(v) => updateSlot('shot', 'direct', v)}
                 unsetHint={unsetHintFor(businessDefaults.shot?.direct)}
               />
               <RewardSettingInput
-                label="間接（上位代理店）"
+                label="上位代理店"
                 value={slots.shot?.indirect}
                 onChange={(v) => updateSlot('shot', 'indirect', v)}
                 unsetHint={unsetHintFor(businessDefaults.shot?.indirect)}
@@ -125,16 +125,16 @@ export function LinkRewardSettingsDialog({
           </div>
 
           <div>
-            <h4 className="text-sm font-medium mb-1">ストック報酬（契約継続中は毎月）</h4>
+            <h4 className="text-sm font-medium mb-1">ストック手数料（契約継続中は毎月）</h4>
             <div className="pl-2">
               <RewardSettingInput
-                label="直紹介"
+                label="担当代理店"
                 value={slots.stock?.direct}
                 onChange={(v) => updateSlot('stock', 'direct', v)}
                 unsetHint={unsetHintFor(businessDefaults.stock?.direct)}
               />
               <RewardSettingInput
-                label="間接（上位代理店）"
+                label="上位代理店"
                 value={slots.stock?.indirect}
                 onChange={(v) => updateSlot('stock', 'indirect', v)}
                 unsetHint={unsetHintFor(businessDefaults.stock?.indirect)}

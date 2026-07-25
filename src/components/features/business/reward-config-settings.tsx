@@ -121,7 +121,7 @@ export function RewardConfigSettings({ entityId }: Props) {
         version: businessData.version,
       });
       queryClient.invalidateQueries({ queryKey: ['business', entityId] });
-      toast({ message: '代理店報酬設定を保存しました', type: 'success' });
+      toast({ message: '代理店支払手数料設定を保存しました', type: 'success' });
     } catch (error) {
       const msg = error instanceof Error ? error.message : '保存に失敗しました';
       toast({ message: msg, type: 'error' });
@@ -142,31 +142,32 @@ export function RewardConfigSettings({ entityId }: Props) {
 
       <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
         <p>
-          <strong className="text-foreground">直紹介</strong>: 案件に紐づく担当代理店へ支払う分。
+          <strong className="text-foreground">担当代理店</strong>: 案件に紐づく担当代理店へ支払う分。
           通常はこちらに設定します。
         </p>
         <p>
-          <strong className="text-foreground">間接（上位代理店）</strong>: 担当代理店の
+          <strong className="text-foreground">上位代理店</strong>: 担当代理店の
           <strong className="text-foreground">親代理店</strong>へ支払う分（代理店階層の二次報酬）。
           親代理店が設定されていない場合は発生しません。
         </p>
         <p>
-          ダッシュボードの「代理店報酬」で直紹介が¥0・間接だけに金額が出ている場合、
-          直紹介に入れるべき料率が間接の欄に入っている可能性があります。
+          内訳は契約マスタの列（ショット手数料・ストック手数料）で案件ごとに確認できます。
+          担当代理店が¥0で上位代理店だけに金額が出ている場合、担当代理店に入れるべき料率が
+          上位代理店の欄に入っている可能性があります。
         </p>
       </div>
 
       <div className="space-y-4">
         <div>
-          <h4 className="text-sm font-medium mb-2">ショット報酬（契約確定時に1回）</h4>
+          <h4 className="text-sm font-medium mb-2">ショット手数料（契約確定時に1回）</h4>
           <div className="pl-2 space-y-1">
             <RewardSettingInput
-              label="直紹介"
+              label="担当代理店"
               value={config.defaults.shot?.direct}
               onChange={(v) => updateSlot('shot', 'direct', v)}
             />
             <RewardSettingInput
-              label="間接（上位代理店）"
+              label="上位代理店"
               value={config.defaults.shot?.indirect}
               onChange={(v) => updateSlot('shot', 'indirect', v)}
             />
@@ -174,15 +175,15 @@ export function RewardConfigSettings({ entityId }: Props) {
         </div>
 
         <div>
-          <h4 className="text-sm font-medium mb-2">ストック報酬（契約継続中は毎月）</h4>
+          <h4 className="text-sm font-medium mb-2">ストック手数料（契約継続中は毎月）</h4>
           <div className="pl-2 space-y-1">
             <RewardSettingInput
-              label="直紹介"
+              label="担当代理店"
               value={config.defaults.stock?.direct}
               onChange={(v) => updateSlot('stock', 'direct', v)}
             />
             <RewardSettingInput
-              label="間接（上位代理店）"
+              label="上位代理店"
               value={config.defaults.stock?.indirect}
               onChange={(v) => updateSlot('stock', 'indirect', v)}
             />
@@ -191,7 +192,7 @@ export function RewardConfigSettings({ entityId }: Props) {
 
         <div className="grid grid-cols-2 gap-4 pt-2">
           <div>
-            <label className="text-sm font-medium block mb-1">ショット報酬の基準金額フィールド</label>
+            <label className="text-sm font-medium block mb-1">ショット手数料の基準金額フィールド</label>
             <select
               className="border rounded px-2 py-1 text-sm w-full"
               value={config.shotBaseField ?? ''}
@@ -204,7 +205,7 @@ export function RewardConfigSettings({ entityId }: Props) {
             </select>
           </div>
           <div>
-            <label className="text-sm font-medium block mb-1">ストック報酬の基準金額フィールド（月額）</label>
+            <label className="text-sm font-medium block mb-1">ストック手数料の基準金額フィールド（月額）</label>
             <select
               className="border rounded px-2 py-1 text-sm w-full"
               value={config.stockBaseField ?? ''}
@@ -266,7 +267,7 @@ export function RewardConfigSettings({ entityId }: Props) {
           <h4 className="text-sm font-medium">自社取り分（レベニューシェア）</h4>
           <p className="text-xs text-muted-foreground mt-1">
             取扱高（顧客が支払う総額）のうち、自社の売上になる割合を設定します。
-            ダッシュボードの「自社売上」「粗利（自社売上 − 代理店報酬）」はこの設定で計算されます。
+            ダッシュボードの「自社売上」「粗利（自社売上 − 代理店支払手数料）」はこの設定で計算されます。
             案件ごとの個別条件は案件詳細の「報酬」タブで上書きできます。
           </p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -297,7 +298,7 @@ export function RewardConfigSettings({ entityId }: Props) {
               value={companyShare.shotBaseField ?? ''}
               onChange={(e) => updateCompanyShareBaseField('shot', e.target.value || null)}
             >
-              <option value="">（未設定＝ショット報酬の基準と同じ）</option>
+              <option value="">（未設定＝ショット手数料の基準と同じ）</option>
               {numberFields.map((f) => (
                 <option key={f.key} value={f.key}>{f.label}</option>
               ))}
@@ -310,7 +311,7 @@ export function RewardConfigSettings({ entityId }: Props) {
               value={companyShare.stockBaseField ?? ''}
               onChange={(e) => updateCompanyShareBaseField('stock', e.target.value || null)}
             >
-              <option value="">（未設定＝ストック報酬の基準と同じ）</option>
+              <option value="">（未設定＝ストック手数料の基準と同じ）</option>
               {numberFields.map((f) => (
                 <option key={f.key} value={f.key}>{f.label}</option>
               ))}
