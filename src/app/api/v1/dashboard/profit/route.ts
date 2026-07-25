@@ -66,6 +66,8 @@ function mergeMonths(target: Map<string, MonthlyPL>, months: MonthlyPL[]): void 
     cur.projectCount += m.projectCount;
     cur.grossMargin =
       cur.companyRevenue === 0 ? null : Math.round((cur.grossProfit / cur.companyRevenue) * 1000) / 10;
+    cur.grossMarginOnGmv =
+      cur.gmv === 0 ? null : Math.round((cur.grossProfit / cur.gmv) * 1000) / 10;
   }
 }
 
@@ -79,6 +81,7 @@ function toTotals(months: MonthlyPL[]): ProfitTotals {
     rewardTotal: t.rewardTotal,
     grossProfit: t.grossProfit,
     grossMargin: t.grossMargin,
+    grossMarginOnGmv: t.grossMarginOnGmv,
     projectCount: t.projectCount,
   };
 }
@@ -189,6 +192,7 @@ export async function GET(request: NextRequest) {
         rewardTotal: m?.rewardTotal ?? 0,
         grossProfit: m?.grossProfit ?? 0,
         grossMargin: m?.grossMargin ?? null,
+        grossMarginOnGmv: m?.grossMarginOnGmv ?? null,
         projectCount: m?.projectCount ?? 0,
       };
     });

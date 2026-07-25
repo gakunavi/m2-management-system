@@ -193,7 +193,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
         <ProfitCard
           label="粗利率"
           value={formatMargin(totals.grossMargin)}
-          sub={`対象案件 ${totals.projectCount.toLocaleString()}件`}
+          sub={`取扱高比 ${formatMargin(totals.grossMarginOnGmv)} ／ 対象案件 ${totals.projectCount.toLocaleString()}件`}
           change={null}
           accent="border-l-info"
         />
@@ -281,7 +281,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                   <th className="text-right font-normal py-2 pr-4">自社売上</th>
                   <th className="text-right font-normal py-2 pr-4">支払手数料</th>
                   <th className="text-right font-normal py-2 pr-4">粗利</th>
-                  <th className="text-right font-normal py-2">粗利率</th>
+                  <th className="text-right font-normal py-2">粗利率（自社売上比）</th>
                 </tr>
               </thead>
               <tbody>
@@ -306,7 +306,12 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                       {formatCurrency(p.rewardTotal, true)}
                     </td>
                     <td className="py-2 pr-4 text-right">{formatCurrency(p.grossProfit, true)}</td>
-                    <td className="py-2 text-right">{formatMargin(p.grossMargin)}</td>
+                    <td className="py-2 text-right">
+                      {formatMargin(p.grossMargin)}
+                      <span className="block text-xs text-muted-foreground">
+                        （取扱高比 {formatMargin(p.grossMarginOnGmv)}）
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -332,7 +337,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                   <th className="text-right font-normal py-2 pr-4">自社売上</th>
                   <th className="text-right font-normal py-2 pr-4">代理店支払手数料</th>
                   <th className="text-right font-normal py-2 pr-4">粗利</th>
-                  <th className="text-right font-normal py-2">粗利率</th>
+                  <th className="text-right font-normal py-2">粗利率（自社売上比）</th>
                 </tr>
               </thead>
               <tbody>
@@ -343,7 +348,12 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                     <td className="py-2 pr-4 text-right">{formatCurrency(b.companyRevenue, true)}</td>
                     <td className="py-2 pr-4 text-right">{formatCurrency(b.rewardTotal, true)}</td>
                     <td className="py-2 pr-4 text-right">{formatCurrency(b.grossProfit, true)}</td>
-                    <td className="py-2 text-right">{formatMargin(b.grossMargin)}</td>
+                    <td className="py-2 text-right">
+                      {formatMargin(b.grossMargin)}
+                      <span className="block text-xs text-muted-foreground">
+                        （取扱高比 {formatMargin(b.grossMarginOnGmv)}）
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

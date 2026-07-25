@@ -401,7 +401,8 @@ export interface MonthlyPL {
   rewardIndirect: number;
   rewardTotal: number;
   grossProfit: number;
-  grossMargin: number | null; // %
+  grossMargin: number | null; // % 自社売上比
+  grossMarginOnGmv: number | null; // % 取扱高（GMV）比。自社取り分を考慮しない参考値
   projectCount: number; // その月に計上があった案件数
 }
 
@@ -418,6 +419,7 @@ function emptyBucket(month: string): MonthlyPL {
     rewardTotal: 0,
     grossProfit: 0,
     grossMargin: null,
+    grossMarginOnGmv: null,
     projectCount: 0,
   };
 }
@@ -476,6 +478,7 @@ export function computeMonthlyPL(
         rewardTotal,
         grossProfit,
         grossMargin: calcMargin(grossProfit, b.companyRevenue),
+        grossMarginOnGmv: calcMargin(grossProfit, b.gmv),
         projectCount: projectsInMonth.get(b.month)?.size ?? 0,
       };
     })
@@ -587,7 +590,8 @@ export interface ProjectPLRow {
   companyRevenue: number;
   rewardTotal: number;
   grossProfit: number;
-  grossMargin: number | null;
+  grossMargin: number | null; // % 自社売上比
+  grossMarginOnGmv: number | null; // % 取扱高（GMV）比
 }
 
 /** 期間内に計上のあった案件を、金額の大きい順に返す */
@@ -624,6 +628,7 @@ export function computeProjectPLRows(
       rewardTotal,
       grossProfit,
       grossMargin: calcMargin(grossProfit, companyRevenue),
+      grossMarginOnGmv: calcMargin(grossProfit, gmv),
     });
   }
 
@@ -654,6 +659,7 @@ export function sumMonthlyPL(months: MonthlyPL[]): PLTotals {
     rewardTotal: 0,
     grossProfit: 0,
     grossMargin: null,
+    grossMarginOnGmv: null,
     projectCount: 0,
   };
   for (const m of months) {
@@ -666,6 +672,7 @@ export function sumMonthlyPL(months: MonthlyPL[]): PLTotals {
     total.projectCount += m.projectCount;
   }
   total.grossMargin = calcMargin(total.grossProfit, total.companyRevenue);
+  total.grossMarginOnGmv = calcMargin(total.grossProfit, total.gmv);
   return total;
 }
 

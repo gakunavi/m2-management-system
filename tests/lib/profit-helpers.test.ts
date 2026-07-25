@@ -398,6 +398,9 @@ describe('computeMonthlyPL', () => {
     expect(march.rewardDirect).toBe(52_500); // ショット50,000 + ストック2,500
     expect(march.rewardIndirect).toBe(10_000); // ショット間接のみ
     expect(march.grossProfit).toBe(47_500); // 110,000 - 62,500
+    // 自社売上比: 47,500 / 110,000 ≈ 43.2% / 取扱高比: 47,500 / 550,000 ≈ 8.6%
+    expect(march.grossMargin).toBeCloseTo(43.2, 1);
+    expect(march.grossMarginOnGmv).toBeCloseTo(8.6, 1);
   });
 
   it('ストックは売上・報酬とも毎月立つ（2ヶ月目以降に粗利がマイナスにならない）', () => {
@@ -408,6 +411,8 @@ describe('computeMonthlyPL', () => {
       expect(m.rewardTotal).toBe(2_500);
       expect(m.grossProfit).toBe(7_500);
       expect(m.grossMargin).toBe(75);
+      // 取扱高比は自社売上比より必ず小さい（取扱高 > 自社売上のため）
+      expect(m.grossMarginOnGmv).toBe(15); // 7,500 / 50,000
     }
   });
 
@@ -448,6 +453,8 @@ describe('computeMonthlyPL', () => {
     expect(months[0].companyRevenue).toBe(0);
     expect(months[0].grossProfit).toBe(-62_500);
     expect(months[0].grossMargin).toBeNull();
+    // 取扱高比は自社取り分が無くても計算できる（取扱高は 0 ではないため）
+    expect(months[0].grossMarginOnGmv).toBeCloseTo(-11.4, 1);
   });
 
   it('プライマリKPIが数量でも、取扱高・自社売上は金額フィールドで集計する', () => {
@@ -481,6 +488,7 @@ describe('computeProjectPLRows', () => {
     expect(rows[0].companyRevenue).toBe(total.companyRevenue);
     expect(rows[0].rewardTotal).toBe(total.rewardTotal);
     expect(rows[0].grossProfit).toBe(total.grossProfit);
+    expect(rows[0].grossMarginOnGmv).toBe(total.grossMarginOnGmv);
   });
 
   it('代理店が紐づいていない案件は手数料0で partnerName が null', () => {
@@ -508,11 +516,14 @@ describe('sumMonthlyPL', () => {
     expect(total.rewardTotal).toBe(67_500); // 62,500 + 2,500 + 2,500
     expect(total.grossProfit).toBe(62_500);
     expect(total.grossMargin).toBeCloseTo(48.1, 1);
+    // 取扱高比: 62,500 / 650,000 ≈ 9.6%（自社売上比よりかなり小さい）
+    expect(total.grossMarginOnGmv).toBeCloseTo(9.6, 1);
   });
 
   it('空配列は 0 埋め・粗利率 null', () => {
     const total = sumMonthlyPL([]);
     expect(total.grossProfit).toBe(0);
     expect(total.grossMargin).toBeNull();
+    expect(total.grossMarginOnGmv).toBeNull();
   });
 });

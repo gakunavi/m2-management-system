@@ -122,7 +122,10 @@ export interface ProfitTotals {
   rewardIndirect: number;
   rewardTotal: number;
   grossProfit: number;
+  /** 粗利率（自社売上比）。粗利 ÷ 自社売上 */
   grossMargin: number | null;
+  /** 粗利率（取扱高比）。粗利 ÷ 取扱高（GMV）。自社取り分を考慮しない参考値 */
+  grossMarginOnGmv: number | null;
   projectCount: number;
 }
 
@@ -147,6 +150,7 @@ export interface ProfitProjectRow {
   rewardTotal: number;
   grossProfit: number;
   grossMargin: number | null;
+  grossMarginOnGmv: number | null;
 }
 
 export interface ProfitResponse {
