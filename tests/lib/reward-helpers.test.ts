@@ -17,6 +17,10 @@ import {
   type ProjectRewardInput,
   type LinkRewardInput,
   type ComputedRewardEntry,
+  type RewardChainNode,
+  resolvePartnerChain,
+  computeChainRewardAmounts,
+  type LinkRow,
 } from '@/lib/reward-helpers';
 import type { RewardSlots } from '@/lib/reward-slots';
 
@@ -191,15 +195,29 @@ const projBase: ProjectRewardInput = {
 };
 
 const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null };
-const parent: LinkRewardInput = { partnerId: 200, rewardSlots: null, paymentTiming: null, closingDay: null };
+// 上位店は自身のリンク設定で料率を持つ（事業デフォルトは担当店にしか効かない）
+const parent: LinkRewardInput = {
+  partnerId: 200,
+  rewardSlots: { shot: { indirect: { type: 'rate', value: 5 } } },
+  paymentTiming: null,
+  closingDay: null,
+};
+
+/** 担当店のみ（上位店なし） */
+const chainSolo: RewardChainNode[] = [{ partnerId: 100, link: responsible, isAssigned: true }];
+/** 担当店 → 上位店1段 */
+const chainWithParent: RewardChainNode[] = [
+  ...chainSolo,
+  { partnerId: 200, link: parent, isAssigned: false },
+];
 
 describe('computeProjectEntries - ショット', () => {
   it('未確定は空', () => {
-    expect(computeProjectEntries({ ...projBase, revenueConfirmedMonth: null }, responsible, parent, configShotOnly, '2026-01', '2026-12')).toEqual([]);
+    expect(computeProjectEntries({ ...projBase, revenueConfirmedMonth: null }, chainWithParent, configShotOnly, '2026-01', '2026-12')).toEqual([]);
   });
 
   it('直紹介のみ（親なし）', () => {
-    const e = computeProjectEntries(projBase, responsible, null, configShotOnly, '2026-01', '2026-12');
+    const e = computeProjectEntries(projBase, chainSolo, configShotOnly, '2026-01', '2026-12');
     expect(e).toHaveLength(1);
     expect(e[0]).toMatchObject({
       rewardKind: 'shot', entryType: 'direct', partnerId: 100, sourcePartnerId: null,
@@ -209,7 +227,7 @@ describe('computeProjectEntries - ショット', () => {
   });
 
   it('2段: 子に直(20%)・親に間接(5%)', () => {
-    const e = computeProjectEntries(projBase, responsible, parent, configShotOnly, '2026-01', '2026-12');
+    const e = computeProjectEntries(projBase, chainWithParent, configShotOnly, '2026-01', '2026-12');
     expect(e).toHaveLength(2);
     const direct = e.find((x) => x.entryType === 'direct')!;
     const indirect = e.find((x) => x.entryType === 'indirect')!;
@@ -218,12 +236,12 @@ describe('computeProjectEntries - ショット', () => {
   });
 
   it('確定月がレンジ外なら空', () => {
-    expect(computeProjectEntries(projBase, responsible, parent, configShotOnly, '2026-04', '2026-12')).toEqual([]);
+    expect(computeProjectEntries(projBase, chainWithParent, configShotOnly, '2026-04', '2026-12')).toEqual([]);
   });
 
   it('案件別上書き（固定額）が最優先', () => {
     const override: RewardSlots = { shot: { direct: { type: 'fixed', value: 30000 } } };
-    const e = computeProjectEntries({ ...projBase, rewardOverride: override }, responsible, parent, configShotOnly, '2026-01', '2026-12');
+    const e = computeProjectEntries({ ...projBase, rewardOverride: override }, chainWithParent, configShotOnly, '2026-01', '2026-12');
     const direct = e.find((x) => x.entryType === 'direct')!;
     expect(direct).toMatchObject({ rewardType: 'fixed', rate: null, rewardAmount: 30000 });
     // 間接は事業デフォルトのまま
@@ -232,15 +250,144 @@ describe('computeProjectEntries - ショット', () => {
 
   it('リンク別率がデフォルトを上書き', () => {
     const link: LinkRewardInput = { partnerId: 100, rewardSlots: { shot: { direct: { type: 'rate', value: 25 } } }, paymentTiming: null, closingDay: null };
-    const e = computeProjectEntries(projBase, link, null, configShotOnly, '2026-01', '2026-12');
+    const e = computeProjectEntries(projBase, [{ partnerId: 100, link, isAssigned: true }], configShotOnly, '2026-01', '2026-12');
     expect(e[0].rewardAmount).toBe(125000); // 500000×25%
   });
 
-  it('担当代理店なし（partnerId=null）は直紹介なし', () => {
-    const e = computeProjectEntries({ ...projBase, partnerId: null }, null, parent, configShotOnly, '2026-01', '2026-12');
-    // 直はなし、間接は親がいるので出る（sourcePartnerId は null）
-    expect(e.filter((x) => x.entryType === 'direct')).toHaveLength(0);
-    expect(e.find((x) => x.entryType === 'indirect')).toMatchObject({ partnerId: 200, sourcePartnerId: null });
+  it('代理店が紐づいていない案件（自社直販）は手数料が一切発生しない', () => {
+    // 階層の起点が無いので上位店へも遡らない
+    const e = computeProjectEntries({ ...projBase, partnerId: null }, [], configShotOnly, '2026-01', '2026-12');
+    expect(e).toEqual([]);
+  });
+});
+
+// ============================================
+// 代理店階層をたどった手数料の積み上げ
+// ============================================
+// 業務ルール: 案件の代理店から親をたどり、料率が設定されている段ぶんを全て合計する。
+// 未記入の段は 0 として素通りし、さらに上位へ遡る。
+
+describe('resolvePartnerChain', () => {
+  const links = new Map<number, LinkRow>([
+    [1, { partnerId: 1, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: null }], // A(最上位)
+    [2, { partnerId: 2, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 1 }], // B
+    [3, { partnerId: 3, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 2 }], // C
+  ]);
+
+  it('担当店から最上位まで遡る', () => {
+    expect(resolvePartnerChain(3, links).map((n) => n.partnerId)).toEqual([3, 2, 1]);
+  });
+  it('先頭だけが担当店', () => {
+    expect(resolvePartnerChain(3, links).map((n) => n.isAssigned)).toEqual([true, false, false]);
+  });
+  it('代理店なしは空', () => {
+    expect(resolvePartnerChain(null, links)).toEqual([]);
+  });
+  it('親が循環していても止まる', () => {
+    const looped = new Map<number, LinkRow>([
+      [1, { partnerId: 1, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 2 }],
+      [2, { partnerId: 2, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 1 }],
+    ]);
+    expect(resolvePartnerChain(1, looped).map((n) => n.partnerId)).toEqual([1, 2]);
+  });
+});
+
+describe('computeChainRewardAmounts - 業務ルールの例', () => {
+  // 事業デフォルトは無し（担当店の既定料率としてのみ効くため、例の再現には不要）
+  const cfg: RewardConfig = {
+    defaults: {},
+    shotBaseField: 'amount', stockBaseField: null, taxRate: 10,
+    paymentTiming: 'same', closingDay: null, companyShare: {},
+  };
+  const node = (partnerId: number, slots: RewardSlots | null, isAssigned: boolean): RewardChainNode => ({
+    partnerId,
+    link: { partnerId, rewardSlots: slots, paymentTiming: null, closingDay: null },
+    isAssigned,
+  });
+
+  it('例1: A上位5% / B直接10% / C未記入 → Cの案件で合計15%', () => {
+    const chain = [
+      node(3, null, true), // C: 未記入
+      node(2, { shot: { direct: { type: 'rate', value: 10 } } }, false), // B: 直接10%
+      node(1, { shot: { indirect: { type: 'rate', value: 5 } } }, false), // A: 間接5%
+    ];
+    const r = computeChainRewardAmounts('shot', chain, cfg, projBase, 1_000_000);
+    expect(r.direct).toBeNull(); // 担当店Cは未記入
+    expect(r.indirect).toBe(150_000); // B10% + A5% = 15%
+  });
+
+  it('例2: A直接10% / B未記入 / C未記入 → Cの案件で合計10%', () => {
+    const chain = [
+      node(3, null, true),
+      node(2, null, false),
+      node(1, { shot: { direct: { type: 'rate', value: 10 } } }, false), // 直接欄にしか入っていない
+    ];
+    const r = computeChainRewardAmounts('shot', chain, cfg, projBase, 1_000_000);
+    expect(r.indirect).toBe(100_000);
+  });
+
+  it('担当店自身に料率があれば上位ぶんと合算する', () => {
+    const chain = [
+      node(3, { shot: { direct: { type: 'rate', value: 3 } } }, true),
+      node(2, { shot: { indirect: { type: 'rate', value: 10 } } }, false),
+      node(1, { shot: { indirect: { type: 'rate', value: 5 } } }, false),
+    ];
+    const r = computeChainRewardAmounts('shot', chain, cfg, projBase, 1_000_000);
+    expect(r.direct).toBe(30_000);
+    expect(r.indirect).toBe(150_000);
+  });
+
+  it('事業デフォルトは担当店にだけ効く（段数ぶん積み上がらない）', () => {
+    const withDefault: RewardConfig = {
+      ...cfg,
+      defaults: { shot: { direct: { type: 'rate', value: 8 } } },
+    };
+    const chain = [node(3, null, true), node(2, null, false), node(1, null, false)];
+    const r = computeChainRewardAmounts('shot', chain, withDefault, projBase, 1_000_000);
+    expect(r.direct).toBe(80_000);
+    expect(r.indirect).toBeNull(); // 上位店には事業デフォルトを適用しない
+  });
+
+  it('固定額の段が混ざっても加算できる', () => {
+    const chain = [
+      node(3, { shot: { direct: { type: 'fixed', value: 20_000 } } }, true),
+      node(2, { shot: { indirect: { type: 'rate', value: 5 } } }, false),
+    ];
+    const r = computeChainRewardAmounts('shot', chain, cfg, projBase, 1_000_000);
+    expect(r.direct).toBe(20_000);
+    expect(r.indirect).toBe(50_000);
+  });
+});
+
+describe('computeProjectEntries - 階層ぶんの明細', () => {
+  const cfg: RewardConfig = {
+    defaults: {},
+    shotBaseField: 'amount', stockBaseField: null, taxRate: 10,
+    paymentTiming: 'same', closingDay: null, companyShare: {},
+  };
+
+  it('料率が設定されている上位店それぞれに明細行が立つ', () => {
+    const chain: RewardChainNode[] = [
+      { partnerId: 3, link: { partnerId: 3, rewardSlots: null, paymentTiming: null, closingDay: null }, isAssigned: true },
+      {
+        partnerId: 2,
+        link: { partnerId: 2, rewardSlots: { shot: { direct: { type: 'rate', value: 10 } } }, paymentTiming: null, closingDay: null },
+        isAssigned: false,
+      },
+      {
+        partnerId: 1,
+        link: { partnerId: 1, rewardSlots: { shot: { indirect: { type: 'rate', value: 5 } } }, paymentTiming: null, closingDay: null },
+        isAssigned: false,
+      },
+    ];
+    const e = computeProjectEntries({ ...projBase, partnerId: 3 }, chain, cfg, '2026-01', '2026-12');
+
+    // 担当店Cは未記入なので行が立たず、上位店2段ぶんだけ記録される
+    expect(e).toHaveLength(2);
+    expect(e.map((x) => x.partnerId).sort()).toEqual([1, 2]);
+    // 上位店の行は「誰の成果か」を担当店IDで記録する
+    expect(e.every((x) => x.entryType === 'indirect' && x.sourcePartnerId === 3)).toBe(true);
+    expect(e.reduce((s, x) => s + x.rewardAmount, 0)).toBe(75_000); // 500,000 × 15%
   });
 });
 
@@ -254,7 +401,7 @@ describe('computeProjectEntries - ストック', () => {
   };
 
   it('確定月から毎月ストック（率）＋確定月にショット', () => {
-    const e = computeProjectEntries(projBase, responsible, null, configBoth, '2026-03', '2026-05');
+    const e = computeProjectEntries(projBase, chainSolo, configBoth, '2026-03', '2026-05');
     // ショット直(3月) + ストック直(3,4,5月) = 1 + 3 = 4
     const shot = e.filter((x) => x.rewardKind === 'shot');
     const stock = e.filter((x) => x.rewardKind === 'stock');
@@ -266,21 +413,34 @@ describe('computeProjectEntries - ストック', () => {
   });
 
   it('ストック間接（固定1000/月）が親に毎月', () => {
-    const e = computeProjectEntries(projBase, responsible, parent, configBoth, '2026-03', '2026-04');
+    const chain: RewardChainNode[] = [
+      ...chainSolo,
+      {
+        partnerId: 200,
+        link: {
+          partnerId: 200,
+          rewardSlots: { stock: { indirect: { type: 'fixed', value: 1000 } } },
+          paymentTiming: null,
+          closingDay: null,
+        },
+        isAssigned: false,
+      },
+    ];
+    const e = computeProjectEntries(projBase, chain, configBoth, '2026-03', '2026-04');
     const stockIndirect = e.filter((x) => x.rewardKind === 'stock' && x.entryType === 'indirect');
     expect(stockIndirect).toHaveLength(2);
     expect(stockIndirect.every((x) => x.partnerId === 200 && x.rewardAmount === 1000)).toBe(true);
   });
 
   it('解約月まででストック停止', () => {
-    const e = computeProjectEntries({ ...projBase, cancelledMonth: '2026-04' }, responsible, null, configBoth, '2026-03', '2026-12');
+    const e = computeProjectEntries({ ...projBase, cancelledMonth: '2026-04' }, chainSolo, configBoth, '2026-03', '2026-12');
     const stock = e.filter((x) => x.rewardKind === 'stock');
     expect(stock.map((x) => x.sourceMonth)).toEqual(['2026-03', '2026-04']);
   });
 
   it('翌月払い: ストック各月が翌月の支払いに乗る', () => {
     const nextCfg: RewardConfig = { ...configBoth, paymentTiming: 'next' };
-    const e = computeProjectEntries(projBase, responsible, null, nextCfg, '2026-03', '2026-04');
+    const e = computeProjectEntries(projBase, chainSolo, nextCfg, '2026-03', '2026-04');
     const stock = e.filter((x) => x.rewardKind === 'stock');
     expect(stock.find((x) => x.sourceMonth === '2026-03')!.paymentMonth).toBe('2026-04');
     expect(stock.find((x) => x.sourceMonth === '2026-04')!.paymentMonth).toBe('2026-05');
@@ -289,7 +449,7 @@ describe('computeProjectEntries - ストック', () => {
   });
 
   it('ストック設定が無ければストック行は出ない', () => {
-    const e = computeProjectEntries(projBase, responsible, null, configShotOnly, '2026-03', '2026-06');
+    const e = computeProjectEntries(projBase, chainSolo, configShotOnly, '2026-03', '2026-06');
     expect(e.filter((x) => x.rewardKind === 'stock')).toHaveLength(0);
   });
 });
@@ -298,7 +458,7 @@ describe('computeProjectEntries - 代理店特例の支払いタイミング', (
   it('担当代理店の paymentTiming がデフォルトを上書き', () => {
     const cfg: RewardConfig = { ...configShotOnly, paymentTiming: 'same' };
     const link: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: 'next', closingDay: null };
-    const e = computeProjectEntries(projBase, link, null, cfg, '2026-01', '2026-12');
+    const e = computeProjectEntries(projBase, [{ partnerId: 100, link, isAssigned: true }], cfg, '2026-01', '2026-12');
     expect(e[0].paymentMonth).toBe('2026-04'); // 確定3月→特例で翌月
   });
 });

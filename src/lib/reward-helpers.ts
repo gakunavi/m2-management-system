@@ -214,53 +214,111 @@ export function calcTax(subtotal: number, taxRate: number): number {
 // 純粋計算：1案件の支払明細
 // ============================================
 
-/** 担当代理店ぶんのスロット解決（事業デフォルト→担当リンク→案件上書き） */
-function resolveDirect(
-  kind: RewardKind,
-  config: RewardConfig,
-  responsibleLink: LinkRewardInput | null,
-  project: ProjectRewardInput,
-): RewardSetting | undefined {
-  const merged = mergeRewardSlots(config.defaults, responsibleLink?.rewardSlots, project.rewardOverride);
-  return merged[kind]?.direct;
-}
+// ============================================
+// 代理店階層のたどり方
+// ============================================
+//
+// 案件に紐づく代理店（担当店）から親をたどり、料率が設定されている
+// 上位店ぶんを全て積み上げる。以前は「担当店＋直上の親」の2段固定だったため、
+// 3段以上の階層で最上位の取り分が欠落し、支払総額が実態より小さくなっていた。
+//
+// 各段の料率:
+//   担当店   事業デフォルト → 担当店リンク → 案件上書き の順にマージした「直接」欄
+//   上位店   その代理店のリンクの「間接」欄（事業デフォルトは加算しない）
+//
+// どちらも該当欄が未記入なら、もう一方の欄の値を使う。料率を片方の欄にだけ
+// 入れている運用が実際にあるため（例: 上位店なのに「直接」欄に入っている）。
+// 未記入の段は 0 として素通りし、さらに上位へ遡る。
+//
+// 事業デフォルトを上位店に適用しないのは、階層が深いほど既定料率が段数ぶん
+// 積み上がって支払総額が膨らむため。事業デフォルトは「担当店に払う標準料率」とする。
 
-/** 上位代理店ぶんのスロット解決（事業デフォルト→親リンク→案件上書き） */
-function resolveIndirect(
-  kind: RewardKind,
-  config: RewardConfig,
-  parentLink: LinkRewardInput | null,
-  project: ProjectRewardInput,
-): RewardSetting | undefined {
-  const merged = mergeRewardSlots(config.defaults, parentLink?.rewardSlots, project.rewardOverride);
-  return merged[kind]?.indirect;
-}
+/** 無限ループ・異常データ対策の上限。実運用の代理店階層はこれより浅い */
+const MAX_CHAIN_DEPTH = 20;
 
-/** 1案件について、4スロット全ての手数料設定を解決した結果（未設定は undefined） */
-export interface ResolvedProjectRewardSettings {
-  shotDirect: RewardSetting | undefined;
-  shotIndirect: RewardSetting | undefined;
-  stockDirect: RewardSetting | undefined;
-  stockIndirect: RewardSetting | undefined;
+/** 手数料を受け取る階層の1段ぶん */
+export interface RewardChainNode {
+  partnerId: number;
+  link: LinkRewardInput | null;
+  /** 案件に紐づく担当店か（先頭の1段だけ true） */
+  isAssigned: boolean;
 }
 
 /**
- * 1案件に適用される手数料設定を4スロットぶん解決する（純粋関数）。
- * 明細計算を通さずに「この案件のストック手数料は月いくらか」を出したい
- * 一覧列表示などで使う。
+ * 担当店から最上位までの階層を返す（純粋関数）。
+ * businessParentId が循環していても MAX_CHAIN_DEPTH と訪問済み判定で止まる。
  */
-export function resolveProjectRewardSettings(
+export function resolvePartnerChain(
+  partnerId: number | null,
+  linkByPartner: Map<number, LinkRow>,
+): RewardChainNode[] {
+  if (partnerId == null) return [];
+
+  const nodes: RewardChainNode[] = [];
+  const seen = new Set<number>();
+  let current: number | null = partnerId;
+
+  while (current != null && !seen.has(current) && nodes.length < MAX_CHAIN_DEPTH) {
+    seen.add(current);
+    const row = linkByPartner.get(current);
+    nodes.push({
+      partnerId: current,
+      link: toLinkInput(row),
+      isAssigned: nodes.length === 0,
+    });
+    current = row?.businessParentId ?? null;
+  }
+
+  return nodes;
+}
+
+/** その段に適用する手数料設定（未設定なら undefined） */
+function settingForNode(
+  kind: RewardKind,
+  node: RewardChainNode,
   config: RewardConfig,
-  responsibleLink: LinkRewardInput | null,
-  parentLink: LinkRewardInput | null,
   project: ProjectRewardInput,
-): ResolvedProjectRewardSettings {
-  return {
-    shotDirect: resolveDirect('shot', config, responsibleLink, project),
-    shotIndirect: resolveIndirect('shot', config, parentLink, project),
-    stockDirect: resolveDirect('stock', config, responsibleLink, project),
-    stockIndirect: resolveIndirect('stock', config, parentLink, project),
-  };
+): RewardSetting | undefined {
+  if (node.isAssigned) {
+    const merged = mergeRewardSlots(config.defaults, node.link?.rewardSlots, project.rewardOverride);
+    return merged[kind]?.direct ?? merged[kind]?.indirect;
+  }
+  const own = node.link?.rewardSlots?.[kind];
+  // 案件別に上位店の料率を上書きしている場合はそれを優先する
+  return project.rewardOverride?.[kind]?.indirect ?? own?.indirect ?? own?.direct;
+}
+
+/** 階層を積み上げた手数料額。null は「その区分の設定が1段も無い」 */
+export interface ChainRewardAmounts {
+  /** 担当店ぶん */
+  direct: number | null;
+  /** 上位店ぶんの合計（設定のある段だけ加算） */
+  indirect: number | null;
+}
+
+/**
+ * 1案件の手数料額を階層ぶん積み上げて返す（純粋関数）。
+ * 明細計算を通さずに「この案件の手数料はいくらか」を出したい一覧列表示で使う。
+ */
+export function computeChainRewardAmounts(
+  kind: RewardKind,
+  chain: RewardChainNode[],
+  config: RewardConfig,
+  project: ProjectRewardInput,
+  baseAmount: number,
+): ChainRewardAmounts {
+  let direct: number | null = null;
+  let indirect: number | null = null;
+
+  for (const node of chain) {
+    const setting = settingForNode(kind, node, config, project);
+    if (!setting) continue;
+    const amount = applyRewardSetting(setting, baseAmount);
+    if (node.isAssigned) direct = (direct ?? 0) + amount;
+    else indirect = (indirect ?? 0) + amount;
+  }
+
+  return { direct, indirect };
 }
 
 /** その代理店の支払いタイミング（リンク特例→事業デフォルト） */
@@ -315,19 +373,16 @@ export function getStockActiveMonths(
  */
 export function computeProjectEntries(
   project: ProjectRewardInput,
-  responsibleLink: LinkRewardInput | null,
-  parentLink: LinkRewardInput | null,
+  chain: RewardChainNode[],
   config: RewardConfig,
   sourceFrom: string,
   sourceTo: string,
 ): ComputedRewardEntry[] {
   const entries: ComputedRewardEntry[] = [];
   if (!project.revenueConfirmedMonth) return entries; // 未確定は対象外
+  if (chain.length === 0) return entries; // 代理店が紐づいていない案件（自社直販）
 
-  const responsiblePartnerId = project.partnerId;
-  const parentPartnerId = parentLink?.partnerId ?? null;
-  const directTiming = timingFor(responsibleLink, config);
-  const indirectTiming = timingFor(parentLink, config);
+  const assignedPartnerId = chain[0].partnerId;
 
   const revenueForField = {
     id: project.id,
@@ -362,39 +417,44 @@ export function computeProjectEntries(
     });
   };
 
+  /** 階層の各段ぶんを1行ずつ積む。料率が未設定の段は飛ばして上位へ進む */
+  const pushChain = (
+    kind: RewardKind,
+    baseAmount: number,
+    sourceMonth: string,
+    sourceDay: number,
+  ) => {
+    for (const node of chain) {
+      const setting = settingForNode(kind, node, config, project);
+      if (!setting) continue;
+      const timing = timingFor(node.link, config);
+      pushEntry(
+        kind,
+        node.isAssigned ? 'direct' : 'indirect',
+        node.partnerId,
+        node.isAssigned ? null : assignedPartnerId,
+        baseAmount,
+        setting,
+        sourceMonth,
+        applyPaymentTiming(sourceMonth, sourceDay, timing.timing, timing.closingDay),
+      );
+    }
+  };
+
   // --- ショット（確定月に1回）---
   const confirmedMonth = project.revenueConfirmedMonth;
   if (compareMonth(confirmedMonth, sourceFrom) >= 0 && compareMonth(confirmedMonth, sourceTo) <= 0) {
     const shotBase = config.shotBaseField ? getRevenueAmount(revenueForField, config.shotBaseField) : 0;
     const confirmedDay = project.revenueConfirmedDay ?? lastDayOfMonth(confirmedMonth);
-
-    const directSetting = resolveDirect('shot', config, responsibleLink, project);
-    if (directSetting && responsiblePartnerId != null) {
-      pushEntry('shot', 'direct', responsiblePartnerId, null, shotBase, directSetting, confirmedMonth,
-        applyPaymentTiming(confirmedMonth, confirmedDay, directTiming.timing, directTiming.closingDay));
-    }
-    const indirectSetting = resolveIndirect('shot', config, parentLink, project);
-    if (indirectSetting && parentPartnerId != null) {
-      pushEntry('shot', 'indirect', parentPartnerId, responsiblePartnerId, shotBase, indirectSetting, confirmedMonth,
-        applyPaymentTiming(confirmedMonth, confirmedDay, indirectTiming.timing, indirectTiming.closingDay));
-    }
+    pushChain('shot', shotBase, confirmedMonth, confirmedDay);
   }
 
   // --- ストック（有効な各発生月）---
-  const stockDirect = resolveDirect('stock', config, responsibleLink, project);
-  const stockIndirect = resolveIndirect('stock', config, parentLink, project);
-  if (stockDirect || stockIndirect) {
+  const hasStockSetting = chain.some((node) => settingForNode('stock', node, config, project));
+  if (hasStockSetting) {
     const stockBase = config.stockBaseField ? getRevenueAmount(revenueForField, config.stockBaseField) : 0;
     for (const month of getStockActiveMonths(project, sourceFrom, sourceTo)) {
-      const day = lastDayOfMonth(month); // ストックは末日基準
-      if (stockDirect && responsiblePartnerId != null) {
-        pushEntry('stock', 'direct', responsiblePartnerId, null, stockBase, stockDirect, month,
-          applyPaymentTiming(month, day, directTiming.timing, directTiming.closingDay));
-      }
-      if (stockIndirect && parentPartnerId != null) {
-        pushEntry('stock', 'indirect', parentPartnerId, responsiblePartnerId, stockBase, stockIndirect, month,
-          applyPaymentTiming(month, day, indirectTiming.timing, indirectTiming.closingDay));
-      }
+      pushChain('stock', stockBase, month, lastDayOfMonth(month)); // ストックは末日基準
     }
   }
 
@@ -446,20 +506,6 @@ function toLinkInput(l: LinkRow | undefined): LinkRewardInput | null {
         closingDay: l.closingDay,
       }
     : null;
-}
-
-/** 担当代理店の直リンクと、その親代理店（上位代理店）のリンクを解決する */
-export function resolveResponsibleAndParentLinks(
-  partnerId: number | null,
-  linkByPartner: Map<number, LinkRow>,
-): { responsibleLink: LinkRewardInput | null; parentLink: LinkRewardInput | null } {
-  const responsibleLink = partnerId != null ? toLinkInput(linkByPartner.get(partnerId)) : null;
-  const rawResponsible = partnerId != null ? linkByPartner.get(partnerId) : undefined;
-  const parentLink =
-    rawResponsible?.businessParentId != null
-      ? toLinkInput(linkByPartner.get(rawResponsible.businessParentId))
-      : null;
-  return { responsibleLink, parentLink };
 }
 
 /** 案件行(DB) → computeProjectEntries が要求する ProjectRewardInput へ変換 */
@@ -564,8 +610,8 @@ export async function calculateBusinessRewardEntries(
   const result: ComputedRewardEntry[] = [];
   for (const p of ctx.projects) {
     const input = toProjectRewardInput(p);
-    const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(p.partnerId, ctx.linkByPartner);
-    result.push(...computeProjectEntries(input, responsibleLink, parentLink, ctx.config, sourceFrom, sourceTo));
+    const chain = resolvePartnerChain(p.partnerId, ctx.linkByPartner);
+    result.push(...computeProjectEntries(input, chain, ctx.config, sourceFrom, sourceTo));
   }
   return result;
 }

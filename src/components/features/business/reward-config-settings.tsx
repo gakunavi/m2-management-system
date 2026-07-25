@@ -146,14 +146,20 @@ export function RewardConfigSettings({ entityId }: Props) {
           通常はこちらに設定します。
         </p>
         <p>
-          <strong className="text-foreground">上位代理店</strong>: 担当代理店の
-          <strong className="text-foreground">親代理店</strong>へ支払う分（代理店階層の二次報酬）。
-          親代理店が設定されていない場合は発生しません。
+          <strong className="text-foreground">上位代理店</strong>: 担当代理店の上位にある代理店へ支払う分。
+          親をたどれる限り<strong className="text-foreground">最上位まで遡り</strong>、
+          料率が設定されている段の分を全て合計します。未記入の段は0として素通りします。
         </p>
         <p>
-          内訳は契約マスタの列（ショット手数料・ストック手数料）で案件ごとに確認できます。
-          担当代理店が¥0で上位代理店だけに金額が出ている場合、担当代理店に入れるべき料率が
-          上位代理店の欄に入っている可能性があります。
+          例: A（上位5%）→ B（担当10%）→ C（未記入）の階層で、案件に C が紐づいている場合は合計15%。
+        </p>
+        <p>
+          ここで設定する事業デフォルトは<strong className="text-foreground">担当代理店にのみ</strong>
+          適用されます。上位店の料率は代理店マスタの各代理店側で設定してください
+          （階層が深いほど既定料率が段数ぶん積み上がるのを防ぐため）。
+        </p>
+        <p>
+          代理店が紐づいていない案件（自社直営）は手数料が発生せず、売上がそのまま粗利になります。
         </p>
       </div>
 

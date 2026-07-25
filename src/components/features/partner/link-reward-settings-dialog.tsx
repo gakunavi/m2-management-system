@@ -100,10 +100,15 @@ export function LinkRewardSettingsDialog({
           </p>
           <p className="text-xs text-muted-foreground">
             <strong className="text-foreground">担当代理店</strong>＝この代理店が担当する案件で
-            この代理店へ支払う分（通常はこちら）。
+            この代理店へ支払う分。
             <strong className="text-foreground">上位代理店</strong>＝この代理店の
             <strong className="text-foreground">配下代理店</strong>が担当した案件で、
             上位であるこの代理店へ支払う分。
+          </p>
+          <p className="text-xs text-muted-foreground">
+            手数料は案件の代理店から最上位まで階層を遡り、料率が設定されている段の分を
+            全て合計します。該当欄が未記入の場合はもう一方の欄の値を使い、
+            どちらも未記入なら0として上位へ遡ります。
           </p>
 
           <div>

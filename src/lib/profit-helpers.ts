@@ -7,21 +7,21 @@ import {
 } from '@/lib/revenue-helpers';
 import {
   applyRewardSetting,
+  computeChainRewardAmounts,
   computeProjectEntries,
   getStockActiveMonths,
   loadBusinessRewardContext,
   resolveCompanyShareBaseField,
-  resolveProjectRewardSettings,
-  resolveResponsibleAndParentLinks,
+  resolvePartnerChain,
   toProjectRewardInput,
   compareMonth,
   type BusinessRewardContext,
   type ConfirmedProjectRow,
-  type LinkRewardInput,
   type ProjectRewardInput,
+  type RewardChainNode,
   type RewardConfig,
 } from '@/lib/reward-helpers';
-import { formatRewardSetting, type RewardSetting } from '@/lib/reward-slots';
+import { formatRewardSetting } from '@/lib/reward-slots';
 import {
   isCompanyShareConfigured,
   mergeCompanyShare,
@@ -243,13 +243,11 @@ export function resolveProjectCompanyShare(
  */
 export function computeProjectFinancials(
   project: ProjectRewardInput,
-  responsibleLink: LinkRewardInput | null,
-  parentLink: LinkRewardInput | null,
+  chain: RewardChainNode[],
   config: RewardConfig,
   basis: ProfitBasis | null,
   recognized: boolean,
 ): ProjectFinancials {
-  const settings = resolveProjectRewardSettings(config, responsibleLink, parentLink, project);
   const { share, isOverridden } = resolveProjectCompanyShare(config, project);
 
   const revenueSource = {
@@ -262,8 +260,6 @@ export function computeProjectFinancials(
   // 計上対象かつ計上月が決まる案件のみ金額を出す
   const countable =
     recognized && basis !== null && recognitionMonthOf(project, basis) !== null;
-  const hasResponsible = project.partnerId != null;
-  const hasParent = parentLink != null;
 
   // 取り分・報酬とも同じ「取扱高」に対して掛けるので、基準フィールドは共通にする。
   // 順序は 取り分の明示指定 → 報酬の基準 → KPIのsourceField。
@@ -276,22 +272,22 @@ export function computeProjectFinancials(
   const shotRewardBase = amountOf(config.shotBaseField ?? basis?.sourceField ?? null);
   const stockRewardBase = amountOf(config.stockBaseField);
 
-  const rewardOf = (
-    setting: RewardSetting | undefined,
-    hasPartner: boolean,
-    base: number,
-  ): number | null => (countable && hasPartner && setting ? applyRewardSetting(setting, base) : null);
+  // 手数料は階層を最上位まで遡って積み上げる（担当店ぶん / 上位店ぶんの合計）
+  const emptyAmounts = { direct: null, indirect: null };
+  const shotAmounts = countable
+    ? computeChainRewardAmounts('shot', chain, config, project, shotRewardBase)
+    : emptyAmounts;
+  const stockAmounts = countable
+    ? computeChainRewardAmounts('stock', chain, config, project, stockRewardBase)
+    : emptyAmounts;
 
-  const revenueOf = (setting: RewardSetting | undefined, base: number): number | null =>
-    countable && setting ? applyRewardSetting(setting, base) : null;
+  const rewardShotDirect = shotAmounts.direct;
+  const rewardShotIndirect = shotAmounts.indirect;
+  const rewardStockDirect = stockAmounts.direct;
+  const rewardStockIndirect = stockAmounts.indirect;
 
-  const rewardShotDirect = rewardOf(settings.shotDirect, hasResponsible, shotRewardBase);
-  const rewardShotIndirect = rewardOf(settings.shotIndirect, hasParent, shotRewardBase);
-  const rewardStockDirect = rewardOf(settings.stockDirect, hasResponsible, stockRewardBase);
-  const rewardStockIndirect = rewardOf(settings.stockIndirect, hasParent, stockRewardBase);
-
-  const companyRevenueShot = revenueOf(share.shot, shotShareBase);
-  const companyRevenueStock = revenueOf(share.stock, stockShareBase);
+  const companyRevenueShot = countable && share.shot ? applyRewardSetting(share.shot, shotShareBase) : null;
+  const companyRevenueStock = countable && share.stock ? applyRewardSetting(share.stock, stockShareBase) : null;
 
   // 「いくら支払うか」の合計。どちらのスロットも未設定なら null（¥0 と区別する）
   const totalOf = (a: number | null, b: number | null): number | null =>
@@ -347,13 +343,12 @@ export async function calculateProjectFinancialsByBusiness(
 
   for (const row of ctx.projects) {
     const input = toProjectRewardInput(row);
-    const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(row.partnerId, ctx.linkByPartner);
+    const chain = resolvePartnerChain(row.partnerId, ctx.linkByPartner);
     result.set(
       row.id,
       computeProjectFinancials(
         input,
-        responsibleLink,
-        parentLink,
+        chain,
         ctx.config,
         basis,
         basis !== null && isRecognized(row, basis),
@@ -383,11 +378,10 @@ export async function calculateProjectFinancials(
   const basis = prepareContext(ctx);
 
   const input = toProjectRewardInput(row);
-  const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(row.partnerId, ctx.linkByPartner);
+  const chain = resolvePartnerChain(row.partnerId, ctx.linkByPartner);
   return computeProjectFinancials(
     input,
-    responsibleLink,
-    parentLink,
+        chain,
     ctx.config,
     basis,
     basis !== null && isRecognized(row, basis),
@@ -515,7 +509,7 @@ function projectMonthDeltas(
   if (!month) return [];
 
   const project = withRecognitionMonth(base, month);
-  const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(row.partnerId, ctx.linkByPartner);
+  const chain = resolvePartnerChain(row.partnerId, ctx.linkByPartner);
   const { share } = resolveProjectCompanyShare(ctx.config, project);
 
   const revenueSource = {
@@ -569,7 +563,7 @@ function projectMonthDeltas(
   }
 
   // --- 手数料側: 計上月で集計 ---
-  for (const e of computeProjectEntries(project, responsibleLink, parentLink, ctx.config, fromMonth, toMonth)) {
+  for (const e of computeProjectEntries(project, chain, ctx.config, fromMonth, toMonth)) {
     const d = deltaFor(e.sourceMonth);
     if (e.entryType === 'direct') d.rewardDirect += e.rewardAmount;
     else d.rewardIndirect += e.rewardAmount;

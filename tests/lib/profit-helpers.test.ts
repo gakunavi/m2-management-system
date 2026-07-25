@@ -13,6 +13,7 @@ import {
   type BusinessRewardContext,
   type LinkRewardInput,
   type ProjectRewardInput,
+  type RewardChainNode,
   type RewardConfig,
 } from '@/lib/reward-helpers';
 import {
@@ -181,7 +182,22 @@ const project: ProjectRewardInput = {
 };
 
 const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null };
-const parent: LinkRewardInput = { partnerId: 200, rewardSlots: null, paymentTiming: null, closingDay: null };
+// 上位店は自身のリンク設定で料率を持つ（事業デフォルトは担当店にしか効かない）
+const PARENT_SLOTS = { shot: { indirect: { type: 'rate' as const, value: 2 } } };
+const parent: LinkRewardInput = {
+  partnerId: 200,
+  rewardSlots: PARENT_SLOTS,
+  paymentTiming: null,
+  closingDay: null,
+};
+
+/** 担当店のみ（上位店なし） */
+const chainSolo: RewardChainNode[] = [{ partnerId: 100, link: responsible, isAssigned: true }];
+/** 担当店 → 上位店1段 */
+const chainWithParent: RewardChainNode[] = [
+  ...chainSolo,
+  { partnerId: 200, link: parent, isAssigned: false },
+];
 
 describe('resolveProjectCompanyShare', () => {
   it('案件別上書きが事業デフォルトに勝つ', () => {
@@ -204,7 +220,7 @@ describe('resolveProjectCompanyShare', () => {
 
 describe('computeProjectFinancials', () => {
   it('収益確定日が無くてもKPIの計上月があれば計算される', () => {
-    const f = computeProjectFinancials(project, responsible, parent, config, basis, true);
+    const f = computeProjectFinancials(project, chainWithParent, config, basis, true);
     // 取扱高 500,000 × 20% = 100,000
     expect(f.companyRevenueShot).toBe(100_000);
     // 報酬 直10% = 50,000 / 間接2% = 10,000
@@ -218,7 +234,7 @@ describe('computeProjectFinancials', () => {
   });
 
   it('ストック: 月額ベースで計算する', () => {
-    const f = computeProjectFinancials(project, responsible, parent, config, basis, true);
+    const f = computeProjectFinancials(project, chainWithParent, config, basis, true);
     expect(f.companyRevenueStock).toBe(10_000); // 50,000 × 20%
     expect(f.rewardStockDirect).toBe(2_500); // 50,000 × 5%
     expect(f.rewardStockIndirect).toBeNull(); // 上位代理店ぶんは未設定
@@ -230,8 +246,7 @@ describe('computeProjectFinancials', () => {
   it('案件別上書きが金額に反映される', () => {
     const f = computeProjectFinancials(
       { ...project, companyShareOverride: { shot: { type: 'rate', value: 15 } } },
-      responsible,
-      parent,
+      chainWithParent,
       config,
       basis,
       true,
@@ -245,8 +260,7 @@ describe('computeProjectFinancials', () => {
   it('固定額の取り分にも対応する', () => {
     const f = computeProjectFinancials(
       { ...project, companyShareOverride: { shot: { type: 'fixed', value: 80_000 } } },
-      responsible,
-      parent,
+      chainWithParent,
       config,
       basis,
       true,
@@ -256,7 +270,7 @@ describe('computeProjectFinancials', () => {
   });
 
   it('計上対象外のステータスは金額が全て null。取り分ラベルだけ返す', () => {
-    const f = computeProjectFinancials(project, responsible, parent, config, basis, false);
+    const f = computeProjectFinancials(project, chainWithParent, config, basis, false);
     expect(f.companyRevenueShot).toBeNull();
     expect(f.rewardShotDirect).toBeNull();
     expect(f.grossProfitShot).toBeNull();
@@ -267,8 +281,7 @@ describe('computeProjectFinancials', () => {
   it('計上月が決まらない案件は金額を出さない', () => {
     const f = computeProjectFinancials(
       { ...project, projectExpectedCloseMonth: null },
-      responsible,
-      parent,
+      chainWithParent,
       config,
       basis,
       true,
@@ -278,7 +291,7 @@ describe('computeProjectFinancials', () => {
   });
 
   it('取り分未設定なら自社売上・粗利は null（0 ではない）', () => {
-    const f = computeProjectFinancials(project, responsible, parent, { ...config, companyShare: {} }, basis, true);
+    const f = computeProjectFinancials(project, chainWithParent, { ...config, companyShare: {} }, basis, true);
     expect(f.companyRevenueShot).toBeNull();
     expect(f.grossProfitShot).toBeNull();
     expect(f.companyShareShotLabel).toBeNull();
@@ -287,7 +300,7 @@ describe('computeProjectFinancials', () => {
   });
 
   it('親代理店が無ければ間接報酬は null', () => {
-    const f = computeProjectFinancials(project, responsible, null, config, basis, true);
+    const f = computeProjectFinancials(project, chainSolo, config, basis, true);
     expect(f.rewardShotIndirect).toBeNull();
     expect(f.grossProfitShot).toBe(50_000); // 100,000 - 50,000
   });
@@ -295,8 +308,7 @@ describe('computeProjectFinancials', () => {
   it('取り分の基準フィールドを個別指定できる', () => {
     const f = computeProjectFinancials(
       { ...project, projectCustomData: { amount: 10, monthly: 50_000, gross: 500_000 } },
-      responsible,
-      parent,
+      chainWithParent,
       {
         ...config,
         // 報酬の基準は台数(amount)だが、取り分の基準は金額(gross)
@@ -315,8 +327,7 @@ describe('computeProjectFinancials', () => {
     const countBasis: ProfitBasis = { ...basis, sourceField: 'units', label: '【合計】受注見込み数' };
     const f = computeProjectFinancials(
       { ...project, projectCustomData: { amount: 7_200_000, units: 3 } },
-      responsible,
-      parent,
+      chainWithParent,
       config, // shotBaseField: 'amount'（金額）
       countBasis,
       true,
@@ -329,8 +340,7 @@ describe('computeProjectFinancials', () => {
   it('自社売上が 0 なら粗利率は null（0除算を返さない）', () => {
     const f = computeProjectFinancials(
       { ...project, projectCustomData: { amount: 0, monthly: 0 } },
-      responsible,
-      parent,
+      chainWithParent,
       config,
       basis,
       true,
@@ -353,7 +363,7 @@ function makeContext(
     businessConfig,
     linkByPartner: new Map([
       [100, { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 200 }],
-      [200, { partnerId: 200, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: null }],
+      [200, { partnerId: 200, rewardSlots: PARENT_SLOTS, paymentTiming: null, closingDay: null, businessParentId: null }],
     ]),
     projects: [
       {
