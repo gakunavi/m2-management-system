@@ -51,20 +51,13 @@ function buildCards(data: DashboardSummary, kpiUnit?: string, hideAchievementRat
     });
   }
 
-  cards.push(
-    {
-      label: '案件総数',
-      value: `${data.totalProjects.current.toLocaleString()}件`,
-      change: `${data.totalProjects.change > 0 ? '+' : ''}${data.totalProjects.change}件 前月比`,
-      changeType: data.totalProjects.changeType,
-    },
-    {
-      label: '受注案件数',
-      value: `${data.wonProjects.current.toLocaleString()}件`,
-      change: `${data.wonProjects.change > 0 ? '+' : ''}${data.wonProjects.change}件 前月比`,
-      changeType: data.wonProjects.changeType,
-    },
-  );
+  // 案件総数（全ステータスの母数）は意思決定に使わないため表示しない
+  cards.push({
+    label: '受注案件数',
+    value: `${data.wonProjects.current.toLocaleString()}件`,
+    change: `${data.wonProjects.change > 0 ? '+' : ''}${data.wonProjects.change}件 前月比`,
+    changeType: data.wonProjects.changeType,
+  });
 
   return cards;
 }
@@ -82,8 +75,8 @@ function ChangeIcon({ type }: { type: 'positive' | 'negative' | 'neutral' }) {
 }
 
 export const KpiSummaryCards = memo(function KpiSummaryCards({ data, isLoading, kpiUnit, hideAchievementRate }: Props) {
-  const cardCount = hideAchievementRate ? 3 : 4;
-  const gridCols = hideAchievementRate ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+  const cardCount = hideAchievementRate ? 2 : 3;
+  const gridCols = hideAchievementRate ? 'lg:grid-cols-2' : 'lg:grid-cols-3';
 
   if (isLoading || !data) {
     return (

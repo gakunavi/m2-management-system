@@ -426,6 +426,7 @@ export type ConfirmedProjectRow = {
   rewardOverride: unknown;
   companyShareOverride: unknown;
   customer: { customerName: string | null } | null;
+  partner: { partnerName: string | null } | null;
 };
 
 export interface BusinessRewardContext {
@@ -540,6 +541,7 @@ export async function loadBusinessRewardContext(
       rewardOverride: true,
       companyShareOverride: true,
       customer: { select: { customerName: true } },
+      partner: { select: { partnerName: true } },
     },
   });
 

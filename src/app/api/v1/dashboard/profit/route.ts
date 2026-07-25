@@ -11,6 +11,7 @@ import {
 } from '@/lib/dashboard-period';
 import {
   calculateBusinessMonthlyPL,
+  calculateBusinessProjectPL,
   sumMonthlyPL,
   type MonthlyPL,
 } from '@/lib/profit-helpers';
@@ -19,7 +20,11 @@ import type {
   ProfitTotals,
   ProfitMonth,
   ProfitBusinessItem,
+  ProfitProjectRow,
 } from '@/types/dashboard';
+
+/** 案件別内訳の返却上限。突き合わせが目的なので全件は返さない */
+const PROJECT_ROW_LIMIT = 100;
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +120,8 @@ export async function GET(request: NextRequest) {
       businesses.map(async (biz) => ({
         biz,
         months: await calculateBusinessMonthlyPL(prisma, biz.id, calcFrom, to),
+        // 案件別内訳は表示期間ぶんだけでよい（前月に広げる必要は無い）
+        projects: await calculateBusinessProjectPL(prisma, biz.id, from, to),
       })),
     );
 
@@ -127,6 +134,7 @@ export async function GET(request: NextRequest) {
         months: [],
         totals: empty,
         previous: null,
+        projects: [],
       };
       return NextResponse.json({ success: true, data: response });
     }
@@ -155,6 +163,12 @@ export async function GET(request: NextRequest) {
       previous = toTotals(Array.from(prevMerged.values()));
     }
 
+    // 案件別内訳（金額の大きい順。事業をまたぐ場合も合算して並べる）
+    const projectRows: ProfitProjectRow[] = configured
+      .flatMap((r) => r.projects ?? [])
+      .sort((a, b) => b.gmv - a.gmv)
+      .slice(0, PROJECT_ROW_LIMIT);
+
     // 事業別内訳（会社全体モードのみ）
     let businessBreakdown: ProfitBusinessItem[] | undefined;
     if (targetBusinessId === null) {
@@ -172,6 +186,7 @@ export async function GET(request: NextRequest) {
       totals: toTotals(months),
       previous,
       ...(businessBreakdown !== undefined && { businesses: businessBreakdown }),
+      projects: projectRows,
     };
 
     return NextResponse.json({ success: true, data: response });

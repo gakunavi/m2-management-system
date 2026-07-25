@@ -246,6 +246,64 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
         )}
       </div>
 
+      {data.projects.length > 0 && (
+        <div className="rounded-lg border bg-card p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h3 className="font-semibold">案件別の内訳</h3>
+            <p className="text-xs text-muted-foreground">
+              金額の大きい順。代理店欄が「直販」の案件は手数料が発生しません
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-muted-foreground border-b">
+                  <th className="text-left font-normal py-2 pr-4">案件番号</th>
+                  <th className="text-left font-normal py-2 pr-4">顧客</th>
+                  <th className="text-left font-normal py-2 pr-4">代理店</th>
+                  <th className="text-right font-normal py-2 pr-4">取扱高</th>
+                  <th className="text-right font-normal py-2 pr-4">自社売上</th>
+                  <th className="text-right font-normal py-2 pr-4">支払手数料</th>
+                  <th className="text-right font-normal py-2 pr-4">粗利</th>
+                  <th className="text-right font-normal py-2">粗利率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.projects.map((p) => (
+                  <tr key={p.projectId} className="border-b last:border-0">
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      <a href={`/projects/${p.projectId}`} className="text-primary hover:underline">
+                        {p.projectNo}
+                      </a>
+                    </td>
+                    <td className="py-2 pr-4">{p.customerName ?? '-'}</td>
+                    <td className="py-2 pr-4">
+                      {p.partnerName ?? <span className="text-muted-foreground">直販</span>}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(p.gmv, true)}</td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(p.companyRevenue, true)}</td>
+                    <td
+                      className={`py-2 pr-4 text-right ${
+                        p.partnerName && p.rewardTotal === 0 ? 'text-amber-600' : ''
+                      }`}
+                    >
+                      {formatCurrency(p.rewardTotal, true)}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(p.grossProfit, true)}</td>
+                    <td className="py-2 text-right">{formatMargin(p.grossMargin)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            代理店が付いているのに支払手数料が¥0の案件は
+            <span className="text-amber-600">オレンジ</span>で表示されます。
+            その代理店の料率が未設定か、階層設定を確認してください。
+          </p>
+        </div>
+      )}
+
       {showBusinessBreakdown && data.businesses && data.businesses.length > 0 && (
         <div className="rounded-lg border bg-card p-5">
           <h3 className="font-semibold mb-3">事業別の収益</h3>

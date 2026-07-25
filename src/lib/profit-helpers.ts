@@ -455,75 +455,21 @@ export function computeMonthlyPL(
     }
     return b;
   };
-  const markProject = (month: string, projectId: number) => {
-    let s = projectsInMonth.get(month);
-    if (!s) {
-      s = new Set<number>();
-      projectsInMonth.set(month, s);
-    }
-    s.add(projectId);
-  };
 
   for (const row of ctx.projects) {
-    if (!isRecognized(row, basis)) continue;
+    for (const d of projectMonthDeltas(ctx, basis, row, fromMonth, toMonth)) {
+      const b = bucketFor(d.month);
+      b.gmv += d.gmv;
+      b.companyRevenue += d.companyRevenue;
+      b.rewardDirect += d.rewardDirect;
+      b.rewardIndirect += d.rewardIndirect;
 
-    const base = toProjectRewardInput(row);
-    const month = recognitionMonthOf(base, basis);
-    if (!month) continue;
-
-    const project = withRecognitionMonth(base, month);
-    const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(row.partnerId, ctx.linkByPartner);
-    const { share } = resolveProjectCompanyShare(ctx.config, project);
-
-    const revenueSource = {
-      id: project.id,
-      projectExpectedCloseMonth: project.projectExpectedCloseMonth,
-      projectCustomData: project.projectCustomData,
-    };
-    const amountOf = (field: string | null) => (field ? getRevenueAmount(revenueSource, field) : 0);
-
-    // --- 売上側: ショット（計上月に1回）---
-    if (compareMonth(month, fromMonth) >= 0 && compareMonth(month, toMonth) <= 0) {
-      const b = bucketFor(month);
-      // 取扱高は報酬の基準金額と同じフィールドから取る。KPIのsourceField を
-      // 優先すると、プライマリKPIが数量（受注見込み数など）の事業で取扱高が
-      // 台数になってしまい、報酬と桁が合わなくなる
-      b.gmv += amountOf(ctx.config.shotBaseField ?? basis.sourceField);
-      if (share.shot) {
-        b.companyRevenue += applyRewardSetting(
-          share.shot,
-          amountOf(resolveCompanyShareBaseField(ctx.config, 'shot') ?? basis.sourceField),
-        );
+      let s = projectsInMonth.get(d.month);
+      if (!s) {
+        s = new Set<number>();
+        projectsInMonth.set(d.month, s);
       }
-      markProject(month, project.id);
-    }
-
-    // --- 売上側: ストック（継続中の各月）---
-    // 起点は withRecognitionMonth で計上月に差し替え済み
-    const stockMonths = getStockActiveMonths(project, fromMonth, toMonth);
-    if (stockMonths.length > 0) {
-      const stockGmv = amountOf(ctx.config.stockBaseField);
-      const stockRevenue = share.stock
-        ? applyRewardSetting(share.stock, amountOf(resolveCompanyShareBaseField(ctx.config, 'stock')))
-        : 0;
-      // ストック設定も取り分も無い案件は月を立てない（空の月が並ぶのを防ぐ）
-      if (stockGmv > 0 || stockRevenue > 0) {
-        for (const m of stockMonths) {
-          const b = bucketFor(m);
-          b.gmv += stockGmv;
-          b.companyRevenue += stockRevenue;
-          markProject(m, project.id);
-        }
-      }
-    }
-
-    // --- 報酬側: 計上月で集計 ---
-    const entries = computeProjectEntries(project, responsibleLink, parentLink, ctx.config, fromMonth, toMonth);
-    for (const e of entries) {
-      const b = bucketFor(e.sourceMonth);
-      if (e.entryType === 'direct') b.rewardDirect += e.rewardAmount;
-      else b.rewardIndirect += e.rewardAmount;
-      markProject(e.sourceMonth, project.id);
+      s.add(row.id);
     }
   }
 
@@ -540,6 +486,168 @@ export function computeMonthlyPL(
       };
     })
     .sort((a, b) => compareMonth(a.month, b.month));
+}
+
+/** 1案件が特定の月にもたらす増分 */
+interface MonthDelta {
+  month: string;
+  gmv: number;
+  companyRevenue: number;
+  rewardDirect: number;
+  rewardIndirect: number;
+}
+
+/**
+ * 1案件ぶんの月別増分を返す（計上対象外なら空配列）。
+ * 月次集計と案件別内訳の両方がこれを使うので、二重実装で数字がズレることがない。
+ */
+function projectMonthDeltas(
+  ctx: BusinessRewardContext,
+  basis: ProfitBasis,
+  row: ConfirmedProjectRow,
+  fromMonth: string,
+  toMonth: string,
+): MonthDelta[] {
+  if (!isRecognized(row, basis)) return [];
+
+  const base = toProjectRewardInput(row);
+  const month = recognitionMonthOf(base, basis);
+  if (!month) return [];
+
+  const project = withRecognitionMonth(base, month);
+  const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(row.partnerId, ctx.linkByPartner);
+  const { share } = resolveProjectCompanyShare(ctx.config, project);
+
+  const revenueSource = {
+    id: project.id,
+    projectExpectedCloseMonth: project.projectExpectedCloseMonth,
+    projectCustomData: project.projectCustomData,
+  };
+  const amountOf = (field: string | null) => (field ? getRevenueAmount(revenueSource, field) : 0);
+
+  const byMonth = new Map<string, MonthDelta>();
+  const deltaFor = (m: string): MonthDelta => {
+    let d = byMonth.get(m);
+    if (!d) {
+      d = { month: m, gmv: 0, companyRevenue: 0, rewardDirect: 0, rewardIndirect: 0 };
+      byMonth.set(m, d);
+    }
+    return d;
+  };
+
+  // --- 売上側: ショット（計上月に1回）---
+  if (compareMonth(month, fromMonth) >= 0 && compareMonth(month, toMonth) <= 0) {
+    const d = deltaFor(month);
+    // 取扱高は報酬の基準金額と同じフィールドから取る。KPIのsourceField を
+    // 優先すると、プライマリKPIが数量（受注見込み数など）の事業で取扱高が
+    // 台数になってしまい、報酬と桁が合わなくなる
+    d.gmv += amountOf(ctx.config.shotBaseField ?? basis.sourceField);
+    if (share.shot) {
+      d.companyRevenue += applyRewardSetting(
+        share.shot,
+        amountOf(resolveCompanyShareBaseField(ctx.config, 'shot') ?? basis.sourceField),
+      );
+    }
+  }
+
+  // --- 売上側: ストック（継続中の各月）---
+  // 起点は withRecognitionMonth で計上月に差し替え済み
+  const stockMonths = getStockActiveMonths(project, fromMonth, toMonth);
+  if (stockMonths.length > 0) {
+    const stockGmv = amountOf(ctx.config.stockBaseField);
+    const stockRevenue = share.stock
+      ? applyRewardSetting(share.stock, amountOf(resolveCompanyShareBaseField(ctx.config, 'stock')))
+      : 0;
+    // ストック設定も取り分も無い案件は月を立てない（空の月が並ぶのを防ぐ）
+    if (stockGmv > 0 || stockRevenue > 0) {
+      for (const m of stockMonths) {
+        const d = deltaFor(m);
+        d.gmv += stockGmv;
+        d.companyRevenue += stockRevenue;
+      }
+    }
+  }
+
+  // --- 手数料側: 計上月で集計 ---
+  for (const e of computeProjectEntries(project, responsibleLink, parentLink, ctx.config, fromMonth, toMonth)) {
+    const d = deltaFor(e.sourceMonth);
+    if (e.entryType === 'direct') d.rewardDirect += e.rewardAmount;
+    else d.rewardIndirect += e.rewardAmount;
+  }
+
+  return Array.from(byMonth.values());
+}
+
+// ============================================
+// 案件別の内訳（数字が合わないときの突き合わせ用）
+// ============================================
+
+/** 期間内の1案件ぶんの収益。「どの案件で手数料が発生していないか」を特定できる */
+export interface ProjectPLRow {
+  projectId: number;
+  projectNo: string;
+  customerName: string | null;
+  /** 代理店名。null は代理店が紐づいていない案件（＝手数料が発生しない） */
+  partnerName: string | null;
+  gmv: number;
+  companyRevenue: number;
+  rewardTotal: number;
+  grossProfit: number;
+  grossMargin: number | null;
+}
+
+/** 期間内に計上のあった案件を、金額の大きい順に返す */
+export function computeProjectPLRows(
+  ctx: BusinessRewardContext,
+  basis: ProfitBasis | null,
+  fromMonth: string,
+  toMonth: string,
+): ProjectPLRow[] {
+  if (!basis) return [];
+
+  const rows: ProjectPLRow[] = [];
+  for (const row of ctx.projects) {
+    const deltas = projectMonthDeltas(ctx, basis, row, fromMonth, toMonth);
+    if (deltas.length === 0) continue;
+
+    let gmv = 0;
+    let companyRevenue = 0;
+    let rewardTotal = 0;
+    for (const d of deltas) {
+      gmv += d.gmv;
+      companyRevenue += d.companyRevenue;
+      rewardTotal += d.rewardDirect + d.rewardIndirect;
+    }
+    const grossProfit = companyRevenue - rewardTotal;
+
+    rows.push({
+      projectId: row.id,
+      projectNo: row.projectNo,
+      customerName: row.customer?.customerName ?? null,
+      partnerName: row.partner?.partnerName ?? null,
+      gmv,
+      companyRevenue,
+      rewardTotal,
+      grossProfit,
+      grossMargin: calcMargin(grossProfit, companyRevenue),
+    });
+  }
+
+  return rows.sort((a, b) => b.gmv - a.gmv);
+}
+
+/** 事業の案件別内訳を DB から計算する。自社取り分が未設定の事業は null を返す */
+export async function calculateBusinessProjectPL(
+  prisma: PrismaClient,
+  businessId: number,
+  fromMonth: string,
+  toMonth: string,
+): Promise<ProjectPLRow[] | null> {
+  const ctx = await loadBusinessRewardContext(prisma, businessId, { includeUnconfirmed: true });
+  if (!ctx) return null;
+  if (!isCompanyShareConfigured(ctx.config.companyShare)) return null;
+  const basis = prepareContext(ctx);
+  return computeProjectPLRows(ctx, basis, fromMonth, toMonth);
 }
 
 /** 月次 P/L を期間合計にまとめる */

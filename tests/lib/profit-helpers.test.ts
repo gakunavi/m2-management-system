@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeProjectFinancials,
   computeMonthlyPL,
+  computeProjectPLRows,
   sumMonthlyPL,
   resolveProfitBasis,
   resolveProjectCompanyShare,
@@ -369,6 +370,7 @@ function makeContext(
         rewardOverride: null,
         companyShareOverride: null,
         customer: { customerName: '株式会社A' },
+        partner: { partnerName: '株式会社パートナー' },
       },
     ],
   };
@@ -452,6 +454,39 @@ describe('computeMonthlyPL', () => {
     const months = computeMonthlyPL(makeContext(), basis, '2026-03', '2026-04');
     expect(months[0].projectCount).toBe(1);
     expect(months[1].projectCount).toBe(1);
+  });
+});
+
+describe('computeProjectPLRows', () => {
+  it('案件別の内訳が月次合計と一致する', () => {
+    const ctx = makeContext();
+    const rows = computeProjectPLRows(ctx, basis, '2026-03', '2026-05');
+    const months = computeMonthlyPL(ctx, basis, '2026-03', '2026-05');
+    const total = sumMonthlyPL(months);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].projectNo).toBe('MG-0010');
+    expect(rows[0].partnerName).toBe('株式会社パートナー');
+    expect(rows[0].gmv).toBe(total.gmv);
+    expect(rows[0].companyRevenue).toBe(total.companyRevenue);
+    expect(rows[0].rewardTotal).toBe(total.rewardTotal);
+    expect(rows[0].grossProfit).toBe(total.grossProfit);
+  });
+
+  it('代理店が紐づいていない案件は手数料0で partnerName が null', () => {
+    const ctx = makeContext();
+    ctx.projects[0].partnerId = null;
+    ctx.projects[0].partner = null;
+    const rows = computeProjectPLRows(ctx, basis, '2026-03', '2026-03');
+    expect(rows[0].partnerName).toBeNull();
+    expect(rows[0].rewardTotal).toBe(0);
+    // 手数料が発生しないぶん、粗利は自社売上そのもの
+    expect(rows[0].grossProfit).toBe(rows[0].companyRevenue);
+  });
+
+  it('計上対象外の案件は含まれない', () => {
+    const rows = computeProjectPLRows(makeContext({ projectSalesStatus: '商談中' }), basis, '2026-03', '2026-05');
+    expect(rows).toEqual([]);
   });
 });
 

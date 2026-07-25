@@ -136,6 +136,19 @@ export interface ProfitBusinessItem extends ProfitTotals {
   businessName: string;
 }
 
+export interface ProfitProjectRow {
+  projectId: number;
+  projectNo: string;
+  customerName: string | null;
+  /** null は代理店が紐づいていない案件（＝手数料が発生しない） */
+  partnerName: string | null;
+  gmv: number;
+  companyRevenue: number;
+  rewardTotal: number;
+  grossProfit: number;
+  grossMargin: number | null;
+}
+
 export interface ProfitResponse {
   /** 自社取り分が設定済みの事業が1つ以上あるか。false なら画面に収益を出さない */
   enabled: boolean;
@@ -146,6 +159,8 @@ export interface ProfitResponse {
   previous: ProfitTotals | null;
   /** 会社全体モードのみ。事業別の内訳 */
   businesses?: ProfitBusinessItem[];
+  /** 期間内に計上のあった案件の内訳（金額の大きい順・上限あり） */
+  projects: ProfitProjectRow[];
 }
 
 export interface PipelineStatus {
