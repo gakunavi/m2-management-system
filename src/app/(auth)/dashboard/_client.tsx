@@ -89,8 +89,10 @@ function CompanyDashboard() {
   });
 
   const { data: profit, isLoading: profitLoading } = useQuery({
-    queryKey: ['dashboard', 'profit', periodKey],
-    queryFn: () => apiClient.get<ProfitResponse>(`/dashboard/profit?_=1${periodParams}`),
+    // グラフは年度ぶんを描くので、KPI推移グラフと同じ年度に連動させる
+    queryKey: ['dashboard', 'profit', periodKey, effectiveTrendYear],
+    queryFn: () =>
+      apiClient.get<ProfitResponse>(`/dashboard/profit?year=${effectiveTrendYear}${periodParams}`),
   });
 
   return (
@@ -203,9 +205,11 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
 
   // 収益（自社売上・粗利）は KPI 選択に依存しない（事業の自社取り分設定で決まる）
   const { data: profit, isLoading: profitLoading } = useQuery({
-    queryKey: ['dashboard', 'profit', businessId, periodKey],
+    queryKey: ['dashboard', 'profit', businessId, periodKey, effectiveTrendYear],
     queryFn: () =>
-      apiClient.get<ProfitResponse>(`/dashboard/profit?businessId=${businessId}${periodParams}`),
+      apiClient.get<ProfitResponse>(
+        `/dashboard/profit?businessId=${businessId}&year=${effectiveTrendYear}${periodParams}`,
+      ),
   });
 
 

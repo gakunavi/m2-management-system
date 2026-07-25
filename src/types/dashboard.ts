@@ -153,7 +153,13 @@ export interface ProfitResponse {
   /** 自社取り分が設定済みの事業が1つ以上あるか。false なら画面に収益を出さない */
   enabled: boolean;
   currentMonth: string;
+  /** グラフの対象年度（4月開始） */
+  year: number;
+  /** 年度の12ヶ月ぶん。実績が無い月も0で埋める（グラフ用） */
   months: ProfitMonth[];
+  /** 単月モードのとき、グラフで強調する月 */
+  highlightMonth: string | null;
+  /** 期間フィルターに基づく合計（カード用。グラフの年度とは別軸） */
   totals: ProfitTotals;
   /** 単月モードのみ。前月の実績（前月比の算出用） */
   previous: ProfitTotals | null;

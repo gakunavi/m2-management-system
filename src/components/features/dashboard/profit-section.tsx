@@ -4,6 +4,7 @@ import { memo } from 'react';
 import {
   ComposedChart,
   Bar,
+  Cell,
   Line,
   XAxis,
   YAxis,
@@ -125,6 +126,9 @@ function ChartTooltip({
   );
 }
 
+/** 選択中の月を強調する色（KPI推移グラフと合わせる） */
+const HIGHLIGHT_COLOR = '#1d4ed8';
+
 const SERIES_LABELS: Record<string, string> = {
   companyRevenue: '自社売上',
   rewardTotal: '代理店支払手数料',
@@ -196,16 +200,18 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
       </div>
 
       <div className="rounded-lg border bg-card p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
           <h3 className="font-semibold">収益推移</h3>
-          <p className="text-xs text-muted-foreground">
-            売上KPIと同じ金額・計上月・営業ステータスで集計（見込みベース）
-          </p>
+          <span className="text-sm font-medium text-muted-foreground">{data.year}年度</span>
         </div>
-        {months.length === 0 ? (
+        <p className="text-xs text-muted-foreground mb-4">
+          売上KPIと同じ金額・計上月・営業ステータスで集計（見込みベース）。
+          グラフは年度（4月開始）の12ヶ月で、上のカードは期間フィルターの合計です。
+        </p>
+        {months.every((m) => m.gmv === 0 && m.rewardTotal === 0) ? (
           <div className="h-40 flex items-center justify-center text-center text-muted-foreground text-sm px-4">
-            対象期間に計上される案件がありません。期間フィルターを広げるか、
-            売上KPIの対象ステータス・計上月フィールドの設定をご確認ください。
+            {data.year}年度に計上される案件がありません。
+            年度を切り替えるか、売上KPIの対象ステータス・計上月フィールドの設定をご確認ください。
           </div>
         ) : (
           <div className="h-[220px] sm:h-[300px]">
@@ -225,7 +231,17 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                   fill={CHART_COLORS.primary}
                   barSize={CHART_DEFAULTS.barSize}
                   radius={[4, 4, 0, 0]}
-                />
+                >
+                  {/* 単月モードのときは選択中の月を濃色で強調（上のKPI推移と同じ挙動） */}
+                  {data.highlightMonth &&
+                    months.map((m) => (
+                      <Cell
+                        key={m.month}
+                        fill={m.month === data.highlightMonth ? HIGHLIGHT_COLOR : CHART_COLORS.primary}
+                        fillOpacity={m.month === data.highlightMonth ? 1 : 0.6}
+                      />
+                    ))}
+                </Bar>
                 <Bar
                   dataKey="rewardTotal"
                   name={SERIES_LABELS.rewardTotal}

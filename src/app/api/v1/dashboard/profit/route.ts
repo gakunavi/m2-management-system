@@ -3,7 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { getBusinessIdsForUser, getMonthLabel } from '@/lib/revenue-helpers';
+import {
+  getBusinessIdsForUser,
+  getMonthLabel,
+  getFiscalYearMonths,
+  getFiscalYearFromMonth,
+} from '@/lib/revenue-helpers';
 import {
   parseDashboardPeriod,
   periodMonthRange,
@@ -90,6 +95,15 @@ export async function GET(request: NextRequest) {
     const period = parseDashboardPeriod(searchParams);
     const { from, to } = periodMonthRange(period);
 
+    // グラフは期間フィルターに関係なく年度（4月開始12ヶ月）で描く。
+    // 上部のKPI推移グラフと同じ見え方に揃えるため。カードの数字は期間フィルター基準のまま。
+    const yearParam = searchParams.get('year');
+    const year = yearParam ? parseInt(yearParam, 10) : getFiscalYearFromMonth(periodLabelMonth(period));
+    if (isNaN(year)) throw ApiError.badRequest('year は整数で指定してください');
+    const fiscalMonths = getFiscalYearMonths(year);
+    const fiscalFrom = fiscalMonths[0];
+    const fiscalTo = fiscalMonths[fiscalMonths.length - 1];
+
     // アクセス可能な事業に限定
     const allowedIds = await getBusinessIdsForUser(prisma, user);
     const businessIdParam = searchParams.get('businessId');
@@ -116,11 +130,16 @@ export async function GET(request: NextRequest) {
     // 単月モードでは前月ぶんも必要なので、計算レンジを1ヶ月広げて後で切り分ける
     const calcFrom = period.mode === 'month' ? period.previousMonth : from;
 
+    // カード用（期間）とグラフ用（年度）の両方をまかなえるレンジで1回だけ計算し、
+    // あとから切り分ける。事業ごとに2回まわすとDBアクセスが倍になるため
+    const loadFrom = calcFrom < fiscalFrom ? calcFrom : fiscalFrom;
+    const loadTo = to > fiscalTo ? to : fiscalTo;
+
     const perBusiness = await Promise.all(
       businesses.map(async (biz) => ({
         biz,
-        months: await calculateBusinessMonthlyPL(prisma, biz.id, calcFrom, to),
-        // 案件別内訳は表示期間ぶんだけでよい（前月に広げる必要は無い）
+        months: await calculateBusinessMonthlyPL(prisma, biz.id, loadFrom, loadTo),
+        // 案件別内訳は表示期間ぶんだけでよい（前月・年度に広げる必要は無い）
         projects: await calculateBusinessProjectPL(prisma, biz.id, from, to),
       })),
     );
@@ -131,7 +150,9 @@ export async function GET(request: NextRequest) {
       const response: ProfitResponse = {
         enabled: false,
         currentMonth: periodLabelMonth(period),
+        year,
         months: [],
+        highlightMonth: null,
         totals: empty,
         previous: null,
         projects: [],
@@ -139,16 +160,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: response });
     }
 
-    // 対象期間内の月だけを残す（単月モードで広げた前月を除外）
+    // 対象期間内の月だけを残す（単月モードで広げた前月・年度ぶんを除外）
     const inPeriod = (m: MonthlyPL) => m.month >= from && m.month <= to;
 
-    const merged = new Map<string, MonthlyPL>();
+    // カード用: 期間フィルターの合計
+    const periodMerged = new Map<string, MonthlyPL>();
     for (const r of configured) {
-      mergeMonths(merged, (r.months as MonthlyPL[]).filter(inPeriod));
+      mergeMonths(periodMerged, (r.months as MonthlyPL[]).filter(inPeriod));
     }
-    const months: ProfitMonth[] = Array.from(merged.values())
-      .sort((a, b) => (a.month < b.month ? -1 : a.month > b.month ? 1 : 0))
-      .map((m) => ({ ...m, monthLabel: getMonthLabel(m.month) }));
+
+    // グラフ用: 年度の12ヶ月。実績が無い月も0で埋めて必ず12本並べる
+    const fiscalMerged = new Map<string, MonthlyPL>();
+    for (const r of configured) {
+      mergeMonths(
+        fiscalMerged,
+        (r.months as MonthlyPL[]).filter((m) => m.month >= fiscalFrom && m.month <= fiscalTo),
+      );
+    }
+    const months: ProfitMonth[] = fiscalMonths.map((month) => {
+      const m = fiscalMerged.get(month);
+      return {
+        month,
+        monthLabel: getMonthLabel(month),
+        gmv: m?.gmv ?? 0,
+        companyRevenue: m?.companyRevenue ?? 0,
+        rewardDirect: m?.rewardDirect ?? 0,
+        rewardIndirect: m?.rewardIndirect ?? 0,
+        rewardTotal: m?.rewardTotal ?? 0,
+        grossProfit: m?.grossProfit ?? 0,
+        grossMargin: m?.grossMargin ?? null,
+        projectCount: m?.projectCount ?? 0,
+      };
+    });
 
     // 前月（単月モードのみ）
     let previous: ProfitTotals | null = null;
@@ -182,8 +225,11 @@ export async function GET(request: NextRequest) {
     const response: ProfitResponse = {
       enabled: true,
       currentMonth: periodLabelMonth(period),
+      year,
       months,
-      totals: toTotals(months),
+      highlightMonth: period.mode === 'month' ? period.month : null,
+      // カードは期間フィルター基準（グラフの年度とは別軸）
+      totals: toTotals(Array.from(periodMerged.values())),
       previous,
       ...(businessBreakdown !== undefined && { businesses: businessBreakdown }),
       projects: projectRows,
