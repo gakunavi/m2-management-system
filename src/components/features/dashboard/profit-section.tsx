@@ -24,6 +24,10 @@ import type { ProfitResponse, ProfitTotals } from '@/types/dashboard';
 // 混同しないよう自社売上カードに取扱高を併記する。
 // 「粗利」は売上総利益。経常利益は販管費・営業外を含む全社の数字で
 // 事業別には配賦なしに出せないため、ここでは扱わない。
+//
+// 計上基準はダッシュボードの売上KPIと同じ（同じ金額フィールド・同じ計上月・
+// 同じ営業ステータス条件）。締め・支払明細の確定ベースとは別なので、
+// 数字が食い違いうることを画面上でも明示する。
 
 interface Props {
   data: ProfitResponse | undefined;
@@ -190,10 +194,16 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
       </div>
 
       <div className="rounded-lg border bg-card p-5">
-        <h3 className="font-semibold mb-4">収益推移（発生月ベース）</h3>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+          <h3 className="font-semibold">収益推移</h3>
+          <p className="text-xs text-muted-foreground">
+            売上KPIと同じ金額・計上月・営業ステータスで集計（見込みベース）
+          </p>
+        </div>
         {months.length === 0 ? (
-          <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
-            対象期間に収益確定した案件がありません
+          <div className="h-40 flex items-center justify-center text-center text-muted-foreground text-sm px-4">
+            対象期間に計上される案件がありません。期間フィルターを広げるか、
+            売上KPIの対象ステータス・計上月フィールドの設定をご確認ください。
           </div>
         ) : (
           <div className="h-[220px] sm:h-[300px]">

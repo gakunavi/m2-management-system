@@ -27,8 +27,13 @@ export const dynamic = 'force-dynamic';
 // GET /api/v1/dashboard/profit
 // ============================================
 //
-// 自社売上・代理店報酬・粗利を発生月ベースで返す。
+// 自社売上・代理店報酬・粗利を返す。
 // 期間パラメータは /dashboard/summary と同じ（month / startMonth+endMonth / period=all）。
+//
+// 計上基準はダッシュボードの売上KPI（プライマリKPI）と同じ:
+// 同じ金額フィールドを取扱高とし、同じ日付フィールドで月に割り当て、
+// 同じ営業ステータス条件で母集団を決める。ダッシュボードは見込みを見る画面なので、
+// 収益確定日（支払明細の締めに使う確定ベース）には依存させない。
 //
 // 自社取り分（businessConfig.rewardConfig.companyShare）が未設定の事業は
 // 「自社売上0」ではなく集計対象外として扱う。全事業が未設定なら enabled=false を返し、

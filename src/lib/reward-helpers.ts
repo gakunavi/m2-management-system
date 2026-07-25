@@ -405,7 +405,7 @@ export function computeProjectEntries(
 // DB ラッパー：事業ぶんの報酬明細を計算
 // ============================================
 
-type LinkRow = {
+export type LinkRow = {
   partnerId: number;
   rewardSlots: unknown;
   paymentTiming: string | null;
@@ -413,10 +413,11 @@ type LinkRow = {
   businessParentId: number | null;
 };
 
-type ConfirmedProjectRow = {
+export type ConfirmedProjectRow = {
   id: number;
   projectNo: string;
   partnerId: number | null;
+  projectSalesStatus: string;
   projectExpectedCloseMonth: string | null;
   projectCustomData: unknown;
   revenueConfirmedAt: Date | null;
@@ -429,6 +430,8 @@ type ConfirmedProjectRow = {
 
 export interface BusinessRewardContext {
   config: RewardConfig;
+  /** KPI定義・案件フィールド定義を読むために生の businessConfig も持ち回る */
+  businessConfig: unknown;
   linkByPartner: Map<number, LinkRow>;
   projects: ConfirmedProjectRow[];
 }
@@ -528,6 +531,7 @@ export async function loadBusinessRewardContext(
       id: true,
       projectNo: true,
       partnerId: true,
+      projectSalesStatus: true,
       projectExpectedCloseMonth: true,
       projectCustomData: true,
       revenueConfirmedAt: true,
@@ -539,7 +543,7 @@ export async function loadBusinessRewardContext(
     },
   });
 
-  return { config, linkByPartner, projects };
+  return { config, businessConfig: business.businessConfig, linkByPartner, projects };
 }
 
 /**

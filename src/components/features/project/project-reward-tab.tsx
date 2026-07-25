@@ -225,7 +225,9 @@ export function ProjectRewardTab({ entityId }: Props) {
       <div>
         <h4 className="text-sm font-medium mb-1">この案件の収益（保存済みの内容で計算）</h4>
         <p className="text-xs text-muted-foreground mb-2">
-          粗利 = 自社売上 − 代理店報酬（直紹介＋間接、税抜）。収益確定前は「-」になります。
+          粗利 = 自社売上 − 代理店報酬（直紹介＋間接、税抜）。
+          金額は売上KPIの対象ステータス・計上月に合致する案件でのみ表示されます
+          （合致しない場合は「-」）。
         </p>
         <div className="overflow-x-auto">
           <table className="text-sm border-collapse">
