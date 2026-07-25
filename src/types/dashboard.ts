@@ -111,6 +111,43 @@ export interface RevenueTrendResponse {
   months: RevenueTrendMonth[];
 }
 
+// --- 収益（自社売上・粗利）---
+// 取扱高(GMV) → 自社売上（取り分適用後）→ 粗利（自社売上 − 代理店報酬）。
+// すべて発生月ベース（支払月ではない）。
+
+export interface ProfitTotals {
+  gmv: number;
+  companyRevenue: number;
+  rewardDirect: number;
+  rewardIndirect: number;
+  rewardTotal: number;
+  grossProfit: number;
+  grossMargin: number | null;
+  projectCount: number;
+}
+
+export interface ProfitMonth extends ProfitTotals {
+  month: string;
+  monthLabel: string;
+}
+
+export interface ProfitBusinessItem extends ProfitTotals {
+  businessId: number;
+  businessName: string;
+}
+
+export interface ProfitResponse {
+  /** 自社取り分が設定済みの事業が1つ以上あるか。false なら画面に収益を出さない */
+  enabled: boolean;
+  currentMonth: string;
+  months: ProfitMonth[];
+  totals: ProfitTotals;
+  /** 単月モードのみ。前月の実績（前月比の算出用） */
+  previous: ProfitTotals | null;
+  /** 会社全体モードのみ。事業別の内訳 */
+  businesses?: ProfitBusinessItem[];
+}
+
 export interface PipelineStatus {
   statusCode: string;
   statusLabel: string;

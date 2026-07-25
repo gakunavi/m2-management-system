@@ -28,7 +28,7 @@ export interface RewardSlots {
 
 // --- Zod スキーマ（API 入力検証・JSON パース用）---
 
-const rewardSettingSchema = z.object({
+export const rewardSettingSchema = z.object({
   type: z.enum(['rate', 'fixed']),
   value: z.number().min(0),
 });

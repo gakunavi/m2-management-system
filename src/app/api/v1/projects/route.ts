@@ -13,7 +13,13 @@ import { formatProject } from '@/lib/format-project';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
-import { calculateShotRewardsByProject } from '@/lib/reward-helpers';
+import {
+  calculateProjectFinancialsByBusiness,
+  canSeeCompanyRevenue,
+  EMPTY_FINANCIALS,
+  visibleFinancials,
+  type ProjectFinancials,
+} from '@/lib/profit-helpers';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 const createProjectSchema = z.object({
@@ -287,14 +293,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 列設定用: 事業ごとのショット報酬額（直紹介・間接）を計算し、案件IDでまとめる
-    const shotRewardsByProject = new Map<number, { direct: number | null; indirect: number | null }>();
+    // 列設定用: 事業ごとの報酬額（ショット/ストック × 直紹介/間接）・自社売上・粗利を
+    // 計算し、案件IDでまとめる
+    const financialsByProject = new Map<number, ProjectFinancials>();
     if (businessIds.length > 0) {
       const perBusiness = await Promise.all(
-        businessIds.map((bizId) => calculateShotRewardsByProject(prisma, bizId)),
+        businessIds.map((bizId) => calculateProjectFinancialsByBusiness(prisma, bizId)),
       );
       for (const m of perBusiness) {
-        m.forEach((amounts, projectId) => shotRewardsByProject.set(projectId, amounts));
+        m.forEach((financials, projectId) => financialsByProject.set(projectId, financials));
       }
     }
 
@@ -346,7 +353,11 @@ export async function GET(request: NextRequest) {
         partnerFlat.partnerVersion = partner.version ?? null;
       }
 
-      const shotReward = shotRewardsByProject.get(p.id);
+      // 自社取り分・自社売上・粗利は社内情報。代理店ロールには値を伏せる
+      const financials = visibleFinancials(
+        financialsByProject.get(p.id) ?? EMPTY_FINANCIALS,
+        canSeeCompanyRevenue(user.role),
+      );
 
       return {
         ...formatted,
@@ -359,8 +370,7 @@ export async function GET(request: NextRequest) {
         partnerCustomData: partnerGlobalData,
         projectSalesStatusLabel: status?.label ?? null,
         projectSalesStatusColor: status?.color ?? null,
-        rewardShotDirect: shotReward?.direct ?? null,
-        rewardShotIndirect: shotReward?.indirect ?? null,
+        ...financials,
         // アプリ側ソート(status戦略)のキーに使用
         businessId: p.businessId,
       };

@@ -31,6 +31,7 @@ export function formatProject(project: ProjectWithRelations) {
     cancelledAt: project.cancelledAt?.toISOString() ?? null,
     stockTermMonths: project.stockTermMonths ?? null,
     rewardOverride: project.rewardOverride ?? null,
+    companyShareOverride: project.companyShareOverride ?? null,
     projectIsActive: project.projectIsActive,
     portalVisible: project.portalVisible,
     version: project.version,

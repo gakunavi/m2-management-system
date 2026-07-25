@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { RewardSettingInput } from './reward-setting-input';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
+import type { CompanyShareConfig } from '@/lib/company-share';
 
 // ============================================
 // 型定義
@@ -23,6 +24,7 @@ interface RewardConfig {
   taxRate: number;
   paymentTiming: PaymentTiming;
   closingDay?: number | null;
+  companyShare?: CompanyShareConfig;
 }
 
 interface BusinessData {
@@ -45,6 +47,7 @@ const DEFAULT_CONFIG: RewardConfig = {
   taxRate: 10,
   paymentTiming: 'same',
   closingDay: null,
+  companyShare: {},
 };
 
 const PAYMENT_TIMING_LABELS: Record<PaymentTiming, string> = {
@@ -89,6 +92,25 @@ export function RewardConfigSettings({ entityId }: Props) {
       },
     }));
   };
+
+  const updateCompanyShare = (kind: 'shot' | 'stock', value: RewardSetting | undefined) => {
+    setConfig((prev) => ({
+      ...prev,
+      companyShare: { ...prev.companyShare, [kind]: value },
+    }));
+  };
+
+  const updateCompanyShareBaseField = (kind: 'shot' | 'stock', field: string | null) => {
+    setConfig((prev) => ({
+      ...prev,
+      companyShare: {
+        ...prev.companyShare,
+        [kind === 'shot' ? 'shotBaseField' : 'stockBaseField']: field,
+      },
+    }));
+  };
+
+  const companyShare = config.companyShare ?? {};
 
   const handleSave = async () => {
     if (!businessData) return;
@@ -220,6 +242,70 @@ export function RewardConfigSettings({ entityId }: Props) {
             <span className="text-sm text-muted-foreground ml-2">日締め</span>
           </div>
         )}
+      </div>
+
+      {/* ── 自社取り分（レベニューシェア）── */}
+      <div className="space-y-4 border-t pt-6">
+        <div>
+          <h4 className="text-sm font-medium">自社取り分（レベニューシェア）</h4>
+          <p className="text-xs text-muted-foreground mt-1">
+            取扱高（顧客が支払う総額）のうち、自社の売上になる割合を設定します。
+            ダッシュボードの「自社売上」「粗利（自社売上 − 代理店報酬）」はこの設定で計算されます。
+            案件ごとの個別条件は案件詳細の「報酬」タブで上書きできます。
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            未設定のままだと自社売上は計上されず、ダッシュボードに収益カードは表示されません。
+          </p>
+        </div>
+
+        <div className="pl-2 space-y-1">
+          <RewardSettingInput
+            label="ショット（1回）"
+            value={companyShare.shot}
+            onChange={(v) => updateCompanyShare('shot', v)}
+            unsetHint="未設定（自社売上に計上しません）"
+          />
+          <RewardSettingInput
+            label="ストック（毎月）"
+            value={companyShare.stock}
+            onChange={(v) => updateCompanyShare('stock', v)}
+            unsetHint="未設定（自社売上に計上しません）"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium block mb-1">取り分の基準金額フィールド（ショット）</label>
+            <select
+              className="border rounded px-2 py-1 text-sm w-full"
+              value={companyShare.shotBaseField ?? ''}
+              onChange={(e) => updateCompanyShareBaseField('shot', e.target.value || null)}
+            >
+              <option value="">（未設定＝ショット報酬の基準と同じ）</option>
+              {numberFields.map((f) => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium block mb-1">取り分の基準金額フィールド（ストック）</label>
+            <select
+              className="border rounded px-2 py-1 text-sm w-full"
+              value={companyShare.stockBaseField ?? ''}
+              onChange={(e) => updateCompanyShareBaseField('stock', e.target.value || null)}
+            >
+              <option value="">（未設定＝ストック報酬の基準と同じ）</option>
+              {numberFields.map((f) => (
+                <option key={f.key} value={f.key}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          率（%）で設定する場合、基準フィールドが金額であることを確認してください。
+          台数などの数量フィールドを基準にすると、率をかけた結果が金額になりません。
+          その場合は固定額（円）を選ぶか、金額フィールドを基準に指定してください。
+        </p>
       </div>
 
       {isAdmin && (

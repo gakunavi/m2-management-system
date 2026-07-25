@@ -6,6 +6,12 @@ import {
   type RewardSetting,
   type RewardSlots,
 } from '@/lib/reward-slots';
+import {
+  parseCompanyShare,
+  parseCompanyShareConfig,
+  type CompanyShare,
+  type CompanyShareConfig,
+} from '@/lib/company-share';
 
 // ============================================
 // 代理店報酬 計算エンジン
@@ -32,6 +38,8 @@ export interface RewardConfig {
   taxRate: number; // 消費税率(%)。既定 10
   paymentTiming: PaymentTiming;
   closingDay: number | null;
+  /** 自社取り分（レベニューシェア）の事業デフォルト。粗利計算に使う */
+  companyShare: CompanyShareConfig;
 }
 
 /** 計算対象の案件（DB非依存。日付は JST の YYYY-MM / 日 に変換済み） */
@@ -47,6 +55,7 @@ export interface ProjectRewardInput {
   cancelledMonth: string | null; // 解約月（YYYY-MM）。null=継続中
   stockTermMonths: number | null; // ストック固定期間（月数）。null=解約日まで
   rewardOverride: RewardSlots | null; // 案件別上書き
+  companyShareOverride: CompanyShare | null; // 案件別の自社取り分上書き
 }
 
 /** 代理店×事業リンク（報酬設定・支払いタイミング特例） */
@@ -167,7 +176,25 @@ export function getRewardConfig(businessConfig: unknown): RewardConfig | null {
     taxRate: typeof rc.taxRate === 'number' ? rc.taxRate : 10,
     paymentTiming: timing,
     closingDay: typeof rc.closingDay === 'number' ? rc.closingDay : null,
+    companyShare: parseCompanyShareConfig(rc.companyShare),
   };
+}
+
+/**
+ * 自社取り分の基準金額フィールドを解決する。
+ * 取り分は原則として報酬と同じ基準額（取扱高）に掛けるため、既定では
+ * 報酬の shotBaseField / stockBaseField をそのまま使う。事業によって
+ * 「報酬の基準は台数だが取り分の基準は金額」のようにズレる場合のみ、
+ * companyShare 側の個別指定で上書きする。
+ */
+export function resolveCompanyShareBaseField(
+  config: RewardConfig,
+  kind: RewardKind,
+): string | null {
+  if (kind === 'shot') {
+    return config.companyShare.shotBaseField ?? config.shotBaseField;
+  }
+  return config.companyShare.stockBaseField ?? config.stockBaseField;
 }
 
 /** 報酬設定を基準額に適用（率→⌊base×率⌋ / 固定→⌊value⌋、円未満切り捨て） */
@@ -207,6 +234,33 @@ function resolveIndirect(
 ): RewardSetting | undefined {
   const merged = mergeRewardSlots(config.defaults, parentLink?.rewardSlots, project.rewardOverride);
   return merged[kind]?.indirect;
+}
+
+/** 1案件について、4スロット全ての報酬設定を解決した結果（未設定は undefined） */
+export interface ResolvedProjectRewardSettings {
+  shotDirect: RewardSetting | undefined;
+  shotIndirect: RewardSetting | undefined;
+  stockDirect: RewardSetting | undefined;
+  stockIndirect: RewardSetting | undefined;
+}
+
+/**
+ * 1案件に適用される報酬設定を4スロットぶん解決する（純粋関数）。
+ * 明細計算を通さずに「この案件のストック報酬は月いくらか」を出したい
+ * 一覧列表示などで使う。
+ */
+export function resolveProjectRewardSettings(
+  config: RewardConfig,
+  responsibleLink: LinkRewardInput | null,
+  parentLink: LinkRewardInput | null,
+  project: ProjectRewardInput,
+): ResolvedProjectRewardSettings {
+  return {
+    shotDirect: resolveDirect('shot', config, responsibleLink, project),
+    shotIndirect: resolveIndirect('shot', config, parentLink, project),
+    stockDirect: resolveDirect('stock', config, responsibleLink, project),
+    stockIndirect: resolveIndirect('stock', config, parentLink, project),
+  };
 }
 
 /** その代理店の支払いタイミング（リンク特例→事業デフォルト） */
@@ -369,10 +423,11 @@ type ConfirmedProjectRow = {
   cancelledAt: Date | null;
   stockTermMonths: number | null;
   rewardOverride: unknown;
+  companyShareOverride: unknown;
   customer: { customerName: string | null } | null;
 };
 
-interface BusinessRewardContext {
+export interface BusinessRewardContext {
   config: RewardConfig;
   linkByPartner: Map<number, LinkRow>;
   projects: ConfirmedProjectRow[];
@@ -390,7 +445,7 @@ function toLinkInput(l: LinkRow | undefined): LinkRewardInput | null {
 }
 
 /** 担当代理店の直リンクと、その親代理店（間接）のリンクを解決する */
-function resolveResponsibleAndParentLinks(
+export function resolveResponsibleAndParentLinks(
   partnerId: number | null,
   linkByPartner: Map<number, LinkRow>,
 ): { responsibleLink: LinkRewardInput | null; parentLink: LinkRewardInput | null } {
@@ -404,7 +459,7 @@ function resolveResponsibleAndParentLinks(
 }
 
 /** 案件行(DB) → computeProjectEntries が要求する ProjectRewardInput へ変換 */
-function toProjectRewardInput(p: ConfirmedProjectRow): ProjectRewardInput {
+export function toProjectRewardInput(p: ConfirmedProjectRow): ProjectRewardInput {
   const confirmed = p.revenueConfirmedAt ? toJstMonthDay(p.revenueConfirmedAt) : null;
   const cancelled = p.cancelledAt ? toJstMonthDay(p.cancelledAt) : null;
   return {
@@ -419,17 +474,27 @@ function toProjectRewardInput(p: ConfirmedProjectRow): ProjectRewardInput {
     cancelledMonth: cancelled?.month ?? null,
     stockTermMonths: p.stockTermMonths,
     rewardOverride: parseRewardSlots(p.rewardOverride),
+    companyShareOverride: parseCompanyShare(p.companyShareOverride),
   };
 }
 
 /**
- * 事業の報酬設定・代理店リンク・確定済み案件をまとめて取得する共通ロード処理。
- * calculateBusinessRewardEntries（期間指定の明細計算）と
- * calculateShotRewardsByProject（一覧列表示用のショット報酬額のみの計算）の両方が使う。
+ * 事業の報酬設定・代理店リンク・案件をまとめて取得する共通ロード処理。
+ * calculateBusinessRewardEntries（期間指定の明細計算）・月次P/L計算・
+ * 一覧列表示用の案件別収益計算がいずれもこれを使う。
+ *
+ * @param options.includeUnconfirmed true なら収益未確定の案件も含める。
+ *   報酬・自社売上の「金額」は収益確定後にしか発生しないが、案件一覧では
+ *   未確定案件でも「適用中の自社取り分（例: 15%）」を表示したいため、
+ *   列表示用途のみ true で呼ぶ。金額計算側は revenueConfirmedMonth が null の
+ *   案件を自前で除外するので、含めても金額がズレることはない。
+ * @param options.projectIds 指定時はその案件だけに絞る（単票 PATCH レスポンス用）。
+ *   代理店リンク・事業設定は事業全体ぶんをそのまま読む（親代理店の解決に必要）。
  */
-async function loadBusinessRewardContext(
+export async function loadBusinessRewardContext(
   prisma: PrismaClient,
   businessId: number,
+  options: { includeUnconfirmed?: boolean; projectIds?: number[] } = {},
 ): Promise<BusinessRewardContext | null> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -453,7 +518,12 @@ async function loadBusinessRewardContext(
   for (const l of links) linkByPartner.set(l.partnerId, l);
 
   const projects = await prisma.project.findMany({
-    where: { businessId, revenueConfirmedAt: { not: null }, projectIsActive: true },
+    where: {
+      businessId,
+      projectIsActive: true,
+      ...(options.includeUnconfirmed ? {} : { revenueConfirmedAt: { not: null } }),
+      ...(options.projectIds ? { id: { in: options.projectIds } } : {}),
+    },
     select: {
       id: true,
       projectNo: true,
@@ -464,6 +534,7 @@ async function loadBusinessRewardContext(
       cancelledAt: true,
       stockTermMonths: true,
       rewardOverride: true,
+      companyShareOverride: true,
       customer: { select: { customerName: true } },
     },
   });
@@ -489,43 +560,6 @@ export async function calculateBusinessRewardEntries(
     const input = toProjectRewardInput(p);
     const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(p.partnerId, ctx.linkByPartner);
     result.push(...computeProjectEntries(input, responsibleLink, parentLink, ctx.config, sourceFrom, sourceTo));
-  }
-  return result;
-}
-
-/**
- * 案件一覧の列表示用: 事業内の確定済み案件それぞれについて、
- * ショット報酬額（直紹介・間接）だけを計算する。
- *
- * ストックと違い、ショットは発生月がちょうど収益確定月の1回だけなので、
- * 月レンジ指定は不要（各案件ごとに「確定月＝確定月」の1ヶ月レンジで計算すればよい）。
- * 一覧のページング単位（最大100件程度）で呼ばれる想定。
- */
-export async function calculateShotRewardsByProject(
-  prisma: PrismaClient,
-  businessId: number,
-): Promise<Map<number, { direct: number | null; indirect: number | null }>> {
-  const result = new Map<number, { direct: number | null; indirect: number | null }>();
-  const ctx = await loadBusinessRewardContext(prisma, businessId);
-  if (!ctx) return result;
-
-  for (const p of ctx.projects) {
-    const input = toProjectRewardInput(p);
-    if (!input.revenueConfirmedMonth) continue;
-    const { responsibleLink, parentLink } = resolveResponsibleAndParentLinks(p.partnerId, ctx.linkByPartner);
-    const entries = computeProjectEntries(
-      input,
-      responsibleLink,
-      parentLink,
-      ctx.config,
-      input.revenueConfirmedMonth,
-      input.revenueConfirmedMonth,
-    ).filter((e) => e.rewardKind === 'shot');
-
-    result.set(p.id, {
-      direct: entries.find((e) => e.entryType === 'direct')?.rewardAmount ?? null,
-      indirect: entries.find((e) => e.entryType === 'indirect')?.rewardAmount ?? null,
-    });
   }
   return result;
 }

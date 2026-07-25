@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { RewardSettingInput } from '@/components/features/business/reward-setting-input';
 import { isoToJstDateInput, jstDateInputToIso } from '@/lib/jst-date';
 import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
+import type { CompanyShare } from '@/lib/company-share';
 
 // ============================================
 // 案件の代理店報酬（収益確定・解約日・案件別上書き）
@@ -24,7 +25,24 @@ interface ProjectData {
   revenueConfirmedAt: string | null;
   cancelledAt: string | null;
   rewardOverride: RewardSlots | null;
+  companyShareOverride: CompanyShare | null;
+  // 収益（確認用の実効値。API が計算して返す）
+  companyShareShotLabel: string | null;
+  companyShareStockLabel: string | null;
+  companyRevenueShot: number | null;
+  companyRevenueStock: number | null;
+  grossProfitShot: number | null;
+  grossProfitStock: number | null;
+  grossMarginShot: number | null;
+  grossMarginStock: number | null;
+  rewardShotDirect: number | null;
+  rewardShotIndirect: number | null;
+  rewardStockDirect: number | null;
+  rewardStockIndirect: number | null;
 }
+
+const yen = (v: number | null) => (v != null ? `¥${v.toLocaleString()}` : '-');
+const pct = (v: number | null) => (v != null ? `${v.toFixed(1)}%` : '-');
 
 interface Props {
   entityId: number;
@@ -39,6 +57,7 @@ export function ProjectRewardTab({ entityId }: Props) {
   const [revenueConfirmedDate, setRevenueConfirmedDate] = useState('');
   const [cancelledDate, setCancelledDate] = useState('');
   const [override, setOverride] = useState<RewardSlots>({});
+  const [shareOverride, setShareOverride] = useState<CompanyShare>({});
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', String(entityId)],
@@ -51,6 +70,7 @@ export function ProjectRewardTab({ entityId }: Props) {
     setRevenueConfirmedDate(toDateInputValue(project.revenueConfirmedAt));
     setCancelledDate(toDateInputValue(project.cancelledAt));
     setOverride(project.rewardOverride ?? {});
+    setShareOverride(project.companyShareOverride ?? {});
   }, [project]);
 
   const updateMutation = useMutation({
@@ -71,13 +91,15 @@ export function ProjectRewardTab({ entityId }: Props) {
     project &&
     (toDateInputValue(project.revenueConfirmedAt) !== revenueConfirmedDate ||
       toDateInputValue(project.cancelledAt) !== cancelledDate ||
-      JSON.stringify(project.rewardOverride ?? {}) !== JSON.stringify(override));
+      JSON.stringify(project.rewardOverride ?? {}) !== JSON.stringify(override) ||
+      JSON.stringify(project.companyShareOverride ?? {}) !== JSON.stringify(shareOverride));
 
   const handleSave = () => {
     updateMutation.mutate({
       revenueConfirmedAt: dateInputToIso(revenueConfirmedDate),
       cancelledAt: dateInputToIso(cancelledDate),
       rewardOverride: Object.keys(override).length > 0 ? override : null,
+      companyShareOverride: Object.keys(shareOverride).length > 0 ? shareOverride : null,
     });
   };
 
@@ -86,6 +108,10 @@ export function ProjectRewardTab({ entityId }: Props) {
       ...prev,
       [kind]: { ...prev[kind], [side]: value },
     }));
+  };
+
+  const updateShare = (kind: 'shot' | 'stock', value: RewardSetting | undefined) => {
+    setShareOverride((prev) => ({ ...prev, [kind]: value }));
   };
 
   if (isLoading || !project) {
@@ -170,6 +196,79 @@ export function ProjectRewardTab({ entityId }: Props) {
             onChange={(v) => updateSlot('stock', 'indirect', v)}
             unsetHint="リンク/事業デフォルトを使用"
           />
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-sm font-medium mb-1">この案件だけの自社取り分上書き</h4>
+        <p className="text-xs text-muted-foreground mb-2">
+          取扱高のうち自社の売上になる割合です。チェックを外すと事業マスタの
+          「自社取り分」設定にフォールバックします。
+          （例: 通常は販売額の20%だがこの契約だけ15%）
+        </p>
+        <div className="pl-2">
+          <RewardSettingInput
+            label="ショット（1回）"
+            value={shareOverride.shot}
+            onChange={(v) => updateShare('shot', v)}
+            unsetHint="事業デフォルトを使用"
+          />
+          <RewardSettingInput
+            label="ストック（毎月）"
+            value={shareOverride.stock}
+            onChange={(v) => updateShare('stock', v)}
+            unsetHint="事業デフォルトを使用"
+          />
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-sm font-medium mb-1">この案件の収益（保存済みの内容で計算）</h4>
+        <p className="text-xs text-muted-foreground mb-2">
+          粗利 = 自社売上 − 代理店報酬（直紹介＋間接、税抜）。収益確定前は「-」になります。
+        </p>
+        <div className="overflow-x-auto">
+          <table className="text-sm border-collapse">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="text-left font-normal py-1 pr-6"> </th>
+                <th className="text-right font-normal py-1 pr-6">ショット</th>
+                <th className="text-right font-normal py-1">ストック（月額）</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t">
+                <td className="py-1 pr-6">自社取り分</td>
+                <td className="py-1 pr-6 text-right">{project.companyShareShotLabel ?? '-'}</td>
+                <td className="py-1 text-right">{project.companyShareStockLabel ?? '-'}</td>
+              </tr>
+              <tr className="border-t">
+                <td className="py-1 pr-6">自社売上</td>
+                <td className="py-1 pr-6 text-right">{yen(project.companyRevenueShot)}</td>
+                <td className="py-1 text-right">{yen(project.companyRevenueStock)}</td>
+              </tr>
+              <tr className="border-t">
+                <td className="py-1 pr-6">代理店報酬（直紹介）</td>
+                <td className="py-1 pr-6 text-right">{yen(project.rewardShotDirect)}</td>
+                <td className="py-1 text-right">{yen(project.rewardStockDirect)}</td>
+              </tr>
+              <tr className="border-t">
+                <td className="py-1 pr-6">代理店報酬（間接）</td>
+                <td className="py-1 pr-6 text-right">{yen(project.rewardShotIndirect)}</td>
+                <td className="py-1 text-right">{yen(project.rewardStockIndirect)}</td>
+              </tr>
+              <tr className="border-t font-medium">
+                <td className="py-1 pr-6">粗利</td>
+                <td className="py-1 pr-6 text-right">{yen(project.grossProfitShot)}</td>
+                <td className="py-1 text-right">{yen(project.grossProfitStock)}</td>
+              </tr>
+              <tr className="border-t">
+                <td className="py-1 pr-6">粗利率</td>
+                <td className="py-1 pr-6 text-right">{pct(project.grossMarginShot)}</td>
+                <td className="py-1 text-right">{pct(project.grossMarginStock)}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

@@ -329,6 +329,105 @@ export const projectListConfig: EntityListConfig = {
       group: '報酬情報',
       render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
     },
+    {
+      key: 'rewardStockDirect',
+      label: 'ストック報酬（直紹介）/月',
+      width: 170,
+      align: 'right',
+      defaultVisible: false,
+      group: '報酬情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'rewardStockIndirect',
+      label: 'ストック報酬（間接）/月',
+      width: 170,
+      align: 'right',
+      defaultVisible: false,
+      group: '報酬情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    // ── 収益情報（自社取り分・自社売上・粗利）──
+    // 取り分は事業デフォルト → 案件別上書き で解決した実効値。編集は案件詳細の
+    // 「報酬」タブ（案件別）／事業マスタの報酬設定（デフォルト）で行う。
+    {
+      key: 'companyShareShotLabel',
+      label: '自社取り分（ショット）',
+      width: 160,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value, row) =>
+        value != null
+          ? `${String(value)}${row?.companyShareIsOverridden ? '（案件上書き）' : ''}`
+          : '-',
+    },
+    {
+      key: 'companyShareStockLabel',
+      label: '自社取り分（ストック）',
+      width: 160,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value, row) =>
+        value != null
+          ? `${String(value)}${row?.companyShareIsOverridden ? '（案件上書き）' : ''}`
+          : '-',
+    },
+    {
+      key: 'companyRevenueShot',
+      label: '自社売上（ショット）',
+      width: 160,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'grossProfitShot',
+      label: '粗利（ショット）',
+      width: 150,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'grossMarginShot',
+      label: '粗利率（ショット）',
+      width: 140,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value) => (value != null ? `${(value as number).toFixed(1)}%` : '-'),
+    },
+    {
+      key: 'companyRevenueStock',
+      label: '自社売上（ストック）/月',
+      width: 180,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'grossProfitStock',
+      label: '粗利（ストック）/月',
+      width: 170,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value) => (value != null ? `¥${(value as number).toLocaleString()}` : '-'),
+    },
+    {
+      key: 'grossMarginStock',
+      label: '粗利率（ストック）',
+      width: 140,
+      align: 'right',
+      defaultVisible: false,
+      group: '収益情報',
+      render: (value) => (value != null ? `${(value as number).toFixed(1)}%` : '-'),
+    },
     // ── システム ──
     { key: 'updatedAt', label: '更新日時', width: 150, sortable: true, group: 'システム情報' },
     { key: 'createdAt', label: '作成日時', width: 150, sortable: true, defaultVisible: false, group: 'システム情報' },

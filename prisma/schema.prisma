@@ -562,6 +562,9 @@ model Project {
   // 案件別の報酬上書き（直・間接とも）。{ type: 'rate'|'fixed', value: number } | null
   // 案件別の報酬上書き（RewardSlots 構造の部分JSON。ショット/ストック×直/間接）
   rewardOverride            Json?             @map("reward_override")
+  // 案件別の自社取り分上書き（CompanyShare 構造の部分JSON）
+  // { shot?: {type,value}, stock?: {type,value} }。未設定なら事業デフォルトにフォールバック
+  companyShareOverride      Json?             @map("company_share_override")
   // ストック報酬の終了。解約日（null=継続中）
   cancelledAt               DateTime?         @map("cancelled_at") @db.Timestamptz(6)
   // ストック固定期間（月数）。将来用。null=解約日まで

@@ -11,6 +11,12 @@ import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import { rewardSlotsSchema } from '@/lib/reward-slots';
+import { companyShareSchema } from '@/lib/company-share';
+import {
+  calculateProjectFinancials,
+  canSeeCompanyRevenue,
+  visibleFinancials,
+} from '@/lib/profit-helpers';
 
 const updateProjectSchema = z.object({
   customerId: z.number().int().positive().optional(),
@@ -33,6 +39,8 @@ const updateProjectSchema = z.object({
   cancelledAt: z.string().datetime().optional().nullable(),
   stockTermMonths: z.number().int().positive().optional().nullable(),
   rewardOverride: rewardSlotsSchema.optional().nullable(),
+  // 案件別の自社取り分上書き（例: 通常20%だがこの契約だけ15%）
+  companyShareOverride: companyShareSchema.optional().nullable(),
   version: z.number().int().min(1),
 });
 
@@ -152,11 +160,19 @@ export async function GET(
     const partGlobalData = (partnerObj?.partnerCustomData ?? {}) as Record<string, unknown>;
     for (const [k, v] of Object.entries(partGlobalData)) flatCustom[`partnerGlobal_${k}`] = v;
 
+    // 報酬・自社売上・粗利（一覧 GET と同じキー集合を返す）。
+    // 自社取り分・粗利は社内情報なので代理店ロールには値を伏せる
+    const financials = visibleFinancials(
+      await calculateProjectFinancials(prisma, project.businessId, project.id),
+      canSeeCompanyRevenue(user.role),
+    );
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(project),
         ...flatCustom,
+        ...financials,
         customerLinkCustomData: custLinkData,
         customerCustomData: custGlobalData,
         partnerLinkCustomData: partLinkData,
@@ -189,6 +205,11 @@ export async function PATCH(
     const body = await request.json();
     const data = updateProjectSchema.parse(body);
     const { version, projectCustomData: newCustomData, projectSalesStatus, ...updateData } = data;
+
+    // 自社取り分は社内の収益設定。代理店ロールからの変更は受け付けない
+    if (updateData.companyShareOverride !== undefined && !canSeeCompanyRevenue(user.role)) {
+      throw ApiError.forbidden('自社取り分を変更する権限がありません');
+    }
 
     const existing = await prisma.project.findUnique({
       where: { id: projectId },
@@ -247,7 +268,13 @@ export async function PATCH(
     // 既存値と同じ値（多くは null）が明示的に含まれる。これを「手動指定」と区別せずに
     // 扱うと、ステータス変更による自動ラッチが毎回この値で上書きされてしまう。
     // そのため、既存値と異なる場合のみ「手動指定」とみなす。
-    const { revenueConfirmedAt: manualRevenueConfirmedAt, cancelledAt: manualCancelledAt, rewardOverride, ...restUpdateData } = updateData;
+    const {
+      revenueConfirmedAt: manualRevenueConfirmedAt,
+      cancelledAt: manualCancelledAt,
+      rewardOverride,
+      companyShareOverride,
+      ...restUpdateData
+    } = updateData;
     const existingRevenueConfirmedIso = existing.revenueConfirmedAt ? existing.revenueConfirmedAt.toISOString() : null;
     const isManualRevenueConfirmedChange =
       manualRevenueConfirmedAt !== undefined && manualRevenueConfirmedAt !== existingRevenueConfirmedIso;
@@ -261,6 +288,9 @@ export async function PATCH(
         ...restUpdateData,
         ...(manualCancelledAt !== undefined && { cancelledAt: manualCancelledAt ? new Date(manualCancelledAt) : null }),
         ...(rewardOverride !== undefined && { rewardOverride: (rewardOverride ?? {}) as Prisma.InputJsonValue }),
+        ...(companyShareOverride !== undefined && {
+          companyShareOverride: (companyShareOverride ?? {}) as Prisma.InputJsonValue,
+        }),
         ...(resolvedRevenueConfirmedAt !== undefined && { revenueConfirmedAt: resolvedRevenueConfirmedAt }),
         ...(projectSalesStatus !== undefined && { projectSalesStatus }),
         ...(statusChangedAt && { projectStatusChangedAt: statusChangedAt }),
@@ -368,6 +398,15 @@ export async function PATCH(
       patchPartnerFlat.partnerVersion = (partner.version as number) ?? null;
     }
 
+    // 報酬・自社売上・粗利を再計算して返す。
+    // インライン編集は PATCH レスポンスで一覧の行を丸ごと置換するため、ここで
+    // 返さないと一覧の報酬・収益列が消える（GET 一覧と同じキー集合が必要）。
+    // 収益確定日・解約日・取り分上書きの変更で値自体も変わるので再計算が要る。
+    const patchFinancials = visibleFinancials(
+      await calculateProjectFinancials(prisma, updated.businessId, updated.id),
+      canSeeCompanyRevenue(user.role),
+    );
+
     return NextResponse.json({
       success: true,
       data: {
@@ -375,6 +414,7 @@ export async function PATCH(
         ...flatCustom,
         ...patchCustomerFlat,
         ...patchPartnerFlat,
+        ...patchFinancials,
         customerLinkCustomData: patchCustLinkData,
         customerCustomData: patchCustGlobalData,
         partnerLinkCustomData: patchPartLinkData,

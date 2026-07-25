@@ -150,7 +150,7 @@ describe('getStockActiveMonths', () => {
     id: 1, projectNo: 'P1', customerName: null, partnerId: 1,
     projectExpectedCloseMonth: null, projectCustomData: {},
     revenueConfirmedMonth: '2026-03', revenueConfirmedDay: 10,
-    cancelledMonth: null, stockTermMonths: null, rewardOverride: null,
+    cancelledMonth: null, stockTermMonths: null, rewardOverride: null, companyShareOverride: null,
   };
   it('未確定は空', () => {
     expect(getStockActiveMonths({ ...base, revenueConfirmedMonth: null }, '2026-01', '2026-12')).toEqual([]);
@@ -180,14 +180,14 @@ describe('getStockActiveMonths', () => {
 // ============================================
 const configShotOnly: RewardConfig = {
   defaults: { shot: { direct: { type: 'rate', value: 20 }, indirect: { type: 'rate', value: 5 } } },
-  shotBaseField: 'amount', stockBaseField: null, taxRate: 10, paymentTiming: 'same', closingDay: null,
+  shotBaseField: 'amount', stockBaseField: null, taxRate: 10, paymentTiming: 'same', closingDay: null, companyShare: {},
 };
 
 const projBase: ProjectRewardInput = {
   id: 10, projectNo: 'MG-0010', customerName: '株式会社A', partnerId: 100,
   projectExpectedCloseMonth: null, projectCustomData: { amount: 500000, monthly: 50000 },
   revenueConfirmedMonth: '2026-03', revenueConfirmedDay: 10,
-  cancelledMonth: null, stockTermMonths: null, rewardOverride: null,
+  cancelledMonth: null, stockTermMonths: null, rewardOverride: null, companyShareOverride: null,
 };
 
 const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null };
@@ -250,7 +250,7 @@ describe('computeProjectEntries - ストック', () => {
       shot: { direct: { type: 'rate', value: 20 } },
       stock: { direct: { type: 'rate', value: 10 }, indirect: { type: 'fixed', value: 1000 } },
     },
-    shotBaseField: 'amount', stockBaseField: 'monthly', taxRate: 10, paymentTiming: 'same', closingDay: null,
+    shotBaseField: 'amount', stockBaseField: 'monthly', taxRate: 10, paymentTiming: 'same', closingDay: null, companyShare: {},
   };
 
   it('確定月から毎月ストック（率）＋確定月にショット', () => {

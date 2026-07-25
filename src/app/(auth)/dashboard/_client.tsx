@@ -26,6 +26,10 @@ const PipelineChart = dynamic(
   () => import('@/components/features/dashboard/pipeline-chart').then((m) => m.PipelineChart),
   { loading: () => <Skeleton className="h-64 w-full rounded-lg" /> },
 );
+const ProfitSection = dynamic(
+  () => import('@/components/features/dashboard/profit-section').then((m) => m.ProfitSection),
+  { loading: () => <Skeleton className="h-64 w-full rounded-lg" /> },
+);
 import { BusinessSummaryList } from '@/components/features/dashboard/business-summary-list';
 import { PartnerRanking } from '@/components/features/dashboard/partner-ranking';
 import { KpiTabSelector } from '@/components/features/dashboard/kpi-tab-selector';
@@ -37,6 +41,7 @@ import type {
   RevenueTrendResponse,
   PipelineResponse,
   PartnerRankingResponse,
+  ProfitResponse,
   KpiDefinition,
 } from '@/types/dashboard';
 
@@ -83,6 +88,11 @@ function CompanyDashboard() {
     queryFn: () => apiClient.get<PipelineResponse>(`/dashboard/pipeline?_=1${periodParams}`),
   });
 
+  const { data: profit, isLoading: profitLoading } = useQuery({
+    queryKey: ['dashboard', 'profit', periodKey],
+    queryFn: () => apiClient.get<ProfitResponse>(`/dashboard/profit?_=1${periodParams}`),
+  });
+
   return (
     <div className="space-y-6">
       <AnnouncementBanner />
@@ -113,6 +123,8 @@ function CompanyDashboard() {
           />
         </div>
       </div>
+
+      <ProfitSection data={profit} isLoading={profitLoading} showBusinessBreakdown />
 
       <PipelineChart data={pipeline} isLoading={pipelineLoading} />
 
@@ -189,6 +201,13 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
       ),
   });
 
+  // 収益（自社売上・粗利）は KPI 選択に依存しない（事業の自社取り分設定で決まる）
+  const { data: profit, isLoading: profitLoading } = useQuery({
+    queryKey: ['dashboard', 'profit', businessId, periodKey],
+    queryFn: () =>
+      apiClient.get<ProfitResponse>(`/dashboard/profit?businessId=${businessId}${periodParams}`),
+  });
+
 
 
   const currentKpi = kpiDefinitions.find((k) => k.key === selectedKpiKey);
@@ -225,6 +244,9 @@ function BusinessDashboard({ businessId }: { businessId: number }) {
         highlightMonth={highlightMonth}
         hideYearSelector={isMonthMode}
       />
+
+      {/* 収益（自社売上・代理店報酬・粗利） */}
+      <ProfitSection data={profit} isLoading={profitLoading} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <PipelineChart data={pipeline} isLoading={pipelineLoading} />

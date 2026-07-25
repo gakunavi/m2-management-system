@@ -1,0 +1,270 @@
+'use client';
+
+import { memo } from 'react';
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { CHART_COLORS, CHART_DEFAULTS, formatCurrency, formatYAxis } from './chart-config';
+import type { ProfitResponse, ProfitTotals } from '@/types/dashboard';
+
+// ============================================
+// 収益セクション（自社売上・代理店報酬・粗利）
+// ============================================
+//
+// 取扱高（顧客が支払う総額）と自社売上（取り分適用後）は別物なので、
+// 混同しないよう自社売上カードに取扱高を併記する。
+// 「粗利」は売上総利益。経常利益は販管費・営業外を含む全社の数字で
+// 事業別には配賦なしに出せないため、ここでは扱わない。
+
+interface Props {
+  data: ProfitResponse | undefined;
+  isLoading?: boolean;
+  /** 事業別内訳を表示するか（会社全体モード） */
+  showBusinessBreakdown?: boolean;
+}
+
+type ChangeType = 'positive' | 'negative' | 'neutral';
+
+const changeColors: Record<ChangeType, string> = {
+  positive: 'text-green-600',
+  negative: 'text-red-600',
+  neutral: 'text-muted-foreground',
+};
+
+function ChangeIcon({ type }: { type: ChangeType }) {
+  if (type === 'positive') return <TrendingUp className="h-3.5 w-3.5" />;
+  if (type === 'negative') return <TrendingDown className="h-3.5 w-3.5" />;
+  return <Minus className="h-3.5 w-3.5" />;
+}
+
+function resolveChangeType(current: number, previous: number): ChangeType {
+  if (current > previous) return 'positive';
+  if (current < previous) return 'negative';
+  return 'neutral';
+}
+
+/** 前月比の説明文。前月データが無い期間モードでは null */
+function changeText(current: number, previous: ProfitTotals | null, pick: (t: ProfitTotals) => number): {
+  text: string;
+  type: ChangeType;
+} | null {
+  if (!previous) return null;
+  const prev = pick(previous);
+  if (prev === 0) return { text: '前月データなし', type: 'neutral' };
+  const rate = Math.round(((current - prev) / prev) * 1000) / 10;
+  return {
+    text: `${rate > 0 ? '+' : ''}${rate.toFixed(1)}% 前月比`,
+    type: resolveChangeType(current, prev),
+  };
+}
+
+const formatMargin = (v: number | null) => (v != null ? `${v.toFixed(1)}%` : '-');
+
+function ProfitCard({
+  label,
+  value,
+  sub,
+  change,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  change: { text: string; type: ChangeType } | null;
+  accent: string;
+}) {
+  return (
+    <div className={`rounded-lg border border-l-4 bg-card p-5 shadow-sm ${accent}`}>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-2xl font-bold mt-1">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+      {change && (
+        <div className={`flex items-center gap-1 mt-2 text-xs ${changeColors[change.type]}`}>
+          <ChangeIcon type={change.type} />
+          <span>{change.text}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ value: number; dataKey: string; name: string }>;
+  label?: string;
+}) {
+  if (!active || !payload) return null;
+  return (
+    <div className="bg-card p-3 rounded-lg shadow-lg border text-sm">
+      <p className="font-medium mb-1">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.dataKey}>
+          {entry.name}: {formatCurrency(entry.value)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+const SERIES_LABELS: Record<string, string> = {
+  companyRevenue: '自社売上',
+  rewardTotal: '代理店報酬',
+  grossProfit: '粗利',
+};
+
+export const ProfitSection = memo(function ProfitSection({ data, isLoading, showBusinessBreakdown }: Props) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-lg border bg-card p-5 animate-pulse">
+            <div className="h-4 w-20 bg-muted rounded mb-3" />
+            <div className="h-7 w-32 bg-muted rounded mb-2" />
+            <div className="h-3 w-24 bg-muted rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // 自社取り分が未設定の事業しかない場合は、誤解を招く 0 円/マイナス粗利を出さず
+  // 設定への導線だけを示す
+  if (!data || !data.enabled) {
+    return (
+      <div className="rounded-lg border bg-card p-5">
+        <h3 className="font-semibold mb-1">収益（自社売上・粗利）</h3>
+        <p className="text-sm text-muted-foreground">
+          事業マスタの「代理店報酬」設定にある<strong>自社取り分</strong>が未設定のため表示できません。
+          取扱高のうち自社の売上になる割合を設定すると、自社売上・粗利・粗利率が表示されます。
+        </p>
+      </div>
+    );
+  }
+
+  const { totals, previous, months } = data;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
+        <ProfitCard
+          label="自社売上"
+          value={formatCurrency(totals.companyRevenue, true)}
+          sub={`取扱高 ${formatCurrency(totals.gmv, true)}`}
+          change={changeText(totals.companyRevenue, previous, (t) => t.companyRevenue)}
+          accent="border-l-primary"
+        />
+        <ProfitCard
+          label="代理店報酬"
+          value={formatCurrency(totals.rewardTotal, true)}
+          sub={`直紹介 ${formatCurrency(totals.rewardDirect, true)} / 間接 ${formatCurrency(totals.rewardIndirect, true)}`}
+          change={changeText(totals.rewardTotal, previous, (t) => t.rewardTotal)}
+          accent="border-l-warning"
+        />
+        <ProfitCard
+          label="粗利"
+          value={formatCurrency(totals.grossProfit, true)}
+          sub="自社売上 − 代理店報酬（税抜）"
+          change={changeText(totals.grossProfit, previous, (t) => t.grossProfit)}
+          accent="border-l-success"
+        />
+        <ProfitCard
+          label="粗利率"
+          value={formatMargin(totals.grossMargin)}
+          sub={`対象案件 ${totals.projectCount.toLocaleString()}件`}
+          change={null}
+          accent="border-l-info"
+        />
+      </div>
+
+      <div className="rounded-lg border bg-card p-5">
+        <h3 className="font-semibold mb-4">収益推移（発生月ベース）</h3>
+        {months.length === 0 ? (
+          <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+            対象期間に収益確定した案件がありません
+          </div>
+        ) : (
+          <div className="h-[220px] sm:h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={months} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} />
+                <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 12 }} width={60} />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend
+                  formatter={(value: string) => SERIES_LABELS[value] ?? value}
+                  wrapperStyle={{ fontSize: '12px' }}
+                />
+                <Bar
+                  dataKey="companyRevenue"
+                  name={SERIES_LABELS.companyRevenue}
+                  fill={CHART_COLORS.primary}
+                  barSize={CHART_DEFAULTS.barSize}
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="rewardTotal"
+                  name={SERIES_LABELS.rewardTotal}
+                  fill={CHART_COLORS.warning}
+                  barSize={CHART_DEFAULTS.barSize}
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  dataKey="grossProfit"
+                  name={SERIES_LABELS.grossProfit}
+                  stroke={CHART_COLORS.success}
+                  strokeWidth={CHART_DEFAULTS.lineStrokeWidth}
+                  dot={{ r: 3 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {showBusinessBreakdown && data.businesses && data.businesses.length > 0 && (
+        <div className="rounded-lg border bg-card p-5">
+          <h3 className="font-semibold mb-3">事業別の収益</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-muted-foreground border-b">
+                  <th className="text-left font-normal py-2 pr-4">事業</th>
+                  <th className="text-right font-normal py-2 pr-4">取扱高</th>
+                  <th className="text-right font-normal py-2 pr-4">自社売上</th>
+                  <th className="text-right font-normal py-2 pr-4">代理店報酬</th>
+                  <th className="text-right font-normal py-2 pr-4">粗利</th>
+                  <th className="text-right font-normal py-2">粗利率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.businesses.map((b) => (
+                  <tr key={b.businessId} className="border-b last:border-0">
+                    <td className="py-2 pr-4">{b.businessName}</td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(b.gmv, true)}</td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(b.companyRevenue, true)}</td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(b.rewardTotal, true)}</td>
+                    <td className="py-2 pr-4 text-right">{formatCurrency(b.grossProfit, true)}</td>
+                    <td className="py-2 text-right">{formatMargin(b.grossMargin)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
