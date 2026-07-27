@@ -10,6 +10,7 @@ import { RewardSettingInput } from './reward-setting-input';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import type { RewardSlots, RewardSetting } from '@/lib/reward-slots';
 import type { CompanyShareConfig } from '@/lib/company-share';
+import type { StatusDefinition } from '@/hooks/use-status-definitions';
 
 // ============================================
 // 型定義
@@ -74,6 +75,12 @@ export function RewardConfigSettings({ entityId }: Props) {
     enabled: !!entityId,
   });
 
+  const { data: statusDefs = [] } = useQuery({
+    queryKey: ['status-definitions', entityId],
+    queryFn: () => apiClient.get<StatusDefinition[]>(`/businesses/${entityId}/status-definitions`),
+    enabled: !!entityId,
+  });
+
   useEffect(() => {
     if (!businessData) return;
     const rc = businessData.businessConfig?.rewardConfig;
@@ -110,7 +117,21 @@ export function RewardConfigSettings({ entityId }: Props) {
     }));
   };
 
+  const toggleCompanyShareStatus = (statusCode: string) => {
+    setConfig((prev) => {
+      const current = prev.companyShare?.statusFilter ?? [];
+      const next = current.includes(statusCode)
+        ? current.filter((c) => c !== statusCode)
+        : [...current, statusCode];
+      return {
+        ...prev,
+        companyShare: { ...prev.companyShare, statusFilter: next.length > 0 ? next : null },
+      };
+    });
+  };
+
   const companyShare = config.companyShare ?? {};
+  const companyShareStatuses = companyShare.statusFilter ?? [];
 
   const handleSave = async () => {
     if (!businessData) return;
@@ -329,6 +350,48 @@ export function RewardConfigSettings({ entityId }: Props) {
           台数などの数量フィールドを基準にすると、率をかけた結果が金額になりません。
           その場合は固定額（円）を選ぶか、金額フィールドを基準に指定してください。
         </p>
+
+        <div>
+          <label className="text-sm font-medium block mb-1">収益の計上対象ステータス</label>
+          <div className="rounded-md border border-input bg-background p-3">
+            {statusDefs.filter((s) => s.statusIsActive).length === 0 ? (
+              <p className="text-sm text-muted-foreground">ステータスが未定義です</p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {statusDefs
+                  .filter((s) => s.statusIsActive)
+                  .map((s) => (
+                    <label
+                      key={s.statusCode}
+                      className="flex items-center gap-1.5 text-sm cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={companyShareStatuses.includes(s.statusCode)}
+                        onChange={() => {
+                          if (!isAdmin) return;
+                          toggleCompanyShareStatus(s.statusCode);
+                        }}
+                        disabled={!isAdmin}
+                        className="rounded border-input"
+                      />
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: s.statusColor ?? '#6b7280' }}
+                      />
+                      {s.statusLabel}
+                    </label>
+                  ))}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            ダッシュボードの収益セクション（取扱高・自社売上・粗利）と案件一覧の収益列で、
+            チェックしたステータスの案件だけを計上します。
+            未選択のままだと売上KPI（プライマリKPI）の対象ステータスをそのまま使います。
+            この設定は売上KPIカードの数字には影響しません。
+          </p>
+        </div>
       </div>
 
       {isAdmin && (

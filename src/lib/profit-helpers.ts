@@ -9,6 +9,7 @@ import {
   applyRewardSetting,
   computeChainRewardAmounts,
   computeProjectEntries,
+  getRewardConfig,
   getStockActiveMonths,
   loadBusinessRewardContext,
   resolveCompanyShareBaseField,
@@ -50,6 +51,11 @@ import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 //   対象案件 = プライマリKPIの statusFilter に合致する案件
 // これにより、ダッシュボードの「売上」カードと収益セクションの母集団が一致する。
 //
+// ただし対象ステータスだけは、事業マスタの「収益の計上対象ステータス」で
+// 収益セクション専用に絞り込める（rewardConfig.companyShare.statusFilter）。
+// 売上カードは見込み全体を広く見たいが、自社売上・粗利は確度の高い案件だけで
+// 見たい、という運用のために用意した上書き。未設定ならKPIの母集団と一致したまま。
+//
 // 一方、支払明細書（/rewards の締め）は revenueConfirmedAt を起点とする確定ベースの
 // ままで、こちらは変更していない。ダッシュボード＝見込み、明細＝確定、と役割が違う。
 
@@ -75,16 +81,25 @@ export interface ProfitBasis {
  * 「台数 × 取り分」という無意味な計算になるのを防ぐため。
  * プライマリKPI以外を基準にしたい場合は、事業マスタの
  * 「取り分の基準金額フィールド」で明示的に指定する。
+ *
+ * ステータスだけは例外で、事業マスタの「収益の計上対象ステータス」
+ * （rewardConfig.companyShare.statusFilter）が設定されていればそちらを優先する。
+ * 売上KPIカードは見込み全体を広く見たい／自社売上・粗利は確度の高い案件だけで
+ * 見たい、という運用上のズレを、KPI定義を変えずに吸収するため。
  */
 export function resolveProfitBasis(businessConfig: unknown): ProfitBasis | null {
   const kpi = getPrimaryKpiDefinition(businessConfig);
   if (!kpi) return null;
 
-  const statusCodes = kpi.statusFilter
+  const kpiStatusCodes = kpi.statusFilter
     ? Array.isArray(kpi.statusFilter)
       ? kpi.statusFilter
       : [kpi.statusFilter]
     : null;
+
+  // 収益専用の対象ステータス（未設定・空配列ならKPIの statusFilter に従う）
+  const override = getRewardConfig(businessConfig)?.companyShare.statusFilter;
+  const statusCodes = override && override.length > 0 ? override : kpiStatusCodes;
 
   return {
     // 数量KPI（aggregation='count'）は金額ではないので取扱高の基準にしない

@@ -128,6 +128,34 @@ describe('resolveProfitBasis', () => {
     expect(basis?.statusCodes).toEqual(['受注']);
   });
 
+  it('収益の計上対象ステータスが設定されていればKPIより優先する', () => {
+    const basis = resolveProfitBasis({
+      ...businessConfig,
+      rewardConfig: {
+        defaults: {},
+        companyShare: { shot: { type: 'rate', value: 20 }, statusFilter: ['受注'] },
+      },
+    });
+    // 取扱高・計上月はプライマリKPIのまま、母集団だけ絞られる
+    expect(basis?.statusCodes).toEqual(['受注']);
+    expect(basis?.sourceField).toBe('amount');
+    expect(basis?.dateField).toBe('projectExpectedCloseMonth');
+  });
+
+  it('収益の計上対象ステータスが未設定・空配列ならKPIの statusFilter に従う', () => {
+    const withNull = resolveProfitBasis({
+      ...businessConfig,
+      rewardConfig: { defaults: {}, companyShare: { statusFilter: null } },
+    });
+    expect(withNull?.statusCodes).toEqual(['受注', '納品済']);
+
+    const withEmpty = resolveProfitBasis({
+      ...businessConfig,
+      rewardConfig: { defaults: {}, companyShare: { statusFilter: [] } },
+    });
+    expect(withEmpty?.statusCodes).toEqual(['受注', '納品済']);
+  });
+
   it('数量KPI（count集計）は取扱高の基準にしない', () => {
     const basis = resolveProfitBasis({
       kpiDefinitions: [{ ...businessConfig.kpiDefinitions[0], aggregation: 'count', sourceField: null }],

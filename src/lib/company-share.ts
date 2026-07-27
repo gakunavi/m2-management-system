@@ -30,6 +30,16 @@ export interface CompanyShareConfig extends CompanyShare {
   shotBaseField?: string | null;
   /** ストック取り分の基準金額フィールド（月額）。null=報酬の stockBaseField を使う */
   stockBaseField?: string | null;
+  /**
+   * 収益（自社売上・粗利）の計上対象とする営業ステータス。
+   * null / 空配列 = プライマリKPIの statusFilter に従う（従来動作）。
+   *
+   * 売上KPIカードは営業の見込み全体を見たいので広いステータスを対象にしたい一方、
+   * 自社売上・粗利は確度の高い案件だけで見たい、というズレを吸収するための設定。
+   * 基準金額フィールド（shotBaseField / stockBaseField）と同じく、
+   * 「収益だけ軸をずらす」ための上書きとしてここに置く。
+   */
+  statusFilter?: string[] | null;
 }
 
 // --- Zod スキーマ（API 入力検証・JSON パース用）---
@@ -42,6 +52,7 @@ export const companyShareSchema = z.object({
 export const companyShareConfigSchema = companyShareSchema.extend({
   shotBaseField: z.string().nullable().optional(),
   stockBaseField: z.string().nullable().optional(),
+  statusFilter: z.array(z.string()).nullable().optional(),
 });
 
 /**
