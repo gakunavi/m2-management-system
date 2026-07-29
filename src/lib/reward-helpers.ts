@@ -476,6 +476,8 @@ export type LinkRow = {
 export type ConfirmedProjectRow = {
   id: number;
   projectNo: string;
+  /** 顧客名を出せない外部向け集計（統計API）で匿名IDを組み立てるために持つ */
+  customerId: number;
   partnerId: number | null;
   projectSalesStatus: string;
   projectExpectedCloseMonth: string | null;
@@ -577,6 +579,7 @@ export async function loadBusinessRewardContext(
     select: {
       id: true,
       projectNo: true,
+      customerId: true,
       partnerId: true,
       projectSalesStatus: true,
       projectExpectedCloseMonth: true,

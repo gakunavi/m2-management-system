@@ -231,8 +231,13 @@ export function canSeeCompanyRevenue(role: string): boolean {
   return role === 'admin' || role === 'staff';
 }
 
-/** 粗利率（%）。自社売上が 0 または未設定なら null（0除算・無意味な100%を避ける） */
-function calcMargin(grossProfit: number | null, companyRevenue: number | null): number | null {
+/**
+ * 粗利率（%）。自社売上が 0 または未設定なら null（0除算・無意味な100%を避ける）。
+ *
+ * 呼び出し側でロールアップ（代理店別など）を作るときも必ずこれを使う。
+ * 丸め方が1箇所ずれるだけで「合計は合うのに率だけ合わない」表が出来上がるため。
+ */
+export function calcMarginPercent(grossProfit: number | null, companyRevenue: number | null): number | null {
   if (grossProfit === null || companyRevenue === null || companyRevenue === 0) return null;
   return Math.round((grossProfit / companyRevenue) * 1000) / 10;
 }
@@ -324,13 +329,13 @@ export function computeProjectFinancials(
     rewardShotTotal,
     companyRevenueShot,
     grossProfitShot,
-    grossMarginShot: calcMargin(grossProfitShot, companyRevenueShot),
+    grossMarginShot: calcMarginPercent(grossProfitShot, companyRevenueShot),
     rewardStockDirect,
     rewardStockIndirect,
     rewardStockTotal,
     companyRevenueStock,
     grossProfitStock,
-    grossMarginStock: calcMargin(grossProfitStock, companyRevenueStock),
+    grossMarginStock: calcMarginPercent(grossProfitStock, companyRevenueStock),
   };
 }
 
@@ -492,8 +497,8 @@ export function computeMonthlyPL(
         ...b,
         rewardTotal,
         grossProfit,
-        grossMargin: calcMargin(grossProfit, b.companyRevenue),
-        grossMarginOnGmv: calcMargin(grossProfit, b.gmv),
+        grossMargin: calcMarginPercent(grossProfit, b.companyRevenue),
+        grossMarginOnGmv: calcMarginPercent(grossProfit, b.gmv),
         projectCount: projectsInMonth.get(b.month)?.size ?? 0,
       };
     })
@@ -642,8 +647,8 @@ export function computeProjectPLRows(
       companyRevenue,
       rewardTotal,
       grossProfit,
-      grossMargin: calcMargin(grossProfit, companyRevenue),
-      grossMarginOnGmv: calcMargin(grossProfit, gmv),
+      grossMargin: calcMarginPercent(grossProfit, companyRevenue),
+      grossMarginOnGmv: calcMarginPercent(grossProfit, gmv),
     });
   }
 
@@ -662,6 +667,103 @@ export async function calculateBusinessProjectPL(
   if (!isCompanyShareConfigured(ctx.config.companyShare)) return null;
   const basis = prepareContext(ctx);
   return computeProjectPLRows(ctx, basis, fromMonth, toMonth);
+}
+
+// ============================================
+// 案件 × 計上月の内訳（外部集計API用）
+// ============================================
+
+/**
+ * 期間内の「案件 1 件 × 計上月 1 ヶ月」ぶんの収益。
+ *
+ * ProjectPLRow（画面の突き合わせ用）との違い:
+ *   - 月を持つ（ストック展開で1案件が複数月にまたがる場合は複数行になる）
+ *   - 顧客名ではなく customerId を持つ（会社名を出せない外部向けAPIで匿名IDにする）
+ *   - 営業ステータス・代理店IDを持つ（確度の判定と代理店別ロールアップ用）
+ * 金額は月次P/L・案件別内訳と同じ projectMonthDeltas から作るので、
+ * どの切り口で集計しても合計が一致する。
+ */
+export interface ProjectMonthPL {
+  projectId: number;
+  projectNo: string;
+  customerId: number;
+  partnerId: number | null;
+  partnerName: string | null;
+  salesStatus: string;
+  month: string;
+  /**
+   * KPIの計上月（＝ショットを立てた月）か。
+   * 台数のような「1案件につき1回」の指標を、ストック展開した各月に
+   * 重複計上しないための目印。
+   */
+  isRecognitionMonth: boolean;
+  gmv: number;
+  companyRevenue: number;
+  rewardDirect: number;
+  rewardIndirect: number;
+  rewardTotal: number;
+  grossProfit: number;
+  grossMargin: number | null; // % 自社売上比
+  grossMarginOnGmv: number | null; // % 取扱高比
+}
+
+/** 期間内に計上のあった「案件 × 月」を、取扱高の大きい順に返す */
+export function computeProjectMonthPLRows(
+  ctx: BusinessRewardContext,
+  basis: ProfitBasis | null,
+  fromMonth: string,
+  toMonth: string,
+): ProjectMonthPL[] {
+  if (!basis) return [];
+
+  const rows: ProjectMonthPL[] = [];
+  for (const row of ctx.projects) {
+    const deltas = projectMonthDeltas(ctx, basis, row, fromMonth, toMonth);
+    if (deltas.length === 0) continue;
+
+    const recognitionMonth = recognitionMonthOf(toProjectRewardInput(row), basis);
+    for (const d of deltas) {
+      const rewardTotal = d.rewardDirect + d.rewardIndirect;
+      const grossProfit = d.companyRevenue - rewardTotal;
+      rows.push({
+        projectId: row.id,
+        projectNo: row.projectNo,
+        customerId: row.customerId,
+        partnerId: row.partnerId,
+        partnerName: row.partner?.partnerName ?? null,
+        salesStatus: row.projectSalesStatus,
+        month: d.month,
+        isRecognitionMonth: d.month === recognitionMonth,
+        gmv: d.gmv,
+        companyRevenue: d.companyRevenue,
+        rewardDirect: d.rewardDirect,
+        rewardIndirect: d.rewardIndirect,
+        rewardTotal,
+        grossProfit,
+        grossMargin: calcMarginPercent(grossProfit, d.companyRevenue),
+        grossMarginOnGmv: calcMarginPercent(grossProfit, d.gmv),
+      });
+    }
+  }
+
+  return rows.sort((a, b) => (b.gmv !== a.gmv ? b.gmv - a.gmv : compareMonth(a.month, b.month)));
+}
+
+/**
+ * 事業の「案件 × 計上月」内訳を DB から計算する。
+ * 自社取り分が未設定の事業は null を返す（0 埋めしない）。
+ */
+export async function calculateBusinessProjectMonthPL(
+  prisma: PrismaClient,
+  businessId: number,
+  fromMonth: string,
+  toMonth: string,
+): Promise<ProjectMonthPL[] | null> {
+  const ctx = await loadBusinessRewardContext(prisma, businessId, { includeUnconfirmed: true });
+  if (!ctx) return null;
+  if (!isCompanyShareConfigured(ctx.config.companyShare)) return null;
+  const basis = prepareContext(ctx);
+  return computeProjectMonthPLRows(ctx, basis, fromMonth, toMonth);
 }
 
 /** 月次 P/L を期間合計にまとめる */
@@ -686,8 +788,8 @@ export function sumMonthlyPL(months: MonthlyPL[]): PLTotals {
     total.grossProfit += m.grossProfit;
     total.projectCount += m.projectCount;
   }
-  total.grossMargin = calcMargin(total.grossProfit, total.companyRevenue);
-  total.grossMarginOnGmv = calcMargin(total.grossProfit, total.gmv);
+  total.grossMargin = calcMarginPercent(total.grossProfit, total.companyRevenue);
+  total.grossMarginOnGmv = calcMarginPercent(total.grossProfit, total.gmv);
   return total;
 }
 

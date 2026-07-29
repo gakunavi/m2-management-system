@@ -8,12 +8,23 @@ import {
   getRevenueMonth,
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
+import { addMonths, getRewardConfig } from '@/lib/reward-helpers';
+import { isCompanyShareConfigured } from '@/lib/company-share';
+import {
+  calculateBusinessMonthlyPL,
+  calculateBusinessProjectMonthPL,
+  sumMonthlyPL,
+  resolveProfitBasis,
+} from '@/lib/profit-helpers';
+import { buildRevenueSection, type RevenueSection } from '@/lib/stats-revenue';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 export const dynamic = 'force-dynamic';
 
 // ============================================================================
 // GET /api/stats/strategy-report?months=6
+//                              ?from=2026-07&to=2026-12
+//                              ?months_ahead=6
 //
 // 経営戦略室の AI（Claude Cowork）向け read-only 集計 API。
 // - 認証: Authorization: Bearer <STATS_API_TOKEN>
@@ -22,6 +33,11 @@ export const dynamic = 'force-dynamic';
 // - 対象事業: env STATS_BUSINESS_CODE（安定キー businessCode で解決）
 // - 読み取り専用。DB への書き込み・スキーマ変更は一切行わない。
 // - 顧客の個人情報・会社名は返さない（customer_ref は匿名 ID のみ）。
+//
+// revenue（自社売上・手数料・粗利）の計算式はこのファイルには書かない。
+// ダッシュボード（/api/v1/dashboard/profit）と同じ profit-helpers の関数を
+// そのまま呼ぶ。二重実装にすると画面と統計APIで数字が食い違い、
+// 「どちらが正しい」の議論で信用を失うため。
 // ============================================================================
 
 const DEFAULT_MONTHS = 6;
@@ -48,6 +64,106 @@ function monthRange(fromYm: string, toYm: string): string[] {
     }
   }
   return result;
+}
+
+/** "YYYY-MM" 形式か（月は 01-12） */
+const YEAR_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** その月の末日（"YYYY-MM-DD"） */
+function lastDayOfMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const day = new Date(y, m, 0).getDate(); // 翌月の0日 = 当月末日
+  return `${ym}-${String(day).padStart(2, '0')}`;
+}
+
+type PeriodResolution =
+  | { ok: true; fromYm: string; toYm: string; monthsList: string[]; fromStr: string; toStr: string; notes: string[] }
+  | { ok: false; error: string };
+
+/**
+ * 集計期間を解決する。
+ *
+ * - months（過去Nヶ月）: 従来どおり。既存の呼び出しを壊さないため挙動を変えない。
+ * - from/to: 両方必須の任意区間。最大24ヶ月を **超えたらエラー**にする。
+ *   未来側を黙って切り詰めると「12月まで指定したのに10月までしか返っていない」ことに
+ *   気づけないため。notes は読み飛ばされる前提で設計する。
+ * - months_ahead: 当月を含む先Nヶ月。過去側（months）に足す形で末尾を延ばす。
+ *   こちらは上限超過時にクリップし、notes に明記する。
+ */
+function resolvePeriod(params: URLSearchParams, now: Date): PeriodResolution {
+  const notes: string[] = [];
+  const fromParam = params.get('from');
+  const toParam = params.get('to');
+
+  // --- from/to 指定（months より優先） ---
+  if (fromParam || toParam) {
+    if (!fromParam || !toParam) {
+      return { ok: false, error: 'from と to は両方指定してください（任意区間は from/to のペアで指定します）。' };
+    }
+    if (!YEAR_MONTH_RE.test(fromParam) || !YEAR_MONTH_RE.test(toParam)) {
+      return { ok: false, error: 'from / to は "YYYY-MM" 形式で指定してください（例: from=2026-07&to=2026-12）。' };
+    }
+    if (fromParam > toParam) {
+      return { ok: false, error: `from(${fromParam}) が to(${toParam}) より後ろになっています。` };
+    }
+    const monthsList = monthRange(fromParam, toParam);
+    if (monthsList.length > MAX_MONTHS) {
+      return {
+        ok: false,
+        error: `指定された期間は ${monthsList.length} ヶ月です。from/to での指定は最大 ${MAX_MONTHS} ヶ月までです。期間を分割してください（未来側を黙って切り詰めると欠落に気づけないため、クランプではなくエラーにしています）。`,
+      };
+    }
+    return {
+      ok: true,
+      fromYm: fromParam,
+      toYm: toParam,
+      monthsList,
+      fromStr: `${fromParam}-01`,
+      toStr: lastDayOfMonth(toParam),
+      notes,
+    };
+  }
+
+  // --- months（従来どおり）+ months_ahead（未来側の延長） ---
+  const monthsParam = params.get('months');
+  let months = monthsParam ? parseInt(monthsParam, 10) : DEFAULT_MONTHS;
+  if (!Number.isFinite(months) || months < 1) months = DEFAULT_MONTHS;
+  if (months > MAX_MONTHS) months = MAX_MONTHS;
+
+  const fromDate = new Date(now.getFullYear(), now.getMonth() - months, 1);
+  const fromYm = toYearMonth(fromDate);
+  const currentYm = toYearMonth(now);
+  const baseList = monthRange(fromYm, currentYm);
+
+  const aheadParam = params.get('months_ahead');
+  let ahead = aheadParam ? parseInt(aheadParam, 10) : 0;
+  if (!Number.isFinite(ahead) || ahead < 0) ahead = 0;
+  if (ahead > MAX_MONTHS) {
+    notes.push(`months_ahead は最大 ${MAX_MONTHS} です（指定値をクリップしました）。`);
+    ahead = MAX_MONTHS;
+  }
+
+  // months_ahead=1 は「当月のみ」。当月は既に baseList に含まれるので延長は ahead-1 ヶ月。
+  const requestedExtra = ahead > 0 ? ahead - 1 : 0;
+  const allowedExtra = Math.max(0, MAX_MONTHS - baseList.length);
+  const extra = Math.min(requestedExtra, allowedExtra);
+  if (extra < requestedExtra) {
+    notes.push(
+      `months(${months}) と months_ahead(${ahead}) の合計が上限 ${MAX_MONTHS} ヶ月を超えるため、未来側を ${extra} ヶ月ぶんに切り詰めました。返っている期間は period.from / period.to が正です（月末までの先の月が必要な場合は months を小さくするか from/to で指定してください）。`,
+    );
+  }
+
+  const toYm = extra > 0 ? addMonths(currentYm, extra) : currentYm;
+  return {
+    ok: true,
+    fromYm,
+    toYm,
+    monthsList: monthRange(fromYm, toYm),
+    fromStr: `${fromYm}-01`,
+    // 未来を含まない従来の呼び出しでは period.to をリクエスト日のまま返す（後方互換）
+    toStr: extra > 0 ? lastDayOfMonth(toYm) : now.toISOString().substring(0, 10),
+    notes,
+  };
 }
 
 /** ISO 8601（JST, +09:00）形式のタイムスタンプ */
@@ -85,21 +201,13 @@ export async function GET(request: NextRequest) {
   }
 
   // --- パラメータ ---------------------------------------------------------
-  const monthsParam = request.nextUrl.searchParams.get('months');
-  let months = monthsParam ? parseInt(monthsParam, 10) : DEFAULT_MONTHS;
-  if (!Number.isFinite(months) || months < 1) months = DEFAULT_MONTHS;
-  if (months > MAX_MONTHS) months = MAX_MONTHS;
+  const period = resolvePeriod(request.nextUrl.searchParams, now);
+  if (!period.ok) {
+    return NextResponse.json({ error: period.error }, { status: 400 });
+  }
+  const { fromYm, toYm, monthsList: months_list, fromStr, toStr } = period;
 
-  // 期間: 当月を含み、過去 months ヶ月分のバケットを対象とする
-  // from = 当月の months ヶ月前の月初, to = 現在時刻
-  const fromDate = new Date(now.getFullYear(), now.getMonth() - months, 1);
-  const fromYm = toYearMonth(fromDate);
-  const currentYm = toYearMonth(now);
-  const months_list = monthRange(fromYm, currentYm);
-  const fromStr = `${fromYm}-01`;
-  const toStr = now.toISOString().substring(0, 10);
-
-  const notes: string[] = [];
+  const notes: string[] = [...period.notes];
 
   // --- 対象事業の解決 -----------------------------------------------------
   const businessCode = process.env.STATS_BUSINESS_CODE;
@@ -148,11 +256,32 @@ export async function GET(request: NextRequest) {
   const activeFieldKeys = getActiveFieldKeys(businessConfig);
 
   const primaryKpi = getPrimaryKpiDefinition(businessConfig);
-  // 金額フィールド: プライマリ KPI の sourceField（aggregation=count の場合は金額なし）
-  const amountField =
+  const rewardConfig = getRewardConfig(businessConfig);
+  const profitBasis = resolveProfitBasis(businessConfig);
+
+  // 金額フィールドの解決順:
+  //   1) rewardConfig.shotBaseField（明示指定された取扱高の基準金額）
+  //   2) プライマリ KPI の sourceField（aggregation=count の場合は金額なし）
+  //
+  // KPI を先に見てはいけない。プライマリ KPI が「受注台数」のような数量 KPI の
+  // 事業では amount に台数が入り、同じレスポンス内の revenue.gmv（金額）と
+  // 桁が合わずに必ず読み間違えられる。収益計算（profit-helpers）が取扱高に使う
+  // フィールドと同じものをここでも使い、amount と gmv の参照先を一致させる。
+  const explicitShotBaseField =
+    typeof (businessConfig as { rewardConfig?: { shotBaseField?: unknown } } | null)?.rewardConfig
+      ?.shotBaseField === 'string'
+      ? ((businessConfig as { rewardConfig: { shotBaseField: string } }).rewardConfig.shotBaseField)
+      : null;
+  const kpiAmountField =
     primaryKpi && primaryKpi.aggregation !== 'count' && primaryKpi.sourceField
       ? primaryKpi.sourceField
       : null;
+  const amountField = explicitShotBaseField ?? kpiAmountField;
+  if (explicitShotBaseField && explicitShotBaseField !== kpiAmountField) {
+    notes.push(
+      `amount / amount_total は取扱高の基準金額フィールド "${explicitShotBaseField}"（事業マスタの手数料設定 shotBaseField、revenue.gmv と同じ参照先）から取っています。プライマリKPI("${primaryKpi?.label ?? '-'}")の参照先とは異なります。`,
+    );
+  }
   if (!amountField) {
     notes.push(
       '金額フィールドが businessConfig の KPI（sourceField）から解決できないため、amount 系は 0/null になります。',
@@ -363,7 +492,7 @@ export async function GET(request: NextRequest) {
   const closedInPeriod = projects
     .filter((p) => wonCodes.has(p.projectSalesStatus))
     .map((p) => ({ p, month: closeMonthOf(p) }))
-    .filter(({ month }) => month !== null && month >= fromYm && month <= currentYm)
+    .filter(({ month }) => month !== null && month >= fromYm && month <= toYm)
     .sort((a, b) => (a.month! < b.month! ? -1 : 1));
   const closed_deals = closedInPeriod.map(({ p, month }) => {
     const meta = agentMetaOf(p.partnerId);
@@ -451,6 +580,61 @@ export async function GET(request: NextRequest) {
   // --- lead_time（算出せず null） ----------------------------------------
   const lead_time = { avg_days: null, min_days: null, max_days: null, n: closed_deals.length };
 
+  // --- revenue（取扱高・自社売上・代理店手数料・粗利） --------------------
+  // 計算はすべて profit-helpers（＝ダッシュボードの収益セクションと同一実装）に任せる。
+  const shareConfigured = rewardConfig !== null && isCompanyShareConfigured(rewardConfig.companyShare);
+  const revenueBasis = {
+    kpi_label: profitBasis?.label ?? null,
+    // 取扱高の参照先。profit-helpers が gmv に使うフィールドと同じ解決順
+    amount_field: rewardConfig?.shotBaseField ?? profitBasis?.sourceField ?? null,
+    date_field: profitBasis?.dateField ?? null,
+    status_codes: profitBasis?.statusCodes ?? null,
+    status_labels:
+      profitBasis?.statusCodes?.map((code) => statusLabelMap.get(code) ?? code) ?? null,
+    company_share_configured: shareConfigured,
+  };
+
+  let revenueSection: RevenueSection | null = null;
+
+  if (!shareConfigured) {
+    // 0 で埋めない。「未設定」と「0円」は経営判断上まったく別の意味になるため。
+    notes.push(
+      rewardConfig === null
+        ? 'revenue: この事業には手数料設定（businessConfig.rewardConfig）がありません。自社売上・粗利は算出できないため by_month / by_project / by_partner は空配列、totals は null です（0 ではありません）。'
+        : 'revenue: 自社取り分（rewardConfig.companyShare）が未設定のため、自社売上・粗利は算出できません。by_month / by_project / by_partner は空配列、totals は null です（0 ではありません）。事業マスタで自社取り分を設定してください。',
+    );
+  } else {
+    const [plMonths, plRows] = await Promise.all([
+      calculateBusinessMonthlyPL(prisma, business.id, fromYm, toYm),
+      calculateBusinessProjectMonthPL(prisma, business.id, fromYm, toYm),
+    ]);
+    const unitsByProject = new Map<number, number | null>(projects.map((p) => [p.id, unitsOf(p)]));
+
+    revenueSection = buildRevenueSection({
+      monthsList: months_list,
+      months: plMonths ?? [],
+      rows: plRows ?? [],
+      totals: sumMonthlyPL(plMonths ?? []),
+      unitsOf: (projectId) => unitsByProject.get(projectId) ?? null,
+      unitsResolved: unitsField !== null,
+      metaOf: (partnerId) => agentMetaOf(partnerId),
+      statusLabelOf: (code) => statusLabelMap.get(code) ?? code,
+    });
+
+    notes.push(
+      'revenue は管理画面ダッシュボードの収益セクションと同一の計算実装（profit-helpers）を呼んでいます。金額は税抜（消費税は預り金なので粗利から引いていません）。gross_margin は粗利÷自社売上、gross_margin_on_gmv は粗利÷取扱高（いずれも%）。',
+    );
+    notes.push(
+      'revenue の母集団は「有効な案件（project_is_active=true）」かつ basis.status_codes に合致し計上月が決まるものです。pipeline / closed_deals とは母集団の条件が異なるため、件数は一致しません。',
+    );
+    notes.push(
+      'revenue.by_month[].project_count の合計と revenue.by_project の行数は一致しません。ストック（継続課金）案件は契約継続中の各月に計上されるため、1案件が複数月に現れます。案件単位で数えるときは by_project の project_no をユニークにしてください（is_recognition_month=true の行が各案件の計上初月です）。',
+    );
+    notes.push(
+      'revenue.by_month[].units / by_project[].units は案件の計上初月にのみ1回計上します（ストック展開した月には計上しません）。',
+    );
+  }
+
   return NextResponse.json({
     generated_at: nowIsoJst(now),
     business: { code: business.businessCode ?? businessCode, name: business.businessName },
@@ -459,6 +643,14 @@ export async function GET(request: NextRequest) {
     closed_deals,
     monthly_summary,
     lead_time,
+    revenue: {
+      basis: revenueBasis,
+      by_month: revenueSection?.by_month ?? [],
+      by_project: revenueSection?.by_project ?? [],
+      by_partner: revenueSection?.by_partner ?? [],
+      // 未設定は 0 ではなく null（「粗利ゼロ」に見せないため）
+      totals: revenueSection?.totals ?? null,
+    },
     notes: notes.join(' '),
   });
 }
@@ -485,6 +677,21 @@ function buildEmptyResponse(
       close_rate: 0,
     })),
     lead_time: { avg_days: null, min_days: null, max_days: null, n: 0 },
+    // 事業が解決できていないので計上基準も収益も出せない。形だけ揃えて null / 空で返す
+    revenue: {
+      basis: {
+        kpi_label: null,
+        amount_field: null,
+        date_field: null,
+        status_codes: null,
+        status_labels: null,
+        company_share_configured: false,
+      },
+      by_month: [],
+      by_project: [],
+      by_partner: [],
+      totals: null,
+    },
     notes: notes.join(' '),
   };
 }

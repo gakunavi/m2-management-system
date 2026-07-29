@@ -3,6 +3,7 @@ import {
   computeProjectFinancials,
   computeMonthlyPL,
   computeProjectPLRows,
+  computeProjectMonthPLRows,
   sumMonthlyPL,
   resolveProfitBasis,
   resolveProjectCompanyShare,
@@ -397,6 +398,7 @@ function makeContext(
       {
         id: 10,
         projectNo: 'MG-0010',
+        customerId: 77,
         partnerId: 100,
         projectSalesStatus: overrides.projectSalesStatus ?? '受注',
         projectExpectedCloseMonth: '2026-03',
@@ -533,6 +535,64 @@ describe('computeProjectPLRows', () => {
   it('計上対象外の案件は含まれない', () => {
     const rows = computeProjectPLRows(makeContext({ projectSalesStatus: '商談中' }), basis, '2026-03', '2026-05');
     expect(rows).toEqual([]);
+  });
+});
+
+describe('computeProjectMonthPLRows', () => {
+  it('案件×月に展開され、合計は月次P/Lと一致する', () => {
+    const ctx = makeContext();
+    const rows = computeProjectMonthPLRows(ctx, basis, '2026-03', '2026-05');
+    const months = computeMonthlyPL(ctx, basis, '2026-03', '2026-05');
+
+    // 1案件がショット(3月)＋ストック(3〜5月)で3ヶ月ぶんの行になる
+    expect(rows.map((r) => r.month).sort()).toEqual(['2026-03', '2026-04', '2026-05']);
+
+    for (const m of months) {
+      const row = rows.find((r) => r.month === m.month)!;
+      expect(row.gmv).toBe(m.gmv);
+      expect(row.companyRevenue).toBe(m.companyRevenue);
+      expect(row.rewardDirect).toBe(m.rewardDirect);
+      expect(row.rewardIndirect).toBe(m.rewardIndirect);
+      expect(row.rewardTotal).toBe(m.rewardTotal);
+      expect(row.grossProfit).toBe(m.grossProfit);
+      expect(row.grossMargin).toBe(m.grossMargin);
+      expect(row.grossMarginOnGmv).toBe(m.grossMarginOnGmv);
+    }
+  });
+
+  it('計上初月だけ is_recognition_month が true（台数の重複計上を防ぐ目印）', () => {
+    const rows = computeProjectMonthPLRows(makeContext(), basis, '2026-03', '2026-05');
+    expect(rows.filter((r) => r.isRecognitionMonth).map((r) => r.month)).toEqual(['2026-03']);
+  });
+
+  it('外部集計API向けに顧客ID・営業ステータス・代理店IDを持つ（顧客名は使わせない）', () => {
+    const rows = computeProjectMonthPLRows(makeContext(), basis, '2026-03', '2026-03');
+    expect(rows[0].customerId).toBe(77);
+    expect(rows[0].partnerId).toBe(100);
+    expect(rows[0].salesStatus).toBe('受注');
+    expect(rows[0].projectNo).toBe('MG-0010');
+    expect(rows[0]).not.toHaveProperty('customerName');
+  });
+
+  it('取扱高の大きい順に並ぶ', () => {
+    const ctx = makeContext();
+    const rows = computeProjectMonthPLRows(ctx, basis, '2026-03', '2026-05');
+    const gmvs = rows.map((r) => r.gmv);
+    expect(gmvs).toEqual([...gmvs].sort((a, b) => b - a));
+  });
+
+  it('計上対象外の案件は含まれない', () => {
+    const rows = computeProjectMonthPLRows(
+      makeContext({ projectSalesStatus: '商談中' }),
+      basis,
+      '2026-03',
+      '2026-05',
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it('計上基準が無ければ空（KPI未定義の事業）', () => {
+    expect(computeProjectMonthPLRows(makeContext(), null, '2026-03', '2026-05')).toEqual([]);
   });
 });
 
