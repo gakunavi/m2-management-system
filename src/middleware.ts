@@ -1,6 +1,12 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
-import { checkRateLimit, AUTH_RATE_LIMIT, UPLOAD_RATE_LIMIT, API_RATE_LIMIT } from '@/lib/rate-limit';
+import {
+  checkRateLimit,
+  AUTH_RATE_LIMIT,
+  UPLOAD_RATE_LIMIT,
+  API_RATE_LIMIT,
+  INTEGRATION_RATE_LIMIT,
+} from '@/lib/rate-limit';
 import { isPartnerApiAllowed, isPartnerRole } from '@/lib/partner-api-allowlist';
 
 // 代理店ユーザーが開けない社内専用ページ
@@ -75,6 +81,11 @@ export default withAuth(
       // ログインエンドポイント: IP ベース
       if (pathname.startsWith('/api/auth/callback') || pathname.startsWith('/api/auth/signin')) {
         const result = checkRateLimit(`auth:${ip}`, AUTH_RATE_LIMIT);
+        if (!result.allowed) return rateLimitResponse(result.resetAt);
+      }
+      // 外部システム連携: IP ベース（セッションを持たない機械アクセス）
+      else if (pathname.startsWith('/api/integrations/')) {
+        const result = checkRateLimit(`integration:${ip}`, INTEGRATION_RATE_LIMIT);
         if (!result.allowed) return rateLimitResponse(result.resetAt);
       }
       // アップロード: ユーザーベース
@@ -157,6 +168,12 @@ export default withAuth(
 
         // /api/stats は STATS_API_TOKEN で保護（機械アクセス専用・セッション認証不要）
         if (pathname.startsWith('/api/stats')) {
+          return true;
+        }
+
+        // /api/integrations は INTEGRATION_API_TOKEN で保護
+        // （外部システム連携・機械アクセス専用・セッション認証不要）
+        if (pathname.startsWith('/api/integrations')) {
           return true;
         }
 

@@ -92,3 +92,13 @@ export const API_RATE_LIMIT: RateLimitConfig = {
   limit: 100,
   windowMs: 60_000,
 };
+
+/**
+ * 外部システム連携 API (/api/integrations/**): 60回/分/IP
+ * セッションを持たない機械アクセスのため IP をキーにする。
+ * 注意: インメモリ実装のため ECS タスクが複数ある場合はタスクごとの計数になる。
+ */
+export const INTEGRATION_RATE_LIMIT: RateLimitConfig = {
+  limit: 60,
+  windowMs: 60_000,
+};

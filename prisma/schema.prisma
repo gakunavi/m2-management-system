@@ -232,7 +232,9 @@ model Customer {
   customerFax             String?                @map("customer_fax") @db.VarChar(20)
   customerEmail           String?                @map("customer_email") @db.VarChar(255)
   customerWebsite         String?                @map("customer_website") @db.VarChar(500)
-  customerCorporateNumber String?                @map("customer_corporate_number") @db.VarChar(13)
+  /// 法人番号。UNIQUE（PostgreSQL の UNIQUE は NULL 同士を重複と見なさないため、
+  /// 実質「NOT NULL のときだけ一意」。空文字は全書き込み経路で null に正規化している）
+  customerCorporateNumber String?                @unique @map("customer_corporate_number") @db.VarChar(13)
   customerInvoiceNumber   String?                @map("customer_invoice_number") @db.VarChar(14)
   customerCapital         BigInt?                @map("customer_capital")
   customerEstablishedDate DateTime?              @map("customer_established_date") @db.Date
@@ -952,6 +954,30 @@ model SystemSetting {
   updatedBy       Int?     @map("updated_by")
 
   @@map("system_settings")
+}
+
+// ============================================
+// 外部システム連携（機械アクセス）
+// ============================================
+
+/// Idempotency-Key の記録。同一キーの再送に対して DB を変更せず前回と同じ
+/// レスポンスを返すために使う。保持期間は 30 日（書き込み時に期限切れを遅延削除）。
+/// 注意: responseBody に口座番号等の機微情報は含めない（id / url / 更新項目名のみ）。
+model IntegrationIdempotencyKey {
+  id           Int      @id @default(autoincrement())
+  /// 用途の名前空間（例: "customer-import"）。エンドポイントを跨いだキー衝突を防ぐ。
+  scope        String   @db.VarChar(50)
+  idempotencyKey String @map("idempotency_key") @db.VarChar(200)
+  /// リクエストボディのSHA-256。同一キーで異なるボディが来たら 409 にするための照合用。
+  requestHash  String   @map("request_hash") @db.VarChar(64)
+  statusCode   Int      @map("status_code")
+  responseBody Json     @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@unique([scope, idempotencyKey])
+  @@index([expiresAt])
+  @@map("integration_idempotency_keys")
 }
 
 // ============================================

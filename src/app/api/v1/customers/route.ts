@@ -9,6 +9,7 @@ import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } from '@/lib/sort/engine';
 import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { formatCustomer } from '@/lib/format-customer';
+import { generateCustomerCode } from '@/lib/customer-code';
 import {
   whereIn,
   whereContains,
@@ -16,21 +17,6 @@ import {
   whereNumberRange,
   whereBoolean,
 } from '@/lib/filter-helper';
-
-// ============================================
-// 顧客コード採番ロジック
-// ============================================
-
-async function generateCustomerCode(): Promise<string> {
-  const latest = await prisma.customer.findFirst({
-    where: { customerCode: { startsWith: 'CST-' } },
-    orderBy: { customerCode: 'desc' },
-    select: { customerCode: true },
-  });
-  if (!latest) return 'CST-0001';
-  const num = parseInt(latest.customerCode.replace('CST-', ''), 10);
-  return `CST-${String(num + 1).padStart(4, '0')}`;
-}
 
 // ============================================
 // 入力バリデーションスキーマ
@@ -200,7 +186,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const customerCode = await generateCustomerCode();
+    const customerCode = await generateCustomerCode(prisma);
 
     // 事業IDが指定されている場合は事業の存在確認
     if (linkBusinessId) {

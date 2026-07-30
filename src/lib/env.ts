@@ -68,4 +68,12 @@ export const env = {
   STATS_API_TOKEN: optional('STATS_API_TOKEN'),
   // 集計対象事業を安定キー businessCode で指定（autoincrement の id 直書きを避ける）
   STATS_BUSINESS_CODE: optional('STATS_BUSINESS_CODE'),
+
+  // 外部システム連携 API（/api/integrations/**・機械アクセス専用）
+  // トークン未設定時はエンドポイント自体を無効化（404）
+  INTEGRATION_API_TOKEN: optional('INTEGRATION_API_TOKEN'),
+  // 取り込み対象事業を安定キー businessCode で指定（既定: LIGHT＝マイグレーションライト事業）
+  INTEGRATION_BUSINESS_CODE: optional('INTEGRATION_BUSINESS_CODE', 'LIGHT') as string,
+  // 呼び出し元IPの許可リスト（カンマ区切り）。未設定＝IP制限なし（トークンのみで認証）
+  INTEGRATION_IP_ALLOWLIST: optional('INTEGRATION_IP_ALLOWLIST'),
 } as const;
