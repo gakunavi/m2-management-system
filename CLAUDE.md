@@ -12,6 +12,7 @@
 4. **UPDATE（PATCH）**: スキーマ外のフィールドは明示的に取り出しているか → マージ更新で既存値が消えないか
 5. **インライン編集**: customPatchのbody生成 → API側の受け取り → 必要な付帯情報（businessId等）が欠落していないか
 6. **フォーム編集**: unflattenDotKeysの変換 → APIへの送信 → 必要な付帯情報が含まれるか
+7. **CSVエクスポート**: 一覧に絞り込みを追加したら、CSV APIでも同じ条件が効くか。**一覧APIとCSV APIは絞り込みロジックを共有すること**（`src/lib/project-filters.ts` / `src/lib/master-filters.ts`）。別々に `searchParams` を読むと「画面では絞れるがCSVは全件」になる
 
 ### テーブル設計からの逆算
 
@@ -64,7 +65,7 @@ grep -r "customerDetailConfig" src/app/ src/components/
 
 - **インラインPATCH**: `customPatch.extraBody` で付帯情報（businessId等）を送信。関数型も可（`(row) => ({ version, businessId })`）
 - **クロスエンティティPATCH**: 案件一覧から顧客/代理店フィールドを直接編集。`customPatch.endpoint` で別エンティティのAPIを指定し、`extraBody` 関数で対象エンティティの `version` を動的に渡す
-- **ダブルクリック編集**: `ColumnDef.doubleClickToEdit` + `singleClickHref` でリンク列（顧客名・代理店名）をシングルクリック→遷移 / ダブルクリック→編集に対応。250ms遅延タイマーでダブルクリック検出時にナビゲーションをキャンセル
+- **ダブルクリック編集**: `ColumnDef.doubleClickToEdit` + `singleClickHref` でリンク列（顧客名・代理店名）をシングルクリック→**別タブで開く** / ダブルクリック→編集に対応。250ms遅延タイマーでダブルクリック検出時に `window.open` をキャンセル。同一タブ遷移にすると一覧の絞り込み・列固定が失われるため `router.push` は使わないこと
 - **通常PATCH**: `patchEndpoint` に `?businessId=X` クエリパラメータを付与（レスポンスで事業別データも展開するため）
 - **フォームPATCH**: `config.extraSubmitData` で付帯情報を自動マージ
 - **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）。特に案件PATCHではクロスエンティティのフラット展開フィールド（`customerName`, `customerVersion`, `partnerName`, `partnerVersion`等）を明示的に返す必要がある（`formatProject`だけではネスト構造のみで不足）
@@ -74,6 +75,29 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **新規作成時の事業リンク**: 顧客・代理店POST APIで `businessId` がある場合、自動的に `CustomerBusinessLink` / `PartnerBusinessLink` を作成。`linkCustomData` がある場合はカスタムデータも同時保存
 - **楽観的ロック**: `version: { increment: 1 }` + 409 Conflict
 - **ドット記法**: `unflattenDotKeys` / `flattenNestedToFormKeys` で変換
+
+### 一覧の状態管理（EntityListTemplate）
+
+- **URLが正**: 絞り込み・検索・ソート・ページ・表示件数・**選択中のビューID（`?view=`）** を `useEntityList` がURLに同期する。戻る操作・ブックマークでの復元がこれで成立する
+- **デフォルトビューの自動適用**: URLに一覧状態がある場合はスキップする。適用すると戻ってきた直後にURL由来の状態を上書きしてしまうため
+- **列設定のスコープ分離**: 「すべて」タブ＝グローバル設定（`user-preferences/table`）、自分のビュー＝ビューの `columnSettings`、共有ビュー＝セッション内ローカルのみ。**ビュー適用時にグローバル設定を書き換えないこと**（書き換えると「すべて」タブがビューの列構成に固定される）
+- **「すべて」タブは全列強制表示**: `SpreadsheetTable` の `forceAllColumnsVisible` で `defaultVisible: false` も含め全列を表示し、非表示操作を受け付けない。CSVの対象列・ビュー新規保存時の初期状態も全列に揃える
+- **デバウンス保存はunmountでフラッシュ**: `useTablePreferences` / `useSavedViews.updateViewSettings` は1秒デバウンス。クリーンアップで `clearTimeout` だけすると、列固定直後に画面遷移した場合に保存が消える
+- **パンくず `?from=`**: `buildFromParam(label, fallbackPath)` で生成し、遷移時点の `location.search` を含める。値は必ずURLエンコードし、ラベルは「最後のカンマ以降」で切り出す（クエリ内にカンマが入るため）。`Link href` での使用はSSRとのhydration不一致になるのでイベントハンドラ内でのみ使う
+
+### 一覧APIとCSVエクスポートAPIの絞り込み共有
+
+一覧とCSVで別々に `searchParams` を読むと、**「画面では絞り込めるがCSVは全件」**という不一致が必ず発生する。絞り込みロジックは共通モジュールに集約すること。
+
+| エンティティ | 共通モジュール | 関数 |
+|-------------|--------------|------|
+| 案件 | `src/lib/project-filters.ts` | `applyProjectListFilters` / `matchesCustomFieldFilters` |
+| 顧客・代理店 | `src/lib/master-filters.ts` | `buildCustomerListWhere` / `buildPartnerListWhere` |
+
+- **ロール別スコープは共通モジュールに含めない**。API ごとに要件が違うため呼び出し側の責務とする
+- **適用順は「絞り込み → ロールスコープ」**。逆にするとユーザー指定の `filter[projectAssignedUserId]` 等でスコープを上書きできてしまう（実際に権限の穴になっていた）
+- **カスタムフィールド絞り込み**はJSONカラムのためPrismaでは絞れない。取得後に `matchesCustomFieldFilters` でアプリ側フィルターを両APIに適用する
+- `tests/lib/project-filters.test.ts` / `tests/lib/master-filters.test.ts` に**ドリフト検知**あり。ルート内で `searchParams.get('filter[...]')` を直接読むとテストが落ちる
 
 ## 技術スタック
 
