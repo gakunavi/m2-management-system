@@ -10,13 +10,7 @@ import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } fr
 import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { formatCustomer } from '@/lib/format-customer';
 import { generateCustomerCode } from '@/lib/customer-code';
-import {
-  whereIn,
-  whereContains,
-  whereDateRange,
-  whereNumberRange,
-  whereBoolean,
-} from '@/lib/filter-helper';
+import { buildCustomerListWhere } from '@/lib/master-filters';
 
 // ============================================
 // 入力バリデーションスキーマ
@@ -55,34 +49,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') ?? '25', 10)));
-    const search = searchParams.get('search') ?? '';
     const sortItems = parseSortParams(searchParams, 'customerCode');
 
-    // 事業フィルター
+    // 絞り込み条件（CSV エクスポートと共通ロジック）
     const businessIdParam = searchParams.get('businessId');
-    const businessIdFilter = businessIdParam
-      ? { businessLinks: { some: { businessId: parseInt(businessIdParam, 10), linkStatus: 'active' } } }
-      : {};
-
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { customerName: { contains: search, mode: 'insensitive' as const } },
-              { customerCode: { contains: search, mode: 'insensitive' as const } },
-              { contacts: { some: { contactName: { contains: search, mode: 'insensitive' as const } } } },
-            ],
-          }
-        : {}),
-      ...whereIn(searchParams, 'customerType'),
-      ...whereIn(searchParams, 'industryId', 'industryId', (v) => parseInt(v, 10)),
-      ...whereContains(searchParams, 'customerAddress'),
-      ...whereDateRange(searchParams, 'createdAt'),
-      ...whereNumberRange(searchParams, 'customerCapital'),
-      ...whereDateRange(searchParams, 'customerEstablishedDate'),
-      ...(whereBoolean(searchParams, 'isActive', 'customerIsActive') ?? {}),
-      ...businessIdFilter,
-    };
+    const where = buildCustomerListWhere(searchParams);
 
     // 統一ソートエンジン: db列は Prisma orderBy、select(種別)/カスタム列等はアプリ側で処理
     const sortSpec = withCustomDataFields(CUSTOMER_SORT_SPEC, sortItems);

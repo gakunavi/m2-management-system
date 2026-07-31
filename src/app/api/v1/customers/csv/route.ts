@@ -8,6 +8,7 @@ import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort } from '@/lib/sort/engine';
 import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { CUSTOMER_CSV_HEADERS, escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
+import { buildCustomerListWhere } from '@/lib/master-filters';
 
 const CSV_HEADERS = CUSTOMER_CSV_HEADERS;
 
@@ -27,10 +28,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = request.nextUrl;
-    const search = searchParams.get('search') ?? '';
-    const customerType = searchParams.get('filter[customerType]') || searchParams.get('customerType') || '';
-    const industryIdStr = searchParams.get('filter[industryId]') || searchParams.get('industryId') || '';
-    const isActive = searchParams.get('filter[isActive]') || searchParams.get('isActive') || '';
     const sortItems = parseSortParams(searchParams, 'customerCode');
 
     // エクスポート対象列（columns パラメータ指定時はその列のみ、未指定時は全列）
@@ -46,20 +43,8 @@ export async function GET(request: NextRequest) {
         })()
       : CSV_HEADERS;
 
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { customerName: { contains: search, mode: 'insensitive' as const } },
-              { customerCode: { contains: search, mode: 'insensitive' as const } },
-              { contacts: { some: { contactName: { contains: search, mode: 'insensitive' as const } } } },
-            ],
-          }
-        : {}),
-      ...(customerType ? { customerType } : {}),
-      ...(industryIdStr ? { industryId: parseInt(industryIdStr, 10) } : {}),
-      ...(isActive !== '' ? { customerIsActive: isActive === 'true' } : {}),
-    };
+    // 画面の絞り込み条件を一覧 API と同じロジックで適用する
+    const where = buildCustomerListWhere(searchParams);
 
     const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, CUSTOMER_SORT_SPEC);
     const orderBy = (

@@ -12,6 +12,7 @@ import type { AppSortContext } from '@/lib/sort/types';
 import { formatProject } from '@/lib/format-project';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
+import { applyProjectListFilters, matchesCustomFieldFilters } from '@/lib/project-filters';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
 import {
   calculateProjectFinancialsByBusiness,
@@ -85,36 +86,17 @@ export async function GET(request: NextRequest) {
 
     const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') ?? '25', 10)));
-    const search = searchParams.get('search') ?? '';
     const businessIdParam = searchParams.get('businessId');
     const sortItems = parseSortParams(searchParams, 'updatedAt', 'desc');
 
-    // フィルター
-    const statusFilter = searchParams.get('filter[projectSalesStatus]');
-    const assignedUserFilter = searchParams.get('filter[projectAssignedUserId]');
-    const isActiveParam = searchParams.get('filter[isActive]');
-    const portalVisibleParam = searchParams.get('filter[portalVisible]');
-    const customerIdParam = searchParams.get('filter[customerId]') || searchParams.get('customerId');
+    // 画面の絞り込み条件（CSV エクスポートと共通ロジック）。
+    // ロール別スコープより「先に」適用すること。後勝ちにすると、ユーザー指定の
+    // filter[projectAssignedUserId] 等でスコープを上書きできてしまう。
+    const where: Record<string, unknown> = {};
+    const { customFieldFilters } = applyProjectListFilters(where, searchParams);
+    const hasCustomFieldFilter = customFieldFilters.length > 0;
+
     const partnerIdParam = searchParams.get('filter[partnerId]') || searchParams.get('partnerId');
-
-    const where: Record<string, unknown> = {
-      ...(isActiveParam === 'true' ? { projectIsActive: true }
-        : isActiveParam === 'false' ? { projectIsActive: false }
-        : {}),
-    };
-
-    // ポータル表示フィルター
-    if (portalVisibleParam === 'true') {
-      where.portalVisible = true;
-    } else if (portalVisibleParam === 'false') {
-      where.portalVisible = false;
-    }
-
-    // 顧客フィルター（関連案件タブ用）
-    if (customerIdParam) {
-      where.customerId = parseInt(customerIdParam, 10);
-    }
-
     const requestedBusinessId = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
     const requestedPartnerId = partnerIdParam ? parseInt(partnerIdParam, 10) : undefined;
 
@@ -178,55 +160,6 @@ export async function GET(request: NextRequest) {
       where.partnerId = requestedPartnerId;
     }
 
-    // テキスト検索
-    if (search) {
-      where.OR = [
-        { projectNo: { contains: search, mode: 'insensitive' } },
-        { customer: { customerName: { contains: search, mode: 'insensitive' } } },
-        { partner: { partnerName: { contains: search, mode: 'insensitive' } } },
-        { projectAssignedUserName: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-
-    // ステータスフィルター
-    if (statusFilter) {
-      const statuses = statusFilter.split(',').filter(Boolean);
-      if (statuses.length > 0) {
-        where.projectSalesStatus = { in: statuses };
-      }
-    }
-
-    // 受注予定月フィルター
-    const monthFrom = searchParams.get('filter[expectedCloseMonthFrom]');
-    const monthTo = searchParams.get('filter[expectedCloseMonthTo]');
-    if (monthFrom || monthTo) {
-      where.projectExpectedCloseMonth = {};
-      if (monthFrom) {
-        (where.projectExpectedCloseMonth as Record<string, string>).gte = monthFrom;
-      }
-      if (monthTo) {
-        (where.projectExpectedCloseMonth as Record<string, string>).lte = monthTo;
-      }
-    }
-
-    // 担当者フィルター
-    if (assignedUserFilter) {
-      where.projectAssignedUserId = parseInt(assignedUserFilter, 10);
-    }
-
-    // カスタムフィールドフィルター（filter[customField_xxx] 形式）
-    const customFieldFilters: { key: string; values: string[] }[] = [];
-    searchParams.forEach((paramValue, paramKey) => {
-      const cfMatch = paramKey.match(/^filter\[customField_(.+)\]$/);
-      if (cfMatch && paramValue) {
-        customFieldFilters.push({
-          key: cfMatch[1],
-          values: paramValue.split(',').filter(Boolean),
-        });
-      }
-    });
-    const hasCustomFieldFilter = customFieldFilters.length > 0;
-
     // 統一ソートエンジン: 動的カスタム列を補完した spec でソートを解決
     const spec = withCustomDataFields(PROJECT_SORT_SPEC, sortItems);
     const { prismaOrderBy, appSortItems, needsAppSort: needsSortAppSort } = resolveSort(sortItems, spec);
@@ -252,16 +185,12 @@ export async function GET(request: NextRequest) {
     // カスタムフィールドフィルター適用（アプリ側）
     let filteredProjects = allProjects;
     if (hasCustomFieldFilter) {
-      filteredProjects = allProjects.filter((p) => {
-        const customData = p.projectCustomData as Record<string, unknown> | null;
-        if (!customData) return false;
-        return customFieldFilters.every(({ key, values }) => {
-          const fieldVal = customData[key];
-          if (fieldVal == null) return false;
-          if (typeof fieldVal === 'boolean') return values.includes(String(fieldVal));
-          return values.some((v) => String(fieldVal).includes(v));
-        });
-      });
+      filteredProjects = allProjects.filter((p) =>
+        matchesCustomFieldFilters(
+          p.projectCustomData as Record<string, unknown> | null,
+          customFieldFilters,
+        ),
+      );
     }
 
     // ステータスラベル・色を一括取得（フォーマット対象 = filteredProjects 全件）

@@ -9,12 +9,7 @@ import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } from '@/lib/sort/engine';
 import { PARTNER_SORT_SPEC } from '@/lib/sort/specs';
 import { formatPartner } from '@/lib/format-partner';
-import {
-  whereIn,
-  whereContains,
-  whereDateRange,
-  whereBoolean,
-} from '@/lib/filter-helper';
+import { buildPartnerListWhere } from '@/lib/master-filters';
 import { generateTierNumber, validateTierHierarchy, calculateTierFromParent } from '@/lib/partner-hierarchy';
 import { parseRewardSlots, mergeRewardSlots } from '@/lib/reward-slots';
 
@@ -73,34 +68,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') ?? '25', 10)));
-    const search = searchParams.get('search') ?? '';
     const sortItems = parseSortParams(searchParams, 'partnerCode');
 
-    // 事業フィルター
+    // 絞り込み条件（CSV エクスポートと共通ロジック）
     const businessIdParam = searchParams.get('businessId');
-    const businessIdFilter = businessIdParam
-      ? { businessLinks: { some: { businessId: parseInt(businessIdParam, 10), linkStatus: 'active' } } }
-      : {};
-
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { partnerName: { contains: search, mode: 'insensitive' as const } },
-              { partnerCode: { contains: search, mode: 'insensitive' as const } },
-              { contacts: { some: { contactName: { contains: search, mode: 'insensitive' as const } } } },
-            ],
-          }
-        : {}),
-      ...whereIn(searchParams, 'partnerType'),
-      ...whereIn(searchParams, 'partnerTier'),
-      ...whereIn(searchParams, 'industryId', 'industryId', (v) => parseInt(v, 10)),
-      ...whereContains(searchParams, 'partnerAddress'),
-      ...whereDateRange(searchParams, 'createdAt'),
-      ...whereDateRange(searchParams, 'partnerEstablishedDate'),
-      ...(whereBoolean(searchParams, 'isActive', 'partnerIsActive') ?? {}),
-      ...businessIdFilter,
-    };
+    const where = buildPartnerListWhere(searchParams);
 
     const sortSpec = withCustomDataFields(PARTNER_SORT_SPEC, sortItems);
     const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, sortSpec);

@@ -10,6 +10,7 @@ import { PROJECT_CSV_SORT_SPEC } from '@/lib/sort/specs';
 import { escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
+import { applyProjectListFilters, matchesCustomFieldFilters } from '@/lib/project-filters';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // 固定ヘッダー定義
@@ -57,18 +58,14 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = request.nextUrl;
 
-    const search = searchParams.get('search') ?? '';
     const businessIdParam = searchParams.get('businessId');
-    const isActiveParam = searchParams.get('filter[isActive]') || searchParams.get('isActive') || '';
-    const statusFilter = searchParams.get('filter[projectSalesStatus]');
     const sortItems = parseSortParams(searchParams, 'updatedAt', 'desc');
     const columnsParam = searchParams.get('columns');
 
-    const where: Record<string, unknown> = {
-      ...(isActiveParam === 'true' ? { projectIsActive: true }
-        : isActiveParam === 'false' ? { projectIsActive: false }
-        : {}),
-    };
+    // 画面の絞り込み条件を一覧 API と同じロジックで適用する
+    // （営業ステータス・受注予定月・担当者・ポータル表示・カスタムフィールド等）
+    const where: Record<string, unknown> = {};
+    const { customFieldFilters } = applyProjectListFilters(where, searchParams);
 
     const requestedBusinessId = businessIdParam ? parseInt(businessIdParam, 10) : undefined;
 
@@ -91,21 +88,6 @@ export async function GET(request: NextRequest) {
         }
       } else {
         where.businessId = { in: assignedBusinessIds };
-      }
-    }
-
-    if (search) {
-      where.OR = [
-        { projectNo: { contains: search, mode: 'insensitive' } },
-        { customer: { customerName: { contains: search, mode: 'insensitive' } } },
-        { partner: { partnerName: { contains: search, mode: 'insensitive' } } },
-      ];
-    }
-
-    if (statusFilter) {
-      const statuses = statusFilter.split(',').filter(Boolean);
-      if (statuses.length > 0) {
-        where.projectSalesStatus = { in: statuses };
       }
     }
 
@@ -191,10 +173,21 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // カスタムフィールドフィルター（JSON カラムのため Prisma では絞れずアプリ側で適用）
+    const filteredProjects =
+      customFieldFilters.length > 0
+        ? projects.filter((p) =>
+            matchesCustomFieldFilters(
+              p.projectCustomData as Record<string, unknown> | null,
+              customFieldFilters,
+            ),
+          )
+        : projects;
+
     // 営業ステータス=定義順(statusSortOrder)はアプリ側で整列（CSVは全件出力）
-    let sortedProjects = projects;
+    let sortedProjects = filteredProjects;
     if (needsAppSort) {
-      const bizIds = Array.from(new Set(projects.map((p) => p.businessId)));
+      const bizIds = Array.from(new Set(filteredProjects.map((p) => p.businessId)));
       const defs = bizIds.length > 0
         ? await prisma.businessStatusDefinition.findMany({
             where: { businessId: { in: bizIds } },
@@ -202,7 +195,7 @@ export async function GET(request: NextRequest) {
           })
         : [];
       const statusOrder = new Map(defs.map((d) => [`${d.businessId}:${d.statusCode}`, d.statusSortOrder]));
-      sortedProjects = applyAppSort(projects, appSortItems, PROJECT_CSV_SORT_SPEC, { statusOrder });
+      sortedProjects = applyAppSort(filteredProjects, appSortItems, PROJECT_CSV_SORT_SPEC, { statusOrder });
     }
 
     // ステータスラベルを一括取得

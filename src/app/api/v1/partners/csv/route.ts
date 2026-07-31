@@ -8,6 +8,7 @@ import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort } from '@/lib/sort/engine';
 import { PARTNER_SORT_SPEC } from '@/lib/sort/specs';
 import { PARTNER_CSV_HEADERS, escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
+import { buildPartnerListWhere } from '@/lib/master-filters';
 
 const CSV_HEADERS = PARTNER_CSV_HEADERS;
 
@@ -27,10 +28,6 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = request.nextUrl;
-    const search = searchParams.get('search') ?? '';
-    const partnerType = searchParams.get('filter[partnerType]') || searchParams.get('partnerType') || '';
-    const industryIdStr = searchParams.get('filter[industryId]') || searchParams.get('industryId') || '';
-    const isActive = searchParams.get('filter[isActive]') || searchParams.get('isActive') || '';
     const sortItems = parseSortParams(searchParams, 'partnerCode');
 
     const columnsParam = searchParams.get('columns');
@@ -44,20 +41,8 @@ export async function GET(request: NextRequest) {
         })()
       : CSV_HEADERS;
 
-    const where = {
-      ...(search
-        ? {
-            OR: [
-              { partnerName: { contains: search, mode: 'insensitive' as const } },
-              { partnerCode: { contains: search, mode: 'insensitive' as const } },
-              { contacts: { some: { contactName: { contains: search, mode: 'insensitive' as const } } } },
-            ],
-          }
-        : {}),
-      ...(partnerType ? { partnerType } : {}),
-      ...(industryIdStr ? { industryId: parseInt(industryIdStr, 10) } : {}),
-      ...(isActive !== '' ? { partnerIsActive: isActive === 'true' } : {}),
-    };
+    // 画面の絞り込み条件を一覧 API と同じロジックで適用する
+    const where = buildPartnerListWhere(searchParams);
 
     const { prismaOrderBy, appSortItems, needsAppSort } = resolveSort(sortItems, PARTNER_SORT_SPEC);
     const orderBy = (
