@@ -215,7 +215,9 @@ export function EditableCell({
           : hasUrlValue
           ? `${localValue}\n（ダブルクリックで編集）`
           : isDblClickEditable
-          ? 'ダブルクリックで編集'
+          ? onSingleClick
+            ? 'クリックで別タブに表示 / ダブルクリックで編集'
+            : 'ダブルクリックで編集'
           : undefined
       }
     >

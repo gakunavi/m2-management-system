@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
@@ -110,14 +110,42 @@ export function useSavedViews(tableKey: string) {
 
   // デバウンス用ref（列幅変更等の高頻度更新でAPI連打を防止）
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 未送信（デバウンス待ち）の更新。unmount 時にフラッシュする。
+  const pendingUpdateRef = useRef<{ id: number; settings: SavedViewSettings } | null>(null);
+  const mutateRef = useRef(updateMutation.mutate);
+  mutateRef.current = updateMutation.mutate;
+
+  // unmount 時: デバウンス待ちのビュー更新を破棄せず送信する
+  // （列固定などを変更した直後に詳細画面へ遷移すると設定が失われるため）
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (pendingUpdateRef.current) {
+        mutateRef.current(pendingUpdateRef.current);
+        pendingUpdateRef.current = null;
+      }
+    };
+  }, []);
+
   const updateViewSettings = useCallback(
     (id: number, settings: SavedViewSettings) => {
+      // 楽観的キャッシュ更新（デバウンス完了を待たずに UI へ即時反映）
+      queryClient.setQueryData(queryKey, (old: SavedTableView[] = []) =>
+        old.map((v) => (v.id === id ? { ...v, settings } : v)),
+      );
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        pendingUpdateRef.current = null;
         updateMutation.mutate({ id, settings });
       }, 1000);
+      pendingUpdateRef.current = { id, settings };
     },
-    [updateMutation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [updateMutation, queryClient],
   );
 
   const setDefaultView = useCallback(

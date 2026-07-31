@@ -180,6 +180,12 @@ interface SpreadsheetTableProps {
   onPageSizeSet?: (size: number) => void;
   /** 列表示設定モーダルのグループ表示順 */
   columnGroupOrder?: string[];
+  /**
+   * config の全列を強制的に表示する（「すべて」タブ用）。
+   * 有効時は保存済みの非表示設定を無視し、列の非表示操作も受け付けない。
+   * 列を絞り込みたい場合はビューを作成して使う。
+   */
+  forceAllColumnsVisible?: boolean;
 }
 
 export function SpreadsheetTable({
@@ -204,6 +210,7 @@ export function SpreadsheetTable({
   onSortItemsSet,
   onPageSizeSet,
   columnGroupOrder,
+  forceAllColumnsVisible = false,
 }: SpreadsheetTableProps) {
   const router = useRouter();
   const resizingRef = useRef<{ colId: string; startX: number; startWidth: number } | null>(null);
@@ -227,6 +234,14 @@ export function SpreadsheetTable({
   // 保存済み columnVisibility に存在しない列は defaultColumnVisibility をフォールバック
   // （ビュー保存後に追加された列が勝手に表示されるのを防止）
   const mergedColumnVisibility = useMemo<VisibilityState>(() => {
+    // 「すべて」タブ: config の全列を強制表示（保存済みの非表示設定・defaultVisible:false を無視）
+    if (forceAllColumnsVisible) {
+      const vis: VisibilityState = {};
+      configColumns.forEach((col) => {
+        vis[col.key] = true;
+      });
+      return vis;
+    }
     const saved = preferences?.columnVisibility;
     if (!saved) return defaultColumnVisibility;
     const merged: VisibilityState = { ...saved };
@@ -236,7 +251,7 @@ export function SpreadsheetTable({
       }
     }
     return merged;
-  }, [preferences?.columnVisibility, defaultColumnVisibility]);
+  }, [preferences?.columnVisibility, defaultColumnVisibility, forceAllColumnsVisible, configColumns]);
 
   const defaultColumnOrder = useMemo<ColumnOrderState>(() => {
     const prefix = hasSelection ? ['_select', '_open'] : ['_open'];
@@ -395,11 +410,13 @@ export function SpreadsheetTable({
         const canCustomEdit = col.customPatch ? !!col.customPatch.endpoint(rowData) : true;
         const effectiveEditConfig = canCustomEdit ? col.edit : undefined;
 
-        // doubleClickToEdit 列のシングルクリック遷移ハンドラ
+        // doubleClickToEdit 列のシングルクリック遷移ハンドラ。
+        // URL 型セルと同様に別タブで開く（一覧の絞り込み・列固定・スクロール位置を
+        // そのまま残すため、同一タブでの遷移はしない）。
         const singleClickHandler = col.doubleClickToEdit && col.singleClickHref
           ? () => {
               const href = col.singleClickHref!(rowData);
-              if (href) router.push(href);
+              if (href) window.open(href, '_blank', 'noopener,noreferrer');
             }
           : undefined;
 
@@ -445,6 +462,8 @@ export function SpreadsheetTable({
       columnSizing: preferences?.columnWidths ?? defaultColumnSizing,
     },
     onColumnVisibilityChange: (updater) => {
+      // 全列強制表示中は非表示操作を受け付けない（保存もしない）
+      if (forceAllColumnsVisible) return;
       const current = mergedColumnVisibility;
       const next = typeof updater === 'function' ? updater(current) : updater;
       const latest = preferencesRef.current;
@@ -511,7 +530,10 @@ export function SpreadsheetTable({
       // preferences を一括保存（stale closure による上書きを防ぐため、ここで一元管理）
       savePreferences({
         columnOrder: settings.columnOrder,
-        columnVisibility: settings.columnVisibility,
+        // 全列強制表示中は非表示設定を持たないため、保存済みの値をそのまま維持する
+        columnVisibility: forceAllColumnsVisible
+          ? preferencesRef.current?.columnVisibility ?? {}
+          : settings.columnVisibility,
         columnWidths: settings.columnWidths,
         sortState: settings.sortState,
         columnPinning: settings.columnPinning,
@@ -521,7 +543,7 @@ export function SpreadsheetTable({
       onSortItemsSet?.(settings.sortState);
       onPageSizeSet?.(settings.pageSize);
     },
-    [savePreferences, onSortItemsSet, onPageSizeSet],
+    [savePreferences, onSortItemsSet, onPageSizeSet, forceAllColumnsVisible],
   );
 
   // ============================================
@@ -617,6 +639,7 @@ export function SpreadsheetTable({
         defaultColumnOrder={defaultColumnOrder}
         defaultColumnVisibility={defaultColumnVisibility}
         defaultColumnSizing={defaultColumnSizing}
+        forceAllColumnsVisible={forceAllColumnsVisible}
         currentSortItems={sortItems}
         currentPageSize={currentPageSize}
         pinnedCols={pinnedCols}

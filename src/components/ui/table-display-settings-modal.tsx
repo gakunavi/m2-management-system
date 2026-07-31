@@ -65,6 +65,8 @@ interface TableDisplaySettingsModalProps {
   defaultColumnOrder: string[];
   defaultColumnVisibility: Record<string, boolean>;
   defaultColumnSizing: Record<string, number>;
+  /** 全列強制表示中（「すべて」タブ）。列の非表示操作を無効化する */
+  forceAllColumnsVisible?: boolean;
   currentSortItems: SortItem[];
   currentPageSize: number;
   pinnedCols: string[];
@@ -185,6 +187,7 @@ export function TableDisplaySettingsModal({
   defaultColumnOrder,
   defaultColumnVisibility,
   defaultColumnSizing,
+  forceAllColumnsVisible = false,
   currentSortItems,
   currentPageSize,
   pinnedCols: initialPinnedCols,
@@ -254,6 +257,11 @@ export function TableDisplaySettingsModal({
 
       const vis: Record<string, boolean> = {};
       columns.forEach((col) => {
+        // 「すべて」タブは全列強制表示
+        if (forceAllColumnsVisible) {
+          vis[col.key] = true;
+          return;
+        }
         const savedVis = preferences?.columnVisibility;
         if (savedVis && col.key in savedVis) {
           vis[col.key] = savedVis[col.key];
@@ -273,7 +281,7 @@ export function TableDisplaySettingsModal({
       setActiveTab('columns');
     }
     prevOpenRef.current = open;
-  }, [open, columns, preferences, defaultColumnOrder, initialPinnedCols, currentSortItems, currentPageSize]);
+  }, [open, columns, preferences, defaultColumnOrder, initialPinnedCols, currentSortItems, currentPageSize, forceAllColumnsVisible]);
 
   // ============================================
   // 派生データ
@@ -640,57 +648,67 @@ export function TableDisplaySettingsModal({
                 />
               </div>
 
+              {/* 全列強制表示中の案内 */}
+              {forceAllColumnsVisible && (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  「すべて」タブでは全ての列が表示されます。列を絞り込むには、
+                  ビューを作成して保存してください。（並び順・列幅・列固定はここで変更できます）
+                </p>
+              )}
+
               {/* 一括操作 */}
-              <div className="flex items-center gap-2 text-sm">
-                {filteredVisibleIds.length > 0 && (
-                  <>
-                    <Checkbox
-                      checked={
-                        filteredVisibleIds.length > 0 &&
-                        filteredVisibleIds.every((id) => bulkSelectedIds.has(id))
-                      }
-                      onCheckedChange={() => handleBulkSelectAll()}
-                    />
-                    <span className="text-muted-foreground">全選択</span>
-                  </>
-                )}
-                {bulkSelectedIds.size > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 text-xs ml-auto"
-                    onClick={handleBulkHide}
-                  >
-                    <EyeOff className="h-3 w-3 mr-1" />
-                    選択した列を非表示 ({bulkSelectedIds.size})
-                  </Button>
-                )}
-                {bulkSelectedIds.size === 0 && (
-                  <div className="flex gap-1 ml-auto">
+              {!forceAllColumnsVisible && (
+                <div className="flex items-center gap-2 text-sm">
+                  {filteredVisibleIds.length > 0 && (
+                    <>
+                      <Checkbox
+                        checked={
+                          filteredVisibleIds.length > 0 &&
+                          filteredVisibleIds.every((id) => bulkSelectedIds.has(id))
+                        }
+                        onCheckedChange={() => handleBulkSelectAll()}
+                      />
+                      <span className="text-muted-foreground">全選択</span>
+                    </>
+                  )}
+                  {bulkSelectedIds.size > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-6 text-xs"
-                      onClick={handleShowAllColumns}
-                    >
-                      <Eye className="h-3 w-3 mr-1" />
-                      全て表示
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={handleHideAllColumns}
+                      className="h-6 text-xs ml-auto"
+                      onClick={handleBulkHide}
                     >
                       <EyeOff className="h-3 w-3 mr-1" />
-                      全て非表示
+                      選択した列を非表示 ({bulkSelectedIds.size})
                     </Button>
-                  </div>
-                )}
-              </div>
+                  )}
+                  {bulkSelectedIds.size === 0 && (
+                    <div className="flex gap-1 ml-auto">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={handleShowAllColumns}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        全て表示
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={handleHideAllColumns}
+                      >
+                        <EyeOff className="h-3 w-3 mr-1" />
+                        全て非表示
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* 2カラムレイアウト */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* 2カラムレイアウト（全列強制表示中は「非表示の列」が常に空になるため1カラム） */}
+              <div className={cn('grid gap-4', forceAllColumnsVisible ? 'grid-cols-1' : 'grid-cols-2')}>
                 {/* 左: 表示中の列 */}
                 <div>
                   <h4 className="text-xs font-medium text-muted-foreground mb-2">
@@ -738,8 +756,8 @@ export function TableDisplaySettingsModal({
                   </DndContext>
                 </div>
 
-                {/* 右: 非表示の列（グループ別） */}
-                <div>
+                {/* 右: 非表示の列（グループ別）。全列強制表示中は常に空のため非表示 */}
+                <div className={cn(forceAllColumnsVisible && 'hidden')}>
                   <h4 className="text-xs font-medium text-muted-foreground mb-2">
                     非表示の列
                   </h4>

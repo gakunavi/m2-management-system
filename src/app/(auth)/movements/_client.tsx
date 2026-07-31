@@ -25,6 +25,7 @@ import { useBusiness } from '@/hooks/use-business';
 import { useStatusDefinitions } from '@/hooks/use-status-definitions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { buildFromParam } from '@/lib/breadcrumb-from';
 import type { MovementStatus } from '@/lib/validations/movement';
 
 const STATUS_CELL: Record<MovementStatus, { bg: string; icon: typeof CheckCircle; iconColor: string }> = {
@@ -208,7 +209,9 @@ export function MovementsClient() {
   };
 
   const handleGanttRowClick = (row: GanttRow) => {
-    router.push(`/projects/${row.projectId}?from=/movements,案件ムーブメント`);
+    router.push(
+      `/projects/${row.projectId}?from=${buildFromParam('案件ムーブメント', '/movements')}`,
+    );
   };
 
   if (!hasHydrated || !selectedBusinessId) return <LoadingSpinner />;
@@ -361,7 +364,11 @@ export function MovementsClient() {
                         'w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r sticky left-0 z-10 cursor-pointer hover:brightness-95 transition-all',
                         isInactive ? 'bg-muted' : 'bg-card',
                       )}
-                      onClick={() => router.push(`/projects/${project.id}?from=/movements,案件ムーブメント`)}
+                      onClick={() =>
+                        router.push(
+                          `/projects/${project.id}?from=${buildFromParam('案件ムーブメント', '/movements')}`,
+                        )
+                      }
                     >
                       <div className="text-sm font-medium truncate" title={project.customerName ?? ''}>
                         {project.customerName ?? '顧客未設定'}

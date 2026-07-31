@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type {
   EntityListConfig,
   PersistedColumnSettings,
@@ -67,11 +67,12 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
     setSortItems,
     refresh,
     queryKey,
+    viewId: activeViewId,
+    setViewId: setActiveViewId,
   } = useEntityList(config);
 
-  const { preferences, savePreferences } = useTablePreferences(
-    config.tableSettings.persistKey,
-  );
+  const { preferences, savePreferences, isLoading: prefsLoading } =
+    useTablePreferences(config.tableSettings.persistKey);
   // stale closure 防止: handlePageSizeChange から最新の preferences を参照
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
@@ -98,102 +99,154 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
     isDeleting,
   } = useSavedViews(config.tableSettings.persistKey);
 
-  const [activeViewId, setActiveViewId] = useState<number | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<SavedTableView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SavedTableView | null>(null);
 
+  // URL に一覧の状態（絞り込み・ソート・ページ・検索）が載っているか。
+  // 詳細画面からの「戻る」やブックマークで復元された状態を、デフォルトビューの
+  // 自動適用で上書きしないための判定。初回マウント時の値のみを見る。
+  const searchParams = useSearchParams();
+  const hasUrlStateRef = useRef<boolean | null>(null);
+  if (hasUrlStateRef.current === null) {
+    hasUrlStateRef.current =
+      ['page', 'pageSize', 'search', 'sort', 'sortField', 'view'].some((k) =>
+        searchParams.has(k),
+      ) || Array.from(searchParams.keys()).some((k) => k.startsWith('filter['));
+  }
+
   // 初回ロード: 保存済み pageSize をグローバル設定から復元
+  // URL に pageSize がある場合はそちらを優先（戻る操作での復元を壊さない）
   const pageSizeAppliedRef = useRef(false);
   useEffect(() => {
-    if (pageSizeAppliedRef.current || !preferences?.pageSize) return;
+    if (pageSizeAppliedRef.current || prefsLoading) return;
     pageSizeAppliedRef.current = true;
-    setPageSize(preferences.pageSize);
+    if (searchParams.has('pageSize')) return;
+    if (preferences?.pageSize) setPageSize(preferences.pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferences?.pageSize]);
+  }, [prefsLoading, preferences?.pageSize]);
 
-  // 「すべて」タブの設定を退避する Ref（ビュー切替前に保存）
-  const basePrefsRef = useRef<PersistedColumnSettings | null>(null);
+  // ============================================
+  // 列設定のスコープ分離
+  // ============================================
+  // グローバル設定（user-preferences/table）は「すべて」タブ専用の状態として扱い、
+  // ビュー選択中の列設定はビュー側（saved-views）にのみ保存する。
+  // 以前は両者が同じレコードを共有していたため、一度ビューを適用すると
+  // 「すべて」タブがビューの列構成のままになっていた。
+  const activeView = useMemo(
+    () => (activeViewId !== null ? views.find((v) => v.id === activeViewId) ?? null : null),
+    [activeViewId, views],
+  );
 
-  // 初回プリファレンスロード時に「すべて」のベース状態を保存
-  const baseCapturedRef = useRef(false);
+  // 共有ビュー（他人のビュー = 読み取り専用）はセッション内のみのローカル上書きを持つ
+  const [sharedViewPrefs, setSharedViewPrefs] = useState<PersistedColumnSettings | null>(null);
   useEffect(() => {
-    if (baseCapturedRef.current || !preferences) return;
-    baseCapturedRef.current = true;
-    basePrefsRef.current = { ...preferences };
-  }, [preferences]);
+    setSharedViewPrefs(null);
+  }, [activeViewId]);
+
+  /** テーブルに渡す実効的な列設定 */
+  const effectivePreferences = useMemo<PersistedColumnSettings | null>(() => {
+    if (!activeView) return preferences;
+    if (activeView.ownerName && sharedViewPrefs) return sharedViewPrefs;
+    return (activeView.settings as SavedViewSettings).columnSettings ?? preferences;
+  }, [activeView, preferences, sharedViewPrefs]);
+
+  // stale closure 防止用
+  const effectivePreferencesRef = useRef(effectivePreferences);
+  effectivePreferencesRef.current = effectivePreferences;
+
+  /**
+   * 「すべて」タブでは config の全列を強制表示する。
+   * （非表示設定を持つのはビューのみ。列を絞り込みたい場合はビューを作成する）
+   */
+  const forceAllColumnsVisible = activeView === null;
 
   // デフォルトビューの自動適用（初回ロード時のみ）
+  // - preferences のロード完了を待つ（グローバル設定の確定を先に済ませるため）
+  // - URL に一覧状態がある場合は適用しない（詳細画面からの戻りを尊重）
   const defaultAppliedRef = useRef(false);
   useEffect(() => {
-    if (viewsLoading || defaultAppliedRef.current) return;
+    if (viewsLoading || prefsLoading || defaultAppliedRef.current) return;
     defaultAppliedRef.current = true;
-    if (defaultView) {
+    if (defaultView && !hasUrlStateRef.current) {
       applyViewState(defaultView);
       setActiveViewId(defaultView.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewsLoading]);
+  }, [viewsLoading, prefsLoading]);
 
   /** 現在のテーブル状態をスナップショットとして取得 */
-  const snapshotCurrentState = useCallback((): SavedViewSettings => ({
-    columnSettings: preferences ?? {
+  const snapshotCurrentState = useCallback((): SavedViewSettings => {
+    const base: PersistedColumnSettings = effectivePreferences ?? {
       columnOrder: [],
       columnVisibility: {},
       columnWidths: {},
       sortState: [],
       columnPinning: { left: [] },
-    },
+    };
+    // 「すべて」タブから保存する場合、画面と同じ「全列表示」を初期状態にする
+    const columnSettings: PersistedColumnSettings = forceAllColumnsVisible
+      ? {
+          ...base,
+          columnVisibility: Object.fromEntries(
+            config.columns.map((c) => [c.key, true]),
+          ),
+        }
+      : base;
+    return {
+      columnSettings,
+      filters,
+      sortItems,
+      searchQuery,
+      pageSize: pagination.pageSize,
+    };
+  }, [
+    effectivePreferences,
+    forceAllColumnsVisible,
+    config.columns,
     filters,
     sortItems,
     searchQuery,
-    pageSize: pagination.pageSize,
-  }), [preferences, filters, sortItems, searchQuery, pagination.pageSize]);
+    pagination.pageSize,
+  ]);
 
-  /** ビューの保存済み状態を全フックに適用 */
+  /**
+   * ビューの保存済み状態を一覧の絞り込み系フックに適用する。
+   * 列設定はビュー側に保持されるため（effectivePreferences 参照）、
+   * ここでグローバル設定を書き換えないこと。
+   */
   const applyViewState = useCallback(
     (view: SavedTableView) => {
       const s = view.settings as SavedViewSettings;
-      // ビューに columnPinning がない場合はピンなし（他ビューのピンを引き継がない）
-      const mergedSettings: PersistedColumnSettings = {
-        ...s.columnSettings,
-        columnPinning: s.columnSettings.columnPinning ?? { left: [] },
-        pageSize: s.pageSize ?? s.columnSettings.pageSize,
-      };
-      savePreferences(mergedSettings);
       setSearchQuery(s.searchQuery);
-      if (s.pageSize) setPageSize(s.pageSize);
+      const viewPageSize = s.pageSize ?? s.columnSettings?.pageSize;
+      if (viewPageSize) setPageSize(viewPageSize);
       setFilters(s.filters);
       setSortItems(s.sortItems);
     },
-    [savePreferences, setSearchQuery, setPageSize, setFilters, setSortItems],
+    [setSearchQuery, setPageSize, setFilters, setSortItems],
   );
 
   /** タブ切替 */
   const handleSelectView = useCallback(
     (id: number | null) => {
-      // 「すべて」からビューに切り替える場合、現在の状態を退避
-      if (activeViewId === null && id !== null && preferences) {
-        basePrefsRef.current = { ...preferences };
-      }
-
       setActiveViewId(id);
 
       if (id === null) {
-        // 「すべて」に切替: 退避した状態を復元 + フィルタリセット
-        if (basePrefsRef.current) {
-          savePreferences(basePrefsRef.current);
-          if (basePrefsRef.current.pageSize) {
-            setPageSize(basePrefsRef.current.pageSize);
-          }
-        }
+        // 「すべて」に切替: ビュー由来の絞り込み・検索を解除し、
+        // 表示件数・ソートはグローバル設定（= 「すべて」自身の状態）に戻す。
+        // 列設定は effectivePreferences が自動的にグローバル設定を参照する。
+        const base = preferencesRef.current;
         clearFilters();
+        setSearchQuery('');
+        if (base?.pageSize) setPageSize(base.pageSize);
+        if (base?.sortState && base.sortState.length > 0) setSortItems(base.sortState);
         return;
       }
       const view = views.find((v) => v.id === id);
       if (view) applyViewState(view);
     },
-    [activeViewId, views, applyViewState, clearFilters, preferences, savePreferences, setPageSize],
+    [views, applyViewState, clearFilters, setSearchQuery, setPageSize, setSortItems, setActiveViewId],
   );
 
   /** ビュー保存 */
@@ -203,7 +256,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       const created = await createView(name, settings, setAsDefault, isShared);
       setActiveViewId(created.id);
     },
-    [snapshotCurrentState, createView],
+    [snapshotCurrentState, createView, setActiveViewId],
   );
 
   /** ビュー複製 */
@@ -219,7 +272,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       );
       setActiveViewId(created.id);
     },
-    [views, createView],
+    [views, createView, setActiveViewId],
   );
 
   /** 共有トグル */
@@ -237,32 +290,39 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       setActiveViewId(created.id);
       applyViewState(created);
     },
-    [copySharedView, applyViewState],
+    [copySharedView, applyViewState, setActiveViewId],
   );
 
-  /** 列設定変更時のラッパー: アクティブビューにも反映（共有ビューは読み取り専用） */
+  /**
+   * 列設定変更時のラッパー。保存先はアクティブなタブによって切り替える。
+   * - 「すべて」タブ: グローバル設定（user-preferences/table）
+   * - 自分のビュー  : ビューの columnSettings
+   * - 共有ビュー    : 読み取り専用のためセッション内のローカル状態のみ
+   */
   const savePreferencesWithView = useCallback(
     (settings: PersistedColumnSettings) => {
-      savePreferences(settings);
-      if (activeViewId !== null) {
-        const view = views.find((v) => v.id === activeViewId);
-        if (view && !view.ownerName) {
-          updateViewSettings(activeViewId, {
-            ...(view.settings as SavedViewSettings),
-            columnSettings: settings,
-          });
-        }
+      if (!activeView) {
+        savePreferences(settings);
+        return;
       }
+      if (activeView.ownerName) {
+        setSharedViewPrefs(settings);
+        return;
+      }
+      updateViewSettings(activeView.id, {
+        ...(activeView.settings as SavedViewSettings),
+        columnSettings: settings,
+      });
     },
-    [savePreferences, activeViewId, views, updateViewSettings],
+    [savePreferences, activeView, updateViewSettings],
   );
 
-  /** 表示件数変更時のラッパー: グローバル設定 + アクティブビューに保存 */
+  /** 表示件数変更時のラッパー: 現在のタブのスコープに保存 */
   const handlePageSizeChange = useCallback(
     (size: number) => {
       setPageSize(size);
-      // ref 経由で最新の preferences を取得（stale closure 防止）
-      const latest = preferencesRef.current;
+      // stale closure 防止のため ref / 実効設定から最新値を組み立てる
+      const latest = effectivePreferencesRef.current;
       const updatedPrefs: PersistedColumnSettings = {
         columnOrder: latest?.columnOrder ?? [],
         columnVisibility: latest?.columnVisibility ?? {},
@@ -271,24 +331,22 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
         columnPinning: latest?.columnPinning,
         pageSize: size,
       };
-      savePreferences(updatedPrefs);
-      // 「すべて」タブのベース状態も更新
-      if (activeViewId === null && basePrefsRef.current) {
-        basePrefsRef.current = { ...basePrefsRef.current, pageSize: size };
+
+      if (!activeView) {
+        savePreferences(updatedPrefs);
+        return;
       }
-      // アクティブビューにも反映（共有ビューは読み取り専用）
-      if (activeViewId !== null) {
-        const view = views.find((v) => v.id === activeViewId);
-        if (view && !view.ownerName) {
-          updateViewSettings(activeViewId, {
-            ...(view.settings as SavedViewSettings),
-            columnSettings: updatedPrefs,
-            pageSize: size,
-          });
-        }
+      if (activeView.ownerName) {
+        setSharedViewPrefs(updatedPrefs);
+        return;
       }
+      updateViewSettings(activeView.id, {
+        ...(activeView.settings as SavedViewSettings),
+        columnSettings: updatedPrefs,
+        pageSize: size,
+      });
     },
-    [setPageSize, savePreferences, activeViewId, views, updateViewSettings],
+    [setPageSize, savePreferences, activeView, updateViewSettings],
   );
 
   // ============================================
@@ -348,8 +406,8 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   // 現在の表示列キー（列順反映・内部列除外 → CSVキーに変換）
   const visibleColumnKeys = useMemo(() => {
     const allKeys = config.columns.map((c) => c.key);
-    const order = preferences?.columnOrder ?? allKeys;
-    const visibility = preferences?.columnVisibility ?? {};
+    const order = effectivePreferences?.columnOrder ?? allKeys;
+    const visibility = effectivePreferences?.columnVisibility ?? {};
     const keyMap = config.csv?.columnKeyMap ?? {};
 
     const visibleKeys = order.filter((key) => {
@@ -358,6 +416,8 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
       const col = config.columns.find((c) => c.key === key);
       // customPatch列: columnKeyMapに登録されていなければCSVに存在しないため除外
       if (col?.customPatch && !(key in keyMap)) return false;
+      // 「すべて」タブは全列強制表示なので、CSV も全列を対象にする
+      if (forceAllColumnsVisible) return true;
       // visibility に key がなければ config の defaultVisible を参照
       if (key in visibility) return visibility[key];
       return col?.defaultVisible !== false;
@@ -365,7 +425,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
 
     // テーブル列キー → CSVキーに変換（マッピングがある場合）
     return visibleKeys.map((key) => keyMap[key] ?? key);
-  }, [config.columns, config.csv?.columnKeyMap, preferences]);
+  }, [config.columns, config.csv?.columnKeyMap, effectivePreferences, forceAllColumnsVisible]);
 
   const hasBatchActions = (config.batchActions?.length ?? 0) > 0;
   const selectedIdList = useMemo(() => Array.from(selectedIds), [selectedIds]);
@@ -464,7 +524,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               sortItems={sortItems}
               onSort={setSort}
               loading={loading}
-              preferences={preferences}
+              preferences={effectivePreferences}
               savePreferences={savePreferencesWithView}
               updateCell={updateCell}
               queryKey={queryKey}
@@ -479,6 +539,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               onSortItemsSet={setSortItems}
               onPageSizeSet={setPageSize}
               columnGroupOrder={config.columnGroupOrder}
+              forceAllColumnsVisible={forceAllColumnsVisible}
             />
             <Pagination
               currentPage={pagination.currentPage}

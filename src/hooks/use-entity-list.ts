@@ -29,6 +29,13 @@ export function useEntityList(config: EntityListConfig) {
     Number(searchParams.get('pageSize')) || defaultPageSize,
   );
   const [searchQuery, setSearchQueryRaw] = useState(searchParams.get('search') || '');
+  // 選択中の保存ビュー ID。URL に載せることで、詳細画面から戻ったときに
+  // タブの選択状態（= 列設定の保存先）まで正しく復元される。
+  const [viewId, setViewId] = useState<number | null>(() => {
+    const raw = searchParams.get('view');
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  });
   const [filters, setFiltersState] = useState<Record<string, string>>(() => {
     // URL から filter[key]=value を復元
     const restored: Record<string, string> = {};
@@ -92,6 +99,7 @@ export function useEntityList(config: EntityListConfig) {
     if (pageSize !== defaultPageSize) params.set('pageSize', String(pageSize));
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (sortStr !== defaultSortStr) params.set('sort', sortStr);
+    if (viewId !== null) params.set('view', String(viewId));
 
     // フィルターを URL に追加
     for (const [key, value] of Object.entries(filters)) {
@@ -100,7 +108,7 @@ export function useEntityList(config: EntityListConfig) {
 
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [page, pageSize, debouncedSearch, sortItems, defaultSortItems, filters, pathname, router, defaultPageSize]);
+  }, [page, pageSize, debouncedSearch, sortItems, defaultSortItems, filters, viewId, pathname, router, defaultPageSize]);
 
   // TanStack Query
   const queryKey = useMemo(
@@ -245,5 +253,7 @@ export function useEntityList(config: EntityListConfig) {
     setFilters: handleSetFilters,
     refresh: refetch,
     queryKey: listQueryKey,
+    viewId,
+    setViewId,
   };
 }

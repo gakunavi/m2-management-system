@@ -1,6 +1,7 @@
 import type { EntityListConfig, EntityDetailConfig, EntityFormConfig } from '@/types/config';
 import { projectBaseSchema } from '@/lib/validations/project';
 import { isoToJstDateInput } from '@/lib/jst-date';
+import { buildFromParam } from '@/lib/breadcrumb-from';
 
 // ============================================
 // 案件一覧 Config（ベース）
@@ -41,7 +42,8 @@ export const projectListConfig: EntityListConfig = {
       /** シングルクリック遷移先を行データから生成 */
       singleClickHref: (row) => {
         const c = row.customer as { id?: number } | null;
-        return c?.id ? `/customers/${c.id}?from=/projects,案件一覧` : '';
+        if (!c?.id) return '';
+        return `/customers/${c.id}?from=${buildFromParam('案件一覧', '/projects')}`;
       },
     },
     {
@@ -78,7 +80,8 @@ export const projectListConfig: EntityListConfig = {
       },
       singleClickHref: (row) => {
         const p = row.partner as { id?: number } | null;
-        return p?.id ? `/partners/${p.id}?from=/projects,案件一覧` : '';
+        if (!p?.id) return '';
+        return `/partners/${p.id}?from=${buildFromParam('案件一覧', '/projects')}`;
       },
     },
     {

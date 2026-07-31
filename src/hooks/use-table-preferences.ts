@@ -37,11 +37,23 @@ export function useTablePreferences(tableKey: string) {
     },
   });
 
-  // unmount 時にデバウンスタイマーをクリーンアップ
+  // 未送信の設定（デバウンス待ち）を保持。unmount 時にフラッシュする。
+  const pendingSettingsRef = useRef<PersistedColumnSettings | null>(null);
+  // 最新の mutate を ref 経由で参照（unmount 時の stale closure 防止）
+  const mutateRef = useRef(saveMutation.mutate);
+  mutateRef.current = saveMutation.mutate;
+
+  // unmount 時: デバウンス待ちの保存を破棄せず、そのまま送信する。
+  // （列固定・列順などを変更した直後に詳細画面へ遷移すると設定が失われるため）
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (pendingSettingsRef.current) {
+        mutateRef.current(pendingSettingsRef.current);
+        pendingSettingsRef.current = null;
       }
     };
   }, []);
@@ -65,10 +77,13 @@ export function useTablePreferences(tableKey: string) {
         },
       );
 
+      pendingSettingsRef.current = settings;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
       debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        pendingSettingsRef.current = null;
         saveMutation.mutate(settings);
       }, 1000);
     },
