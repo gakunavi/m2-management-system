@@ -32,6 +32,8 @@ import { ArrowUpDown, ArrowUp, ArrowDown, GripVertical, ExternalLink, Pin, Slide
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { computeFrozenLayout, withPinnedFirst } from '@/lib/table-pinning';
+import type { FrozenLayout } from '@/lib/table-pinning';
 import { TableDisplaySettingsModal } from './table-display-settings-modal';
 import { FilterPanel } from './filter-bar';
 import { EditableCell } from './editable-cell';
@@ -340,28 +342,35 @@ export function SpreadsheetTable({
     [defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences],
   );
 
-  /** ピン留めセルの sticky スタイルを返す。非ピン列は undefined */
+  /**
+   * 固定列セルの sticky スタイルを返す。固定対象外の列は undefined。
+   * オフセットは「プレフィックス列 + 固定列」を左から積み上げて求める
+   * （固定列だけで計算すると left=0 に重なり、左側の列が下に潜り込んで消える）。
+   */
   const getPinnedStyle = useCallback(
-    (colId: string, visibleCols: { id: string; getSize: () => number }[]): React.CSSProperties | undefined => {
-      const idx = pinnedCols.indexOf(colId);
-      if (idx < 0) return undefined;
-
-      let left = 0;
-      for (let i = 0; i < idx; i++) {
-        const col = visibleCols.find((c) => c.id === pinnedCols[i]);
-        if (col) left += col.getSize();
-      }
+    (colId: string, layout: FrozenLayout): React.CSSProperties | undefined => {
+      const left = layout.offsets[colId];
+      if (left === undefined) return undefined;
 
       return {
         position: 'sticky',
         left,
         zIndex: 10,
-        boxShadow: idx === pinnedCols.length - 1
-          ? '2px 0 4px -2px rgba(0,0,0,0.1)'
-          : undefined,
+        boxShadow:
+          layout.lastId === colId ? '2px 0 4px -2px rgba(0,0,0,0.1)' : undefined,
       };
     },
-    [pinnedCols],
+    [],
+  );
+
+  /**
+   * 実際に描画する列順。固定列はプレフィックス列の直後へ寄せる。
+   * 元の位置のまま sticky にすると、固定列より左の列が横スクロール時に
+   * 固定列の下へ潜り込んで消えてしまうため。
+   */
+  const displayColumnOrder = useMemo(
+    () => withPinnedFirst(reconciledColumnOrder ?? defaultColumnOrder, pinnedCols),
+    [reconciledColumnOrder, defaultColumnOrder, pinnedCols],
   );
 
   // ============================================
@@ -477,7 +486,7 @@ export function SpreadsheetTable({
     columns: tanstackColumns,
     state: {
       columnVisibility: mergedColumnVisibility,
-      columnOrder: reconciledColumnOrder ?? defaultColumnOrder,
+      columnOrder: displayColumnOrder,
       columnSizing: preferences?.columnWidths ?? defaultColumnSizing,
     },
     onColumnVisibilityChange: (updater) => {
@@ -626,6 +635,17 @@ export function SpreadsheetTable({
   const visibleColumns = table.getVisibleLeafColumns();
   const visibleColumnIds = visibleColumns.map((c) => c.id);
 
+  // 固定ブロック（プレフィックス列 + 固定列）の sticky オフセット。
+  // セルごとに再計算せず1レンダリング1回にまとめる。
+  const frozenLayout = useMemo(
+    () =>
+      computeFrozenLayout(
+        visibleColumns.map((c) => ({ id: c.id, size: c.getSize() })),
+        pinnedCols,
+      ),
+    [visibleColumns, pinnedCols],
+  );
+
   return (
     <div className="flex flex-col gap-2">
       {/* ツールバー */}
@@ -687,7 +707,7 @@ export function SpreadsheetTable({
                       const colWidth = header.getSize();
                       const sortIndex = sortItems.findIndex((s) => s.field === colKey);
                       const sortItem = sortIndex >= 0 ? sortItems[sortIndex] : null;
-                      const pinStyle = getPinnedStyle(colKey, visibleColumns);
+                      const pinStyle = getPinnedStyle(colKey, frozenLayout);
                       const isPrefix = colKey === '_select' || colKey === '_open';
 
                       return (
@@ -770,7 +790,7 @@ export function SpreadsheetTable({
                     className="border-b hover:bg-muted/30 transition-colors group/row"
                   >
                     {row.getVisibleCells().map((cell) => {
-                      const pinStyle = getPinnedStyle(cell.column.id, visibleColumns);
+                      const pinStyle = getPinnedStyle(cell.column.id, frozenLayout);
                       return (
                         <td
                           key={cell.id}
