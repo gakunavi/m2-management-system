@@ -526,6 +526,7 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
               loading={loading}
               preferences={effectivePreferences}
               savePreferences={savePreferencesWithView}
+              preferencesReady={!!activeView || !prefsLoading}
               updateCell={updateCell}
               queryKey={queryKey}
               filters={config.filters}

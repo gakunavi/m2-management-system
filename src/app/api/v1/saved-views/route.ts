@@ -6,35 +6,15 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { savedViewSettingsSchema } from '@/lib/table-settings-schema';
 import type { Prisma } from '@prisma/client';
 
 // ============================================
 // バリデーションスキーマ
 // ============================================
 
-const savedViewSettingsSchema = z.object({
-  columnSettings: z.object({
-    columnOrder: z.array(z.string()).default([]),
-    columnVisibility: z.record(z.string(), z.boolean()).default({}),
-    columnWidths: z.record(z.string(), z.number()).default({}),
-    sortState: z.array(
-      z.object({
-        field: z.string(),
-        direction: z.enum(['asc', 'desc']),
-      }),
-    ).default([]),
-  }),
-  filters: z.record(z.string(), z.string()).default({}),
-  sortItems: z.array(
-    z.object({
-      field: z.string(),
-      direction: z.enum(['asc', 'desc']),
-    }),
-  ).default([]),
-  searchQuery: z.string().default(''),
-  pageSize: z.number().int().min(1).max(100).default(25),
-});
-
+// 列設定のスキーマは user-preferences/table と共有する
+// （片方だけにフィールドを足すと zod がキーを黙って削除し、設定が保存されない）
 const createSchema = z.object({
   tableKey: z.string().min(1).max(100),
   viewName: z

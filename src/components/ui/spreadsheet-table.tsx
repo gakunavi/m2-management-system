@@ -164,6 +164,12 @@ interface SpreadsheetTableProps {
   loading?: boolean;
   preferences: ReturnType<typeof useTablePreferences>['preferences'];
   savePreferences: ReturnType<typeof useTablePreferences>['savePreferences'];
+  /**
+   * 列設定の読み込みが完了しているか。
+   * 読み込み中の保存はデフォルト値で既存設定を上書きするため抑止する。
+   * 完了後は preferences が null（＝保存レコードが未作成）でも保存を行う。
+   */
+  preferencesReady?: boolean;
   updateCell: ReturnType<typeof useInlineCellEdit>['updateCell'];
   queryKey: unknown[];
   filters?: FilterDef[];
@@ -197,6 +203,7 @@ export function SpreadsheetTable({
   loading,
   preferences,
   savePreferences,
+  preferencesReady = true,
   updateCell,
   queryKey,
   filters,
@@ -218,6 +225,8 @@ export function SpreadsheetTable({
   // stale closure 防止: handleTogglePin / onColumnXxxChange から最新 preferences を参照
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
+  const preferencesReadyRef = useRef(preferencesReady);
+  preferencesReadyRef.current = preferencesReady;
 
   // ============================================
   // 初期状態
@@ -289,33 +298,43 @@ export function SpreadsheetTable({
   const pinnedColsRef = useRef(pinnedCols);
   pinnedColsRef.current = pinnedCols;
 
-  // DB から復元されたら同期
+  // DB から復元されたら同期。
+  // columnPinning はオブジェクト参照が毎回変わるため、中身が同じなら state を据え置く
+  // （同一内容での再セットは無駄な再レンダリングを生むだけ）。
   useEffect(() => {
     const fromDb = preferences?.columnPinning?.left ?? [];
-    setPinnedCols(fromDb);
+    setPinnedCols((prev) =>
+      prev.length === fromDb.length && prev.every((id, i) => id === fromDb[i])
+        ? prev
+        : fromDb,
+    );
   }, [preferences?.columnPinning]);
 
   /** ピン留めトグル: ローカル即時更新 + DB保存 */
   const handleTogglePin = useCallback(
     (colId: string) => {
-      setPinnedCols((prev) => {
-        const next = prev.includes(colId)
-          ? prev.filter((id) => id !== colId)
-          : [...prev, colId];
-        // ref 経由で最新の preferences を取得（stale closure 防止）
-        const latest = preferencesRef.current;
-        // preferences 未ロード時は保存をスキップ（デフォルト値で上書きするのを防止）
-        if (latest) {
-          savePreferences({
-            columnOrder: latest.columnOrder ?? defaultColumnOrder,
-            columnVisibility: latest.columnVisibility ?? defaultColumnVisibility,
-            columnWidths: latest.columnWidths ?? defaultColumnSizing,
-            sortState: latest.sortState ?? [],
-            columnPinning: { left: next },
-            pageSize: latest.pageSize,
-          });
-        }
-        return next;
+      // 保存は副作用のため updater の外で実行する
+      // （updater 内だと StrictMode の二重呼び出しで保存も二重に走る）
+      const prev = pinnedColsRef.current;
+      const next = prev.includes(colId)
+        ? prev.filter((id) => id !== colId)
+        : [...prev, colId];
+      // 連打時に再レンダリング前の値を参照しないよう ref も即時更新
+      pinnedColsRef.current = next;
+      setPinnedCols(next);
+
+      // ref 経由で最新の preferences を取得（stale closure 防止）
+      const latest = preferencesRef.current;
+      // 読み込み中のみ保存をスキップ（デフォルト値で既存設定を上書きするのを防止）。
+      // 未保存ユーザー（preferences === null）はスキップせずレコードを新規作成する。
+      if (!preferencesReadyRef.current) return;
+      savePreferences({
+        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
+        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
+        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
+        sortState: latest?.sortState ?? [],
+        columnPinning: { left: next },
+        pageSize: latest?.pageSize,
       });
     },
     [defaultColumnOrder, defaultColumnVisibility, defaultColumnSizing, savePreferences],
@@ -467,42 +486,42 @@ export function SpreadsheetTable({
       const current = mergedColumnVisibility;
       const next = typeof updater === 'function' ? updater(current) : updater;
       const latest = preferencesRef.current;
-      if (!latest) return; // preferences 未ロード時は保存をスキップ
+      if (!preferencesReadyRef.current) return; // 読み込み中のみ保存をスキップ
       savePreferences({
-        columnOrder: latest.columnOrder ?? defaultColumnOrder,
+        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
         columnVisibility: next,
-        columnWidths: latest.columnWidths ?? defaultColumnSizing,
-        sortState: latest.sortState ?? [],
+        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
+        sortState: latest?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: latest.pageSize,
+        pageSize: latest?.pageSize,
       });
     },
     onColumnOrderChange: (updater) => {
       const latest = preferencesRef.current;
-      if (!latest) return; // preferences 未ロード時は保存をスキップ
-      const current = latest.columnOrder ?? defaultColumnOrder;
+      if (!preferencesReadyRef.current) return; // 読み込み中のみ保存をスキップ
+      const current = latest?.columnOrder ?? defaultColumnOrder;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
         columnOrder: next,
-        columnVisibility: latest.columnVisibility ?? defaultColumnVisibility,
-        columnWidths: latest.columnWidths ?? defaultColumnSizing,
-        sortState: latest.sortState ?? [],
+        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
+        columnWidths: latest?.columnWidths ?? defaultColumnSizing,
+        sortState: latest?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: latest.pageSize,
+        pageSize: latest?.pageSize,
       });
     },
     onColumnSizingChange: (updater) => {
       const latest = preferencesRef.current;
-      if (!latest) return; // preferences 未ロード時は保存をスキップ
-      const current = latest.columnWidths ?? defaultColumnSizing;
+      if (!preferencesReadyRef.current) return; // 読み込み中のみ保存をスキップ
+      const current = latest?.columnWidths ?? defaultColumnSizing;
       const next = typeof updater === 'function' ? updater(current) : updater;
       savePreferences({
-        columnOrder: latest.columnOrder ?? defaultColumnOrder,
-        columnVisibility: latest.columnVisibility ?? defaultColumnVisibility,
+        columnOrder: latest?.columnOrder ?? defaultColumnOrder,
+        columnVisibility: latest?.columnVisibility ?? defaultColumnVisibility,
         columnWidths: next,
-        sortState: latest.sortState ?? [],
+        sortState: latest?.sortState ?? [],
         columnPinning: { left: pinnedColsRef.current },
-        pageSize: latest.pageSize,
+        pageSize: latest?.pageSize,
       });
     },
     getCoreRowModel: getCoreRowModel(),

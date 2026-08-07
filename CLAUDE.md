@@ -83,6 +83,8 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **列設定のスコープ分離**: 「すべて」タブ＝グローバル設定（`user-preferences/table`）、自分のビュー＝ビューの `columnSettings`、共有ビュー＝セッション内ローカルのみ。**ビュー適用時にグローバル設定を書き換えないこと**（書き換えると「すべて」タブがビューの列構成に固定される）
 - **「すべて」タブは全列強制表示**: `SpreadsheetTable` の `forceAllColumnsVisible` で `defaultVisible: false` も含め全列を表示し、非表示操作を受け付けない。CSVの対象列・ビュー新規保存時の初期状態も全列に揃える
 - **デバウンス保存はunmountでフラッシュ**: `useTablePreferences` / `useSavedViews.updateViewSettings` は1秒デバウンス。クリーンアップで `clearTimeout` だけすると、列固定直後に画面遷移した場合に保存が消える
+- **列設定のZodスキーマは共有する**: グローバル設定（`user-preferences/table`）と保存済みビュー（`saved-views` POST/PATCH）は同じ `PersistedColumnSettings` を保存する。スキーマを各ルートに書くと片方への追加を忘れ、**zodが未定義キーを黙って削除する**（保存レスポンスでキャッシュが上書きされ「設定した瞬間に元に戻る」）。定義は `src/lib/table-settings-schema.ts` に集約し、`tests/lib/table-settings-schema.test.ts` にドリフト検知あり
+- **列設定の保存は「読み込み中」だけスキップ**: `preferences === null` は「未ロード」ではなく「保存レコード未作成」も含む。`if (!preferences) return` にすると新規ユーザーは列固定・列幅・列順を永久に保存できない。ロード完了フラグで判定する（`SpreadsheetTable` の `preferencesReady`）
 - **パンくず `?from=`**: `buildFromParam(label, fallbackPath)` で生成し、遷移時点の `location.search` を含める。値は必ずURLエンコードし、ラベルは「最後のカンマ以降」で切り出す（クエリ内にカンマが入るため）。`Link href` での使用はSSRとのhydration不一致になるのでイベントハンドラ内でのみ使う
 
 ### 一覧APIとCSVエクスポートAPIの絞り込み共有

@@ -6,31 +6,18 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { persistedColumnSettingsSchema } from '@/lib/table-settings-schema';
 import type { Prisma } from '@prisma/client';
 
 // ============================================
 // バリデーションスキーマ
 // ============================================
 
-const columnSettingsSchema = z.object({
-  columnOrder: z.array(z.string()),
-  columnVisibility: z.record(z.string(), z.boolean()),
-  columnWidths: z.record(z.string(), z.number()),
-  sortState: z.array(
-    z.object({
-      field: z.string(),
-      direction: z.enum(['asc', 'desc']),
-    }),
-  ),
-  columnPinning: z
-    .object({ left: z.array(z.string()) })
-    .optional(),
-  pageSize: z.number().int().min(1).max(200).optional(),
-});
-
+// 列設定のスキーマは saved-views と共有する
+// （片方だけにフィールドを足すと zod がキーを黙って削除し、設定が保存されない）
 const putSchema = z.object({
   tableKey: z.string().min(1).max(100),
-  settings: columnSettingsSchema,
+  settings: persistedColumnSettingsSchema,
 });
 
 // ============================================
