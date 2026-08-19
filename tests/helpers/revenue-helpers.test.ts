@@ -10,6 +10,8 @@ import {
   getKpiDefinitions,
   getKpiDefinition,
   getPrimaryKpiDefinition,
+  resolveUnitsField,
+  getUnitsValue,
   getRevenueRecognition,
 } from '@/lib/revenue-helpers';
 
@@ -246,5 +248,57 @@ describe('getPrimaryKpiDefinition', () => {
 
   it('KPI がない場合は null', () => {
     expect(getPrimaryKpiDefinition({})).toBeNull();
+  });
+});
+
+// ============================================
+// 台数フィールドの解決
+// ============================================
+//
+// ダッシュボードの案件別内訳と経営統計API（strategy-report）が同じ値を出す必要が
+// あるため、解決規則をここで固定しておく。
+
+describe('resolveUnitsField', () => {
+  const fields = (...keys: string[]) => ({ projectFields: keys.map((key) => ({ key })) });
+
+  it('key="units" の KPI の sourceField を使う', () => {
+    const config = {
+      ...fields('unit_count', 'daisu'),
+      kpiDefinitions: [{ key: 'units', sourceField: 'daisu', sortOrder: 0 }],
+    };
+    expect(resolveUnitsField(config)).toBe('daisu');
+  });
+
+  it('units KPI が無ければ既定の unit_count', () => {
+    expect(resolveUnitsField(fields('unit_count'))).toBe('unit_count');
+  });
+
+  it('案件フィールドに実在しなければ null（台数を出せない事業）', () => {
+    expect(resolveUnitsField(fields('amount'))).toBeNull();
+    expect(resolveUnitsField(null)).toBeNull();
+  });
+
+  it('KPI が指すフィールドが実在しなければ既定にフォールバックせず null', () => {
+    // 「設定はあるが実体が無い」を黙って別フィールドで代替すると、
+    // 意図しない数字が台数として出る
+    const config = {
+      ...fields('unit_count'),
+      kpiDefinitions: [{ key: 'units', sourceField: 'missing', sortOrder: 0 }],
+    };
+    expect(resolveUnitsField(config)).toBeNull();
+  });
+});
+
+describe('getUnitsValue', () => {
+  it('数値なら返す（0 も 0 のまま）', () => {
+    expect(getUnitsValue({ unit_count: 3 }, 'unit_count')).toBe(3);
+    expect(getUnitsValue({ unit_count: 0 }, 'unit_count')).toBe(0);
+  });
+
+  it('フィールド未解決・値なし・非数値は null（0 と区別する）', () => {
+    expect(getUnitsValue({ unit_count: 3 }, null)).toBeNull();
+    expect(getUnitsValue({}, 'unit_count')).toBeNull();
+    expect(getUnitsValue({ unit_count: '3' }, 'unit_count')).toBeNull();
+    expect(getUnitsValue(null, 'unit_count')).toBeNull();
   });
 });

@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
   getPrimaryKpiDefinition,
-  getKpiDefinitions,
   getActiveFieldKeys,
   getRevenueAmount,
   getRevenueMonth,
+  getUnitsValue,
   injectFormulaValues,
+  resolveUnitsField,
 } from '@/lib/revenue-helpers';
 import { addMonths, getRewardConfig } from '@/lib/reward-helpers';
 import {
@@ -292,14 +293,12 @@ export async function GET(request: NextRequest) {
   // 計上日フィールド: KPI の dateField（なければ projectExpectedCloseMonth）
   const dateField = primaryKpi?.dateField ?? 'projectExpectedCloseMonth';
 
-  // 台数フィールド: key="units" の KPI の sourceField（なければ "unit_count"）
-  const allKpis = getKpiDefinitions(businessConfig);
-  const unitsKpi = allKpis.find((k) => k.key === 'units');
-  const unitsFieldCandidate = unitsKpi?.sourceField ?? 'unit_count';
-  const unitsField = activeFieldKeys.has(unitsFieldCandidate) ? unitsFieldCandidate : null;
+  // 台数フィールド: 解決は revenue-helpers に集約（ダッシュボードの案件別内訳と共通）。
+  // ここで独自に既定値を持つと、画面とAPIで台数が食い違う
+  const unitsField = resolveUnitsField(businessConfig);
   if (!unitsField) {
     notes.push(
-      `台数フィールド（${unitsFieldCandidate}）が見つからないため、closed_deals[].units は null になります。`,
+      '台数フィールド（key="units" の KPI の sourceField、既定 "unit_count"）が見つからないため、closed_deals[].units は null になります。',
     );
   }
 
@@ -335,12 +334,7 @@ export async function GET(request: NextRequest) {
     amountField && activeFieldKeys.has(amountField)
       ? getRevenueAmount({ id: p.id, projectExpectedCloseMonth: null, projectCustomData: p.projectCustomData }, amountField)
       : 0;
-  const unitsOf = (p: ProjectRow): number | null => {
-    if (!unitsField) return null;
-    const data = p.projectCustomData as Record<string, unknown> | null;
-    const v = data?.[unitsField];
-    return typeof v === 'number' ? v : null;
-  };
+  const unitsOf = (p: ProjectRow): number | null => getUnitsValue(p.projectCustomData, unitsField);
   const closeMonthOf = (p: ProjectRow): string | null =>
     getRevenueMonth({ id: p.id, projectExpectedCloseMonth: p.projectExpectedCloseMonth, projectCustomData: p.projectCustomData }, dateField);
 

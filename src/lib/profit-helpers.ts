@@ -3,7 +3,9 @@ import {
   getRevenueAmount,
   getRevenueMonth,
   getPrimaryKpiDefinition,
+  getUnitsValue,
   injectFormulaValues,
+  resolveUnitsField,
 } from '@/lib/revenue-helpers';
 import {
   applyRewardSetting,
@@ -644,6 +646,13 @@ export interface ProjectPLRow {
   customerName: string | null;
   /** 代理店名。null は代理店が紐づいていない案件（＝手数料が発生しない） */
   partnerName: string | null;
+  /**
+   * 台数。事業に台数フィールドが無ければ null（0 と区別する）。
+   *
+   * ストック案件は継続中の各月に金額が計上されるが、台数は案件の属性なので
+   * 月数ぶん増やさず1案件1回だけ数える。
+   */
+  units: number | null;
   gmv: number;
   companyRevenue: number;
   rewardTotal: number;
@@ -660,6 +669,8 @@ export function computeProjectPLRows(
   toMonth: string,
 ): ProjectPLRow[] {
   if (!basis) return [];
+
+  const unitsField = resolveUnitsField(ctx.businessConfig);
 
   const rows: ProjectPLRow[] = [];
   for (const row of ctx.projects) {
@@ -681,6 +692,7 @@ export function computeProjectPLRows(
       projectNo: row.projectNo,
       customerName: row.customer?.customerName ?? null,
       partnerName: row.partner?.partnerName ?? null,
+      units: getUnitsValue(row.projectCustomData, unitsField),
       gmv,
       companyRevenue,
       rewardTotal,

@@ -76,6 +76,12 @@ function changeText(current: number, previous: ProfitTotals | null, pick: (t: Pr
 
 const formatMargin = (v: number | null) => (v != null ? `${v.toFixed(1)}%` : '-');
 
+/**
+ * 台数。事業に台数フィールドが無い場合は null で来るので「-」を出す。
+ * 0台と「台数という概念が無い事業」を同じ見た目にしないため 0 は 0 と出す。
+ */
+const formatUnits = (v: number | null) => (v != null ? `${v.toLocaleString()}台` : '-');
+
 function ProfitCard({
   label,
   value,
@@ -277,6 +283,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                   <th className="text-left font-normal py-2 pr-4">案件番号</th>
                   <th className="text-left font-normal py-2 pr-4">顧客</th>
                   <th className="text-left font-normal py-2 pr-4">代理店</th>
+                  <th className="text-right font-normal py-2 pr-4">台数</th>
                   <th className="text-right font-normal py-2 pr-4">取扱高</th>
                   <th className="text-right font-normal py-2 pr-4">自社売上</th>
                   <th className="text-right font-normal py-2 pr-4">支払手数料</th>
@@ -296,6 +303,7 @@ export const ProfitSection = memo(function ProfitSection({ data, isLoading, show
                     <td className="py-2 pr-4">
                       {p.partnerName ?? <span className="text-muted-foreground">直販</span>}
                     </td>
+                    <td className="py-2 pr-4 text-right">{formatUnits(p.units)}</td>
                     <td className="py-2 pr-4 text-right">{formatCurrency(p.gmv, true)}</td>
                     <td className="py-2 pr-4 text-right">{formatCurrency(p.companyRevenue, true)}</td>
                     <td

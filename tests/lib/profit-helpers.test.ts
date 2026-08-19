@@ -539,6 +539,39 @@ describe('computeProjectPLRows', () => {
     const rows = computeProjectPLRows(makeContext({ projectSalesStatus: '商談中' }), basis, '2026-03', '2026-05');
     expect(rows).toEqual([]);
   });
+
+  it('台数フィールドが定義された事業では台数を返す', () => {
+    const ctx = makeContext();
+    ctx.businessConfig = {
+      ...businessConfig,
+      projectFields: [{ key: 'amount' }, { key: 'monthly' }, { key: 'units' }],
+    };
+    ctx.projects[0].projectCustomData = { amount: 500_000, monthly: 50_000, units: 3 };
+
+    const rows = computeProjectPLRows(ctx, basis, '2026-03', '2026-05');
+    expect(rows[0].units).toBe(3);
+  });
+
+  it('台数フィールドが無い事業では null（0台と区別する）', () => {
+    // fixture の businessConfig には projectFields が無い＝台数を出せない事業
+    const rows = computeProjectPLRows(makeContext(), basis, '2026-03', '2026-05');
+    expect(rows[0].units).toBeNull();
+  });
+
+  it('ストック案件でも台数は月数ぶん増えない（案件の属性なので1回だけ）', () => {
+    const ctx = makeContext();
+    ctx.businessConfig = {
+      ...businessConfig,
+      projectFields: [{ key: 'amount' }, { key: 'monthly' }, { key: 'units' }],
+    };
+    ctx.projects[0].projectCustomData = { amount: 500_000, monthly: 50_000, units: 3 };
+
+    // 3ヶ月ぶん計上される期間で見ても台数は 3 のまま（9 にならない）
+    const rows = computeProjectPLRows(ctx, basis, '2026-03', '2026-05');
+    const months = computeMonthlyPL(ctx, basis, '2026-03', '2026-05');
+    expect(months.length).toBeGreaterThan(1);
+    expect(rows[0].units).toBe(3);
+  });
 });
 
 describe('computeProjectMonthPLRows', () => {

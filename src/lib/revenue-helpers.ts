@@ -124,6 +124,33 @@ export function getActiveFieldKeys(businessConfig: unknown): Set<string> {
   return new Set(fields.map((f) => f.key));
 }
 
+/**
+ * 台数フィールドのキーを解決する。
+ *
+ * key="units" の KPI の sourceField を使い、無ければ既定の "unit_count"。
+ * 案件フィールド定義に実在しない場合は null（＝この事業では台数を出せない）。
+ *
+ * ダッシュボードの案件別内訳と経営統計API（strategy-report）が同じ台数を出す
+ * 必要があるため、解決はここに集約する。片方だけ既定値を変えると
+ * 「画面とAPIで台数が違う」という追いにくい食い違いになる。
+ */
+export function resolveUnitsField(businessConfig: unknown): string | null {
+  const unitsKpi = getKpiDefinitions(businessConfig).find((k) => k.key === 'units');
+  const candidate = unitsKpi?.sourceField ?? 'unit_count';
+  return getActiveFieldKeys(businessConfig).has(candidate) ? candidate : null;
+}
+
+/**
+ * 案件のカスタムデータから台数を読む。
+ * フィールド未解決・値が数値でない場合は null（0 と区別する）。
+ */
+export function getUnitsValue(projectCustomData: unknown, unitsField: string | null): number | null {
+  if (!unitsField) return null;
+  const data = projectCustomData as Record<string, unknown> | null;
+  const v = data?.[unitsField];
+  return typeof v === 'number' ? v : null;
+}
+
 // ============================================
 // 売上実績集計
 // ============================================

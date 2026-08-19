@@ -145,6 +145,8 @@ export interface ProfitProjectRow {
   customerName: string | null;
   /** null は代理店が紐づいていない案件（＝手数料が発生しない） */
   partnerName: string | null;
+  /** 台数。事業に台数フィールドが無ければ null（0 と区別する） */
+  units: number | null;
   gmv: number;
   companyRevenue: number;
   rewardTotal: number;
