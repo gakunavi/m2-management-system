@@ -357,3 +357,52 @@ export async function inheritBusinessHierarchyOnLink(
     await connectChildToParentInBusiness(tx, businessId, child.id, partnerId);
   }
 }
+
+/**
+ * 事業内で、指定代理店の階層を最上位（1次代理店）まで遡って返す。
+ *
+ * 自社受取率は代理店グループ単位で決まるため、2次・3次代理店の画面でも
+ * 「どの1次代理店の設定が効くのか」を示す必要がある。
+ * businessParentId が循環していても深さ上限で必ず止まる。
+ */
+export async function resolveTopBusinessLink(
+  tx: TxClient,
+  businessId: number,
+  partnerId: number,
+): Promise<{
+  partnerId: number;
+  partnerName: string;
+  companyShareSlots: unknown;
+} | null> {
+  const MAX_DEPTH = 10;
+  const seen = new Set<number>();
+  let current: number | null = partnerId;
+  let last: { partnerId: number; partnerName: string; companyShareSlots: unknown } | null = null;
+
+  for (let i = 0; i < MAX_DEPTH && current != null && !seen.has(current); i++) {
+    seen.add(current);
+    const link: {
+      partnerId: number;
+      businessParentId: number | null;
+      companyShareSlots: unknown;
+      partner: { partnerName: string };
+    } | null = await tx.partnerBusinessLink.findFirst({
+      where: { businessId, partnerId: current },
+      select: {
+        partnerId: true,
+        businessParentId: true,
+        companyShareSlots: true,
+        partner: { select: { partnerName: true } },
+      },
+    });
+    if (!link) break;
+    last = {
+      partnerId: link.partnerId,
+      partnerName: link.partner.partnerName,
+      companyShareSlots: link.companyShareSlots,
+    };
+    current = link.businessParentId;
+  }
+
+  return last;
+}

@@ -328,6 +328,13 @@ model PartnerBusinessLink {
   // { shot?: { direct?: {type,value}, indirect?: {type,value} },
   //   stock?: { direct?: {type,value}, indirect?: {type,value} } }
   rewardSlots         Json?    @map("reward_slots")
+  // 自社受取率（メーカーから自社に入る販売手数料）の代理店グループ別上書き。
+  // CompanyShare 構造の部分JSON: { shot?: {type,value}, stock?: {type,value} }
+  //
+  // 「代理店グループ単位」で決まるため、値を持つのは1次代理店のリンクのみ。
+  // 案件の担当が2次・3次でも階層を最上位まで遡って1次代理店の値を使う
+  // （resolveTopPartnerCompanyShare）。2次以降のリンクに書いても参照されない。
+  companyShareSlots   Json?    @map("company_share_slots")
   // 支払い対象月の代理店特例（未設定なら事業デフォルト）
   paymentTiming       String?  @map("payment_timing") @db.VarChar(20) // same|next|next2|closing
   closingDay          Int?     @map("closing_day")
@@ -575,6 +582,13 @@ model Project {
   /// 自動セットされ、その後のステータス変更では自動で外れない（手動リセットのみ）。
   /// null=未確定。報酬対象判定と計上月はこの日付で行う（編集可＝過去月の計上も可能）。
   revenueConfirmedAt        DateTime?         @map("revenue_confirmed_at") @db.Timestamptz(6)
+  /// 手数料の凍結スナップショット（RewardSnapshot 構造のJSON）。
+  /// revenueConfirmedAt がセットされた時点の実効料率（自社受取率・代理店支払率・
+  /// 基準金額フィールド・税率・支払タイミング）を丸ごと焼き付ける。
+  /// 以後マスタを変更しても、この案件の金額計算はスナップショットを参照するため動かない。
+  /// null=未凍結（＝マスタから毎回計算。新しい料率が反映される）。
+  /// 収益確定を解除（revenueConfirmedAt=null）すると同時にクリアされる。
+  rewardSnapshot            Json?             @map("reward_snapshot")
   movements                 ProjectMovement[]
   rewardEntries             RewardEntry[]
   files                     ProjectFile[]

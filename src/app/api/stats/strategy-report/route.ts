@@ -9,7 +9,6 @@ import {
   injectFormulaValues,
 } from '@/lib/revenue-helpers';
 import { addMonths, getRewardConfig } from '@/lib/reward-helpers';
-import { isCompanyShareConfigured } from '@/lib/company-share';
 import {
   calculateBusinessMonthlyPL,
   calculateBusinessProjectMonthPL,
@@ -582,7 +581,21 @@ export async function GET(request: NextRequest) {
 
   // --- revenue（取扱高・自社売上・代理店手数料・粗利） --------------------
   // 計算はすべて profit-helpers（＝ダッシュボードの収益セクションと同一実装）に任せる。
-  const shareConfigured = rewardConfig !== null && isCompanyShareConfigured(rewardConfig.companyShare);
+  //
+  // 「自社取り分が設定済みか」の判定は profit-helpers に一本化する。ここで
+  // isCompanyShareConfigured(rewardConfig.companyShare) を直接見てはいけない。
+  // 受取率は事業デフォルトのほか 1次代理店（代理店グループ）・案件別上書き・
+  // 凍結スナップショットにも入るため、デフォルトだけで判定すると
+  // 「代理店グループごとに受取率を設定している事業」の revenue が丸ごと空になる。
+  // P/L 関数は未設定なら null を返すので、その戻り値をそのまま判定に使う。
+  // 手数料設定そのものが無い事業は P/L を引くまでもなく算出不可。無駄な集計を避ける
+  const [plMonths, plRows] = rewardConfig
+    ? await Promise.all([
+        calculateBusinessMonthlyPL(prisma, business.id, fromYm, toYm),
+        calculateBusinessProjectMonthPL(prisma, business.id, fromYm, toYm),
+      ])
+    : [null, null];
+  const shareConfigured = plMonths !== null && plRows !== null;
   const revenueBasis = {
     kpi_label: profitBasis?.label ?? null,
     // 取扱高の参照先。profit-helpers が gmv に使うフィールドと同じ解決順
@@ -601,13 +614,9 @@ export async function GET(request: NextRequest) {
     notes.push(
       rewardConfig === null
         ? 'revenue: この事業には手数料設定（businessConfig.rewardConfig）がありません。自社売上・粗利は算出できないため by_month / by_project / by_partner は空配列、totals は null です（0 ではありません）。'
-        : 'revenue: 自社取り分（rewardConfig.companyShare）が未設定のため、自社売上・粗利は算出できません。by_month / by_project / by_partner は空配列、totals は null です（0 ではありません）。事業マスタで自社取り分を設定してください。',
+        : 'revenue: 自社取り分（自社受取率）がどこにも設定されていないため、自社売上・粗利は算出できません。by_month / by_project / by_partner は空配列、totals は null です（0 ではありません）。事業マスタの自社取り分、または1次代理店の自社受取率を設定してください。',
     );
   } else {
-    const [plMonths, plRows] = await Promise.all([
-      calculateBusinessMonthlyPL(prisma, business.id, fromYm, toYm),
-      calculateBusinessProjectMonthPL(prisma, business.id, fromYm, toYm),
-    ]);
     const unitsByProject = new Map<number, number | null>(projects.map((p) => [p.id, unitsOf(p)]));
 
     revenueSection = buildRevenueSection({

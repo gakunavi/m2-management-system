@@ -13,6 +13,12 @@ import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import { rewardSlotsSchema } from '@/lib/reward-slots';
 import { companyShareSchema } from '@/lib/company-share';
 import {
+  parseRewardSnapshot,
+  rewardSnapshotEditSchema,
+  visibleRewardSnapshot,
+} from '@/lib/reward-snapshot';
+import { buildRewardSnapshotForProject } from '@/lib/reward-helpers';
+import {
   calculateProjectFinancials,
   canSeeCompanyRevenue,
   visibleFinancials,
@@ -41,8 +47,37 @@ const updateProjectSchema = z.object({
   rewardOverride: rewardSlotsSchema.optional().nullable(),
   // 案件別の自社取り分上書き（例: 通常20%だがこの契約だけ15%）
   companyShareOverride: companyShareSchema.optional().nullable(),
+  // 凍結スナップショットの手動訂正（管理者のみ）。「間違った料率で確定してしまった」
+  // 案件を直すための経路。capturedAt / capturedBy はサーバ側で打ち直す。
+  rewardSnapshot: rewardSnapshotEditSchema.optional().nullable(),
   version: z.number().int().min(1),
 });
+
+/**
+ * この案件を含む「確定済み」の支払明細書が既にあるか。
+ *
+ * 確定済み明細は代理店へ発行済みの書類で、金額も率もスナップショット保存されている。
+ * その案件の料率を後から訂正すると発行済みの書類と食い違うため、画面で警告を出す
+ * （運用判断により訂正自体はブロックせず、差額は次月の明細で調整する）。
+ */
+async function partnerNamesForSnapshot(
+  snapshot: { chain: { partnerId: number }[] } | null,
+): Promise<Record<number, string>> {
+  if (!snapshot || snapshot.chain.length === 0) return {};
+  const partners = await prisma.partner.findMany({
+    where: { id: { in: snapshot.chain.map((n) => n.partnerId) } },
+    select: { id: true, partnerName: true },
+  });
+  return Object.fromEntries(partners.map((p) => [p.id, p.partnerName]));
+}
+
+async function hasConfirmedStatementForProject(projectId: number): Promise<boolean> {
+  const entry = await prisma.rewardEntry.findFirst({
+    where: { projectId, statement: { status: 'confirmed' } },
+    select: { id: true },
+  });
+  return entry !== null;
+}
 
 const PROJECT_INCLUDE = {
   customer: {
@@ -167,12 +202,26 @@ export async function GET(
       canSeeCompanyRevenue(user.role),
     );
 
+    // 凍結スナップショットと「発行済み明細があるか」。案件詳細の報酬タブで
+    // 確定済み料率の確認・訂正を行うために返す。訂正が発行済み明細と食い違う
+    // 可能性を画面で警告するため、明細の有無もここで併せて返す。
+    const rewardSnapshot = visibleRewardSnapshot(
+      parseRewardSnapshot(project.rewardSnapshot),
+      canSeeCompanyRevenue(user.role),
+    );
+    const hasConfirmedRewardStatement = await hasConfirmedStatementForProject(project.id);
+    // 凍結値は代理店IDしか持たないので、画面に出す名前をここで引く
+    const rewardSnapshotPartnerNames = await partnerNamesForSnapshot(rewardSnapshot);
+
     return NextResponse.json({
       success: true,
       data: {
         ...formatProject(project),
         ...flatCustom,
         ...financials,
+        rewardSnapshot,
+        rewardSnapshotPartnerNames,
+        hasConfirmedRewardStatement,
         customerLinkCustomData: custLinkData,
         customerCustomData: custGlobalData,
         partnerLinkCustomData: partLinkData,
@@ -211,11 +260,17 @@ export async function PATCH(
       throw ApiError.forbidden('自社取り分を変更する権限がありません');
     }
 
+    // 凍結スナップショットの手動訂正は管理者のみ。確定済み案件の金額を直接書き換える
+    // 操作で、発行済みの支払明細と食い違い得るため staff にも開けない。
+    if (updateData.rewardSnapshot !== undefined && user.role !== 'admin') {
+      throw ApiError.forbidden('確定済み手数料を訂正する権限がありません');
+    }
+
     const existing = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
         id: true, version: true, projectSalesStatus: true, projectCustomData: true, businessId: true,
-        revenueConfirmedAt: true,
+        revenueConfirmedAt: true, partnerId: true,
       },
     });
     if (!existing) throw ApiError.notFound('案件が見つかりません');
@@ -273,6 +328,7 @@ export async function PATCH(
       cancelledAt: manualCancelledAt,
       rewardOverride,
       companyShareOverride,
+      rewardSnapshot: manualRewardSnapshot,
       ...restUpdateData
     } = updateData;
     const existingRevenueConfirmedIso = existing.revenueConfirmedAt ? existing.revenueConfirmedAt.toISOString() : null;
@@ -281,6 +337,52 @@ export async function PATCH(
     const resolvedRevenueConfirmedAt = isManualRevenueConfirmedChange
       ? (manualRevenueConfirmedAt ? new Date(manualRevenueConfirmedAt) : null)
       : autoRevenueConfirmedAt;
+
+    // ── 手数料の凍結（ラッチ）──
+    // 収益確定した瞬間に、その時点の実効料率（自社受取率・代理店支払率・基準金額
+    // フィールド・支払タイミング）を案件へ焼き付ける。以後マスタの料率を改定しても
+    // この案件の金額は動かない。未確定の案件はスナップショットを持たないので、
+    // 改定した新しい料率がそのまま反映される。
+    //
+    // 発火するのは「未確定 → 確定」の遷移のときだけ。確定日を別の日付へ訂正した
+    // だけでは焼き直さない（料率は確定した時点のものが正なので）。
+    // 逆に確定を解除（null 化）したときはスナップショットも消し、再確定で
+    // 最新のマスタ料率を取り込み直せるようにする。
+    const isNewlyConfirmed =
+      resolvedRevenueConfirmedAt != null && existing.revenueConfirmedAt == null;
+    const isUnconfirmed =
+      resolvedRevenueConfirmedAt === null && existing.revenueConfirmedAt != null;
+
+    let rewardSnapshotUpdate: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+    if (manualRewardSnapshot !== undefined) {
+      // 管理者による手動訂正が最優先。capturedAt / capturedBy はサーバで打ち直す
+      rewardSnapshotUpdate = manualRewardSnapshot
+        ? ({
+            ...manualRewardSnapshot,
+            capturedAt: new Date().toISOString(),
+            capturedBy: 'manual',
+          } as Prisma.InputJsonValue)
+        : Prisma.JsonNull;
+    } else if (isNewlyConfirmed) {
+      const snapshot = await buildRewardSnapshotForProject(prisma, {
+        businessId: existing.businessId,
+        projectId,
+        // 同じ PATCH で担当代理店を付け替える場合があるので更新後の値を使う。
+        // DB はまだ更新前なので existing を見てはいけない。
+        partnerId:
+          restUpdateData.partnerId !== undefined ? restUpdateData.partnerId : existing.partnerId,
+        // 報酬タブは上書きと確定日を同時に送る。更新後の値で凍結しないと、
+        // 上書きを入れた当日に確定した案件だけ上書き前の料率で固まる
+        ...(rewardOverride !== undefined ? { rewardOverride } : {}),
+        ...(companyShareOverride !== undefined ? { companyShareOverride } : {}),
+        capturedBy: 'confirm',
+        capturedAt: resolvedRevenueConfirmedAt,
+      });
+      // 手数料管理をしていない事業（rewardConfig 未設定）は null。その場合は書かない
+      if (snapshot) rewardSnapshotUpdate = snapshot as unknown as Prisma.InputJsonValue;
+    } else if (isUnconfirmed) {
+      rewardSnapshotUpdate = Prisma.JsonNull;
+    }
 
     const updated = await prisma.project.update({
       where: { id: projectId },
@@ -292,6 +394,7 @@ export async function PATCH(
           companyShareOverride: (companyShareOverride ?? {}) as Prisma.InputJsonValue,
         }),
         ...(resolvedRevenueConfirmedAt !== undefined && { revenueConfirmedAt: resolvedRevenueConfirmedAt }),
+        ...(rewardSnapshotUpdate !== undefined && { rewardSnapshot: rewardSnapshotUpdate }),
         ...(projectSalesStatus !== undefined && { projectSalesStatus }),
         ...(statusChangedAt && { projectStatusChangedAt: statusChangedAt }),
         ...(mergedCustomData !== undefined && { projectCustomData: mergedCustomData as Prisma.InputJsonValue }),
@@ -406,6 +509,13 @@ export async function PATCH(
       await calculateProjectFinancials(prisma, updated.businessId, updated.id),
       canSeeCompanyRevenue(user.role),
     );
+    // GET 詳細と同じキー集合を返す（返し漏れると報酬タブの表示が消える）
+    const patchRewardSnapshot = visibleRewardSnapshot(
+      parseRewardSnapshot(updated.rewardSnapshot),
+      canSeeCompanyRevenue(user.role),
+    );
+    const patchHasConfirmedStatement = await hasConfirmedStatementForProject(updated.id);
+    const patchSnapshotPartnerNames = await partnerNamesForSnapshot(patchRewardSnapshot);
 
     return NextResponse.json({
       success: true,
@@ -415,6 +525,9 @@ export async function PATCH(
         ...patchCustomerFlat,
         ...patchPartnerFlat,
         ...patchFinancials,
+        rewardSnapshot: patchRewardSnapshot,
+        rewardSnapshotPartnerNames: patchSnapshotPartnerNames,
+        hasConfirmedRewardStatement: patchHasConfirmedStatement,
         customerLinkCustomData: patchCustLinkData,
         customerCustomData: patchCustGlobalData,
         partnerLinkCustomData: patchPartLinkData,

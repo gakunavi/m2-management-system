@@ -154,7 +154,7 @@ describe('getStockActiveMonths', () => {
     id: 1, projectNo: 'P1', customerName: null, partnerId: 1,
     projectExpectedCloseMonth: null, projectCustomData: {},
     revenueConfirmedMonth: '2026-03', revenueConfirmedDay: 10,
-    cancelledMonth: null, stockTermMonths: null, rewardOverride: null, companyShareOverride: null,
+    cancelledMonth: null, stockTermMonths: null, rewardOverride: null, companyShareOverride: null, rewardSnapshot: null,
   };
   it('未確定は空', () => {
     expect(getStockActiveMonths({ ...base, revenueConfirmedMonth: null }, '2026-01', '2026-12')).toEqual([]);
@@ -191,14 +191,15 @@ const projBase: ProjectRewardInput = {
   id: 10, projectNo: 'MG-0010', customerName: '株式会社A', partnerId: 100,
   projectExpectedCloseMonth: null, projectCustomData: { amount: 500000, monthly: 50000 },
   revenueConfirmedMonth: '2026-03', revenueConfirmedDay: 10,
-  cancelledMonth: null, stockTermMonths: null, rewardOverride: null, companyShareOverride: null,
+  cancelledMonth: null, stockTermMonths: null, rewardOverride: null, companyShareOverride: null, rewardSnapshot: null,
 };
 
-const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null };
+const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null };
 // 上位店は自身のリンク設定で料率を持つ（事業デフォルトは担当店にしか効かない）
 const parent: LinkRewardInput = {
   partnerId: 200,
   rewardSlots: { shot: { indirect: { type: 'rate', value: 5 } } },
+  companyShareSlots: null,
   paymentTiming: null,
   closingDay: null,
 };
@@ -249,7 +250,7 @@ describe('computeProjectEntries - ショット', () => {
   });
 
   it('リンク別率がデフォルトを上書き', () => {
-    const link: LinkRewardInput = { partnerId: 100, rewardSlots: { shot: { direct: { type: 'rate', value: 25 } } }, paymentTiming: null, closingDay: null };
+    const link: LinkRewardInput = { partnerId: 100, rewardSlots: { shot: { direct: { type: 'rate', value: 25 } } }, companyShareSlots: null, paymentTiming: null, closingDay: null };
     const e = computeProjectEntries(projBase, [{ partnerId: 100, link, isAssigned: true }], configShotOnly, '2026-01', '2026-12');
     expect(e[0].rewardAmount).toBe(125000); // 500000×25%
   });
@@ -269,9 +270,9 @@ describe('computeProjectEntries - ショット', () => {
 
 describe('resolvePartnerChain', () => {
   const links = new Map<number, LinkRow>([
-    [1, { partnerId: 1, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: null }], // A(最上位)
-    [2, { partnerId: 2, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 1 }], // B
-    [3, { partnerId: 3, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 2 }], // C
+    [1, { partnerId: 1, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: null }], // A(最上位)
+    [2, { partnerId: 2, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: 1 }], // B
+    [3, { partnerId: 3, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: 2 }], // C
   ]);
 
   it('担当店から最上位まで遡る', () => {
@@ -285,8 +286,8 @@ describe('resolvePartnerChain', () => {
   });
   it('親が循環していても止まる', () => {
     const looped = new Map<number, LinkRow>([
-      [1, { partnerId: 1, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 2 }],
-      [2, { partnerId: 2, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 1 }],
+      [1, { partnerId: 1, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: 2 }],
+      [2, { partnerId: 2, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: 1 }],
     ]);
     expect(resolvePartnerChain(1, looped).map((n) => n.partnerId)).toEqual([1, 2]);
   });
@@ -301,7 +302,7 @@ describe('computeChainRewardAmounts - 業務ルールの例', () => {
   };
   const node = (partnerId: number, slots: RewardSlots | null, isAssigned: boolean): RewardChainNode => ({
     partnerId,
-    link: { partnerId, rewardSlots: slots, paymentTiming: null, closingDay: null },
+    link: { partnerId, rewardSlots: slots, companyShareSlots: null, paymentTiming: null, closingDay: null },
     isAssigned,
   });
 
@@ -368,15 +369,15 @@ describe('computeProjectEntries - 階層ぶんの明細', () => {
 
   it('料率が設定されている上位店それぞれに明細行が立つ', () => {
     const chain: RewardChainNode[] = [
-      { partnerId: 3, link: { partnerId: 3, rewardSlots: null, paymentTiming: null, closingDay: null }, isAssigned: true },
+      { partnerId: 3, link: { partnerId: 3, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null }, isAssigned: true },
       {
         partnerId: 2,
-        link: { partnerId: 2, rewardSlots: { shot: { direct: { type: 'rate', value: 10 } } }, paymentTiming: null, closingDay: null },
+        link: { partnerId: 2, rewardSlots: { shot: { direct: { type: 'rate', value: 10 } } }, companyShareSlots: null, paymentTiming: null, closingDay: null },
         isAssigned: false,
       },
       {
         partnerId: 1,
-        link: { partnerId: 1, rewardSlots: { shot: { indirect: { type: 'rate', value: 5 } } }, paymentTiming: null, closingDay: null },
+        link: { partnerId: 1, rewardSlots: { shot: { indirect: { type: 'rate', value: 5 } } }, companyShareSlots: null, paymentTiming: null, closingDay: null },
         isAssigned: false,
       },
     ];
@@ -420,6 +421,7 @@ describe('computeProjectEntries - ストック', () => {
         link: {
           partnerId: 200,
           rewardSlots: { stock: { indirect: { type: 'fixed', value: 1000 } } },
+          companyShareSlots: null,
           paymentTiming: null,
           closingDay: null,
         },
@@ -457,7 +459,7 @@ describe('computeProjectEntries - ストック', () => {
 describe('computeProjectEntries - 代理店特例の支払いタイミング', () => {
   it('担当代理店の paymentTiming がデフォルトを上書き', () => {
     const cfg: RewardConfig = { ...configShotOnly, paymentTiming: 'same' };
-    const link: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: 'next', closingDay: null };
+    const link: LinkRewardInput = { partnerId: 100, rewardSlots: null, companyShareSlots: null, paymentTiming: 'next', closingDay: null };
     const e = computeProjectEntries(projBase, [{ partnerId: 100, link, isAssigned: true }], cfg, '2026-01', '2026-12');
     expect(e[0].paymentMonth).toBe('2026-04'); // 確定3月→特例で翌月
   });

@@ -9,10 +9,12 @@ import {
   applyRewardSetting,
   computeChainRewardAmounts,
   computeProjectEntries,
+  effectiveCompanyShareBaseField,
+  effectiveRewardBaseField,
   getRewardConfig,
   getStockActiveMonths,
   loadBusinessRewardContext,
-  resolveCompanyShareBaseField,
+  resolveEffectiveCompanyShare,
   resolvePartnerChain,
   toProjectRewardInput,
   compareMonth,
@@ -23,11 +25,8 @@ import {
   type RewardConfig,
 } from '@/lib/reward-helpers';
 import { formatRewardSetting } from '@/lib/reward-slots';
-import {
-  isCompanyShareConfigured,
-  mergeCompanyShare,
-  type CompanyShare,
-} from '@/lib/company-share';
+import { isCompanyShareConfigured, parseCompanyShare, type CompanyShare } from '@/lib/company-share';
+import { parseRewardSnapshot } from '@/lib/reward-snapshot';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 // ============================================
@@ -156,6 +155,11 @@ export interface ProjectFinancials {
   companyShareShotLabel: string | null; // "20%" / "¥5,000"
   companyShareStockLabel: string | null;
   companyShareIsOverridden: boolean; // 案件別上書きが効いているか
+  /**
+   * 料率が凍結済みか（収益確定時のスナップショットを使っているか）。
+   * true の案件はマスタの料率を改定しても金額が動かない。
+   */
+  rewardIsFrozen: boolean;
 
   // --- ショット（計上月に1回）---
   rewardShotDirect: number | null;
@@ -180,6 +184,7 @@ export const EMPTY_FINANCIALS: ProjectFinancials = {
   companyShareShotLabel: null,
   companyShareStockLabel: null,
   companyShareIsOverridden: false,
+  rewardIsFrozen: false,
   rewardShotDirect: null,
   rewardShotIndirect: null,
   rewardShotTotal: null,
@@ -242,16 +247,41 @@ export function calcMarginPercent(grossProfit: number | null, companyRevenue: nu
   return Math.round((grossProfit / companyRevenue) * 1000) / 10;
 }
 
-/** 案件に適用される自社取り分を解決（事業デフォルト → 案件別上書き） */
+/**
+ * 案件に適用される自社受取率を解決する。
+ *
+ * 解決は reward-helpers の resolveEffectiveCompanyShare に一本化している。
+ * 凍結済みならスナップショット、未凍結なら
+ * 事業デフォルト → 1次代理店（代理店グループ） → 案件別上書き の順。
+ */
 export function resolveProjectCompanyShare(
   config: RewardConfig,
+  chain: RewardChainNode[],
   project: ProjectRewardInput,
-): { share: CompanyShare; isOverridden: boolean } {
-  const override = project.companyShareOverride;
-  return {
-    share: mergeCompanyShare(config.companyShare, override),
-    isOverridden: isCompanyShareConfigured(override),
-  };
+): { share: CompanyShare; isOverridden: boolean; isFrozen: boolean } {
+  return resolveEffectiveCompanyShare(config, chain, project);
+}
+
+/**
+ * その事業で自社受取率が1つでも設定されているか（P/L を出すかどうかの判定）。
+ *
+ * 事業デフォルトだけを見てはいけない。受取率は
+ * 事業デフォルト / 1次代理店（代理店グループ） / 案件別上書き / 凍結スナップショット
+ * のどこにでも入り得るので、デフォルト未設定でも代理店グループ別に設定している
+ * 事業では P/L を出す必要がある。デフォルトだけで判定すると、代理店ごとに
+ * 受取率を入れたのに収益セクションが丸ごと消える。
+ */
+export function isCompanyShareUsedInBusiness(ctx: BusinessRewardContext): boolean {
+  if (isCompanyShareConfigured(ctx.config.companyShare)) return true;
+  // Map の直接 iterate は tsconfig の target 制約に触れるため配列化してから回す
+  for (const link of Array.from(ctx.linkByPartner.values())) {
+    if (isCompanyShareConfigured(parseCompanyShare(link.companyShareSlots))) return true;
+  }
+  for (const p of ctx.projects) {
+    if (isCompanyShareConfigured(parseCompanyShare(p.companyShareOverride))) return true;
+    if (isCompanyShareConfigured(parseRewardSnapshot(p.rewardSnapshot)?.companyShare)) return true;
+  }
+  return false;
 }
 
 /**
@@ -268,7 +298,7 @@ export function computeProjectFinancials(
   basis: ProfitBasis | null,
   recognized: boolean,
 ): ProjectFinancials {
-  const { share, isOverridden } = resolveProjectCompanyShare(config, project);
+  const { share, isOverridden, isFrozen } = resolveProjectCompanyShare(config, chain, project);
 
   const revenueSource = {
     id: project.id,
@@ -287,10 +317,14 @@ export function computeProjectFinancials(
   // KPIのsourceField を先に見てはいけない。プライマリKPIが「受注見込み数」の
   // ような数量フィールドだと、取り分だけが台数(例:3)を基準に計算されて
   // 3 × 20% = 0（切り捨て）になり、報酬（金額基準）と桁がまるで合わなくなる。
-  const shotShareBase = amountOf(resolveCompanyShareBaseField(config, 'shot') ?? basis?.sourceField ?? null);
-  const stockShareBase = amountOf(resolveCompanyShareBaseField(config, 'stock'));
-  const shotRewardBase = amountOf(config.shotBaseField ?? basis?.sourceField ?? null);
-  const stockRewardBase = amountOf(config.stockBaseField);
+  const shotShareBase = amountOf(
+    effectiveCompanyShareBaseField(config, project, 'shot') ?? basis?.sourceField ?? null,
+  );
+  const stockShareBase = amountOf(effectiveCompanyShareBaseField(config, project, 'stock'));
+  const shotRewardBase = amountOf(
+    effectiveRewardBaseField(config, project, 'shot') ?? basis?.sourceField ?? null,
+  );
+  const stockRewardBase = amountOf(effectiveRewardBaseField(config, project, 'stock'));
 
   // 手数料は階層を最上位まで遡って積み上げる（担当店ぶん / 上位店ぶんの合計）
   const emptyAmounts = { direct: null, indirect: null };
@@ -324,6 +358,7 @@ export function computeProjectFinancials(
     companyShareShotLabel: share.shot ? formatRewardSetting(share.shot) : null,
     companyShareStockLabel: share.stock ? formatRewardSetting(share.stock) : null,
     companyShareIsOverridden: isOverridden,
+    rewardIsFrozen: isFrozen,
     rewardShotDirect,
     rewardShotIndirect,
     rewardShotTotal,
@@ -533,7 +568,7 @@ function projectMonthDeltas(
 
   const project = withRecognitionMonth(base, month);
   const chain = resolvePartnerChain(row.partnerId, ctx.linkByPartner);
-  const { share } = resolveProjectCompanyShare(ctx.config, project);
+  const { share } = resolveProjectCompanyShare(ctx.config, chain, project);
 
   const revenueSource = {
     id: project.id,
@@ -558,11 +593,11 @@ function projectMonthDeltas(
     // 取扱高は報酬の基準金額と同じフィールドから取る。KPIのsourceField を
     // 優先すると、プライマリKPIが数量（受注見込み数など）の事業で取扱高が
     // 台数になってしまい、報酬と桁が合わなくなる
-    d.gmv += amountOf(ctx.config.shotBaseField ?? basis.sourceField);
+    d.gmv += amountOf(effectiveRewardBaseField(ctx.config, project, 'shot') ?? basis.sourceField);
     if (share.shot) {
       d.companyRevenue += applyRewardSetting(
         share.shot,
-        amountOf(resolveCompanyShareBaseField(ctx.config, 'shot') ?? basis.sourceField),
+        amountOf(effectiveCompanyShareBaseField(ctx.config, project, 'shot') ?? basis.sourceField),
       );
     }
   }
@@ -571,9 +606,12 @@ function projectMonthDeltas(
   // 起点は withRecognitionMonth で計上月に差し替え済み
   const stockMonths = getStockActiveMonths(project, fromMonth, toMonth);
   if (stockMonths.length > 0) {
-    const stockGmv = amountOf(ctx.config.stockBaseField);
+    const stockGmv = amountOf(effectiveRewardBaseField(ctx.config, project, 'stock'));
     const stockRevenue = share.stock
-      ? applyRewardSetting(share.stock, amountOf(resolveCompanyShareBaseField(ctx.config, 'stock')))
+      ? applyRewardSetting(
+          share.stock,
+          amountOf(effectiveCompanyShareBaseField(ctx.config, project, 'stock')),
+        )
       : 0;
     // ストック設定も取り分も無い案件は月を立てない（空の月が並ぶのを防ぐ）
     if (stockGmv > 0 || stockRevenue > 0) {
@@ -664,7 +702,7 @@ export async function calculateBusinessProjectPL(
 ): Promise<ProjectPLRow[] | null> {
   const ctx = await loadBusinessRewardContext(prisma, businessId, { includeUnconfirmed: true });
   if (!ctx) return null;
-  if (!isCompanyShareConfigured(ctx.config.companyShare)) return null;
+  if (!isCompanyShareUsedInBusiness(ctx)) return null;
   const basis = prepareContext(ctx);
   return computeProjectPLRows(ctx, basis, fromMonth, toMonth);
 }
@@ -761,7 +799,7 @@ export async function calculateBusinessProjectMonthPL(
 ): Promise<ProjectMonthPL[] | null> {
   const ctx = await loadBusinessRewardContext(prisma, businessId, { includeUnconfirmed: true });
   if (!ctx) return null;
-  if (!isCompanyShareConfigured(ctx.config.companyShare)) return null;
+  if (!isCompanyShareUsedInBusiness(ctx)) return null;
   const basis = prepareContext(ctx);
   return computeProjectMonthPLRows(ctx, basis, fromMonth, toMonth);
 }
@@ -802,7 +840,7 @@ export async function calculateBusinessMonthlyPL(
 ): Promise<MonthlyPL[] | null> {
   const ctx = await loadBusinessRewardContext(prisma, businessId, { includeUnconfirmed: true });
   if (!ctx) return null;
-  if (!isCompanyShareConfigured(ctx.config.companyShare)) return null;
+  if (!isCompanyShareUsedInBusiness(ctx)) return null;
   const basis = prepareContext(ctx);
   return computeMonthlyPL(ctx, basis, fromMonth, toMonth);
 }

@@ -5,7 +5,12 @@ import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-import { serializeRewardLinkFields, rewardLinkInputSchema, rewardLinkUpdateData } from '@/lib/reward-link-serializer';
+import {
+  serializeRewardLinkFields,
+  rewardLinkInputSchema,
+  rewardLinkUpdateData,
+  validateCompanyShareTier,
+} from '@/lib/reward-link-serializer';
 import {
   generateBusinessTierNumber,
   validateBusinessTierHierarchy,
@@ -55,6 +60,15 @@ export async function PATCH(
     // 階層変更の有無を判定
     const tierChanged = data.businessTier !== undefined;
     const parentChanged = data.businessParentId !== undefined;
+
+    // 自社受取率は1次代理店にのみ保存できる。階層を同時に変更する場合は
+    // 変更後の階層で判定する（2次へ降格しながら受取率を入れる、を防ぐ）
+    const tierAfterUpdate = {
+      businessTier: tierChanged ? data.businessTier ?? null : existing.businessTier,
+      businessParentId: parentChanged ? data.businessParentId ?? null : existing.businessParentId,
+    };
+    const companyShareTierError = validateCompanyShareTier(data.companyShareSlots, tierAfterUpdate);
+    if (companyShareTierError) throw ApiError.badRequest(companyShareTierError);
 
     if (tierChanged || parentChanged) {
       // 階層変更はトランザクション内で処理
@@ -129,6 +143,9 @@ export async function PATCH(
             ...rewardLinkUpdateData(data),
             ...(data.contactPerson !== undefined ? { contactPerson: data.contactPerson } : {}),
             ...(data.linkCustomData !== undefined ? { linkCustomData: data.linkCustomData as Prisma.InputJsonValue } : {}),
+            // 1次代理店から降格したら受取率を消す。降格後は参照されない値なので、
+            // 残すと「設定は見えているのに効いていない」状態が残り続ける
+            ...(newParentId != null ? { companyShareSlots: Prisma.DbNull } : {}),
             businessTier: newTier,
             businessTierNumber,
             businessParentId: newParentId,

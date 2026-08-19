@@ -74,7 +74,35 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新（POST/PATCH共通パターン）
 - **新規作成時の事業リンク**: 顧客・代理店POST APIで `businessId` がある場合、自動的に `CustomerBusinessLink` / `PartnerBusinessLink` を作成。`linkCustomData` がある場合はカスタムデータも同時保存
 - **楽観的ロック**: `version: { increment: 1 }` + 409 Conflict
+- **手数料の凍結**: 収益確定時に実効料率を案件へ焼き付ける（下記「会計（手数料）の2系統と凍結」）。バックフィルは `version` を上げない（実効値が変わらないので編集中ユーザーに409を出す理由が無い）
 - **ドット記法**: `unflattenDotKeys` / `flattenNestedToFormKeys` で変換
+
+### 会計（手数料）の2系統と凍結
+
+向きの違う2種類の手数料を扱う。混同すると粗利が逆側にズレるので、画面のラベルも必ず区別すること。
+
+| | 意味 | 解決レイヤー（後勝ち） | 保存先 |
+|---|---|---|---|
+| **自社受取率** `CompanyShare` | メーカー → 自社。取扱高のうち自社売上になる分 | 事業デフォルト → **1次代理店** → 案件別上書き | `rewardConfig.companyShare` / `PartnerBusinessLink.companyShareSlots` / `Project.companyShareOverride` |
+| **代理店支払手数料** `RewardSlots` | 自社 → 代理店 | 事業デフォルト → 代理店リンク → 案件別上書き | `rewardConfig.defaults` / `PartnerBusinessLink.rewardSlots` / `Project.rewardOverride` |
+
+- **受取率は「代理店グループ単位」**。メーカーとの手数料は1次代理店との契約で決まるため、案件の担当が2次・3次でも階層を最上位まで遡って**1次代理店の値**を使う（`resolveTopPartnerCompanyShare`）。途中の段の設定は参照しない
+- **受取率を保存できるのは1次代理店のリンクだけ**。2次以降に書けると「入力したのに効かない設定」が残るため、`validateCompanyShareTier` で API 入口から弾き、1次から降格したときは値をクリアする
+- **P/L の表示判定は事業デフォルトだけで見ない**。`isCompanyShareUsedInBusiness` で代理店リンク・案件上書き・スナップショットまで見る。デフォルト未設定でも代理店別に設定している事業があるため
+
+#### 収益確定時の凍結（RewardSnapshot）
+
+`revenueConfirmedAt` が **null → 非null** になった瞬間、その時点の実効料率を `Project.rewardSnapshot` へ丸ごと焼き付ける。
+
+- **凍結する**: 自社受取率 / 階層各段の支払率 / 基準金額フィールド / 支払タイミング
+- **凍結しない**: 取扱高そのもの（金額の入力ミスは直したら直ってほしい）/ 消費税率（明細書単位で小計に掛かるため案件ごとに持たせても合成できない）
+- 凍結済み案件は**マスタも案件別上書きも参照しない**。訂正はスナップショットを直接編集する（案件詳細の報酬タブ・**管理者のみ**）
+- 確定解除（null 化）でスナップショットも消え、再確定で最新料率を取り込み直せる
+- 凍結後に階層へ新しい段が現れた場合、その段だけマスタから解決する（`snapshotNodeFor` が undefined を返す）。実在しない代理店に払い続けないため
+- **受取と支払はセットで凍結する**。片方だけ凍結すると粗利＝受取−支払が結局動き、発行済み明細（`RewardEntry` は率・金額を保存済み）と画面の粗利が食い違う
+- 既存の確定済み案件は `POST /api/v1/admin/backfill-reward-snapshots`（管理者・冪等・`dryRun` 可）で一括付与。実行時点の実効値を焼くので前後で金額は変わらない
+
+解決の入口は `resolveEffectiveCompanyShare` / `settingForNode` / `effectiveRewardBaseField` / `effectiveCompanyShareBaseField` に集約されている。**料率を読む新しいコードはこれらを経由すること**（`config.shotBaseField` を直接読むと凍結が効かない）。`tests/lib/reward-snapshot.test.ts` に検証あり。
 
 ### 一覧の状態管理（EntityListTemplate）
 

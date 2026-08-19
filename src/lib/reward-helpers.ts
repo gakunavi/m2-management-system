@@ -3,15 +3,24 @@ import { getRevenueAmount, getKpiDefinitions } from '@/lib/revenue-helpers';
 import {
   parseRewardSlots,
   mergeRewardSlots,
+  type PaymentTiming,
   type RewardSetting,
   type RewardSlots,
 } from '@/lib/reward-slots';
 import {
+  isCompanyShareConfigured,
+  mergeCompanyShare,
   parseCompanyShare,
   parseCompanyShareConfig,
   type CompanyShare,
   type CompanyShareConfig,
 } from '@/lib/company-share';
+import {
+  parseRewardSnapshot,
+  snapshotNodeFor,
+  type RewardSnapshot,
+  type RewardSnapshotNode,
+} from '@/lib/reward-snapshot';
 
 // ============================================
 // 代理店支払手数料 計算エンジン
@@ -27,7 +36,8 @@ import {
 //
 // 中核（computeProjectEntries 以下）は DB 非依存の純粋関数でテストする。
 
-export type PaymentTiming = 'same' | 'next' | 'next2' | 'closing';
+/** 支払い対象月の決め方。型の実体は reward-slots.ts（循環依存を避けるため） */
+export type { PaymentTiming };
 export type RewardKind = 'shot' | 'stock';
 export type RewardEntryType = 'direct' | 'indirect';
 
@@ -56,12 +66,23 @@ export interface ProjectRewardInput {
   stockTermMonths: number | null; // ストック固定期間（月数）。null=解約日まで
   rewardOverride: RewardSlots | null; // 案件別上書き
   companyShareOverride: CompanyShare | null; // 案件別の自社取り分上書き
+  /**
+   * 収益確定時に焼き付けた実効料率。null＝未凍結（マスタから毎回計算）。
+   * 値があるときは事業デフォルト・代理店リンク・案件別上書きより優先され、
+   * マスタの料率を改定してもこの案件の金額は動かない。
+   */
+  rewardSnapshot: RewardSnapshot | null;
 }
 
 /** 代理店×事業リンク（手数料設定・支払いタイミング特例） */
 export interface LinkRewardInput {
   partnerId: number;
   rewardSlots: RewardSlots | null;
+  /**
+   * 自社受取率（メーカーから自社に入る販売手数料）の代理店グループ別設定。
+   * 参照されるのは1次代理店のリンクのみ（resolveTopPartnerCompanyShare）。
+   */
+  companyShareSlots: CompanyShare | null;
   paymentTiming: PaymentTiming | null;
   closingDay: number | null;
 }
@@ -272,13 +293,23 @@ export function resolvePartnerChain(
   return nodes;
 }
 
-/** その段に適用する手数料設定（未設定なら undefined） */
-function settingForNode(
+/**
+ * その段に適用する手数料設定（未設定なら undefined）。
+ *
+ * 案件が凍結済み（rewardSnapshot あり）なら、その段の凍結値をそのまま返す。
+ * マスタ（事業デフォルト・代理店リンク）も案件別上書きも見ない。
+ * ただし凍結後に担当代理店を付け替えた等で階層に新しい段が現れた場合、
+ * その段はスナップショットに無いのでマスタから解決する（snapshotNodeFor 参照）。
+ */
+export function settingForNode(
   kind: RewardKind,
   node: RewardChainNode,
   config: RewardConfig,
   project: ProjectRewardInput,
 ): RewardSetting | undefined {
+  const frozen = snapshotNodeFor(project.rewardSnapshot, node.partnerId);
+  if (frozen) return frozen[kind];
+
   if (node.isAssigned) {
     const merged = mergeRewardSlots(config.defaults, node.link?.rewardSlots, project.rewardOverride);
     return merged[kind]?.direct ?? merged[kind]?.indirect;
@@ -321,15 +352,160 @@ export function computeChainRewardAmounts(
   return { direct, indirect };
 }
 
-/** その代理店の支払いタイミング（リンク特例→事業デフォルト） */
-function timingFor(link: LinkRewardInput | null, config: RewardConfig): {
+/**
+ * その代理店の支払いタイミング（凍結値→リンク特例→事業デフォルト）。
+ *
+ * 支払タイミングは金額ではなく「どの月の明細に載るか」を決める。確定済み案件の
+ * 支払スケジュールが後からずれると発行済み明細と食い違うため、金額と同じく凍結する。
+ */
+function timingFor(
+  node: RewardChainNode,
+  config: RewardConfig,
+  project: ProjectRewardInput,
+): {
   timing: PaymentTiming;
   closingDay: number | null;
 } {
+  const frozen = snapshotNodeFor(project.rewardSnapshot, node.partnerId);
+  if (frozen) return { timing: frozen.paymentTiming, closingDay: frozen.closingDay };
+
+  const link = node.link;
   if (link?.paymentTiming) {
     return { timing: link.paymentTiming, closingDay: link.closingDay ?? config.closingDay };
   }
   return { timing: config.paymentTiming, closingDay: config.closingDay };
+}
+
+// ============================================
+// 自社受取率（メーカーから自社に入る販売手数料）の解決
+// ============================================
+
+/**
+ * 代理店グループ（1次代理店）に設定された自社受取率を返す。
+ *
+ * メーカーとの手数料は代理店グループ単位で決まるため、案件の担当が2次・3次
+ * 代理店であっても階層を最上位まで遡り、1次代理店の設定を使う。途中の段に
+ * 設定があっても参照しない（＝グループ内は一律）。
+ *
+ * 階層が空（代理店の紐づかない自社直販）または1次代理店に設定が無ければ null。
+ * 呼び出し側は事業デフォルトへフォールバックする。
+ */
+export function resolveTopPartnerCompanyShare(chain: RewardChainNode[]): CompanyShare | null {
+  if (chain.length === 0) return null;
+  return chain[chain.length - 1].link?.companyShareSlots ?? null;
+}
+
+export interface ResolvedCompanyShare {
+  share: CompanyShare;
+  /** 案件別上書きが設定されているか（表示用） */
+  isOverridden: boolean;
+  /** 凍結済みか（＝マスタの料率改定の影響を受けない） */
+  isFrozen: boolean;
+}
+
+/**
+ * 案件に適用される自社受取率を解決する。
+ *
+ *   凍結済み: スナップショットの値をそのまま使う（マスタも案件別上書きも見ない）
+ *   未凍結  : 事業デフォルト → 1次代理店 → 案件別上書き の順に後勝ちでマージ
+ */
+export function resolveEffectiveCompanyShare(
+  config: RewardConfig,
+  chain: RewardChainNode[],
+  project: ProjectRewardInput,
+): ResolvedCompanyShare {
+  const isOverridden = isCompanyShareConfigured(project.companyShareOverride);
+  if (project.rewardSnapshot) {
+    return { share: project.rewardSnapshot.companyShare, isOverridden, isFrozen: true };
+  }
+  return {
+    share: mergeCompanyShare(
+      config.companyShare,
+      resolveTopPartnerCompanyShare(chain),
+      project.companyShareOverride,
+    ),
+    isOverridden,
+    isFrozen: false,
+  };
+}
+
+// ============================================
+// 基準金額フィールド（凍結値を優先）
+// ============================================
+//
+// 料率を掛ける相手（取扱高をどのフィールドから読むか）も凍結対象。ここが後から
+// 変わると、料率を据え置いても金額が動いてしまうため。
+
+/** 代理店支払手数料の基準金額フィールド（凍結値→事業設定） */
+export function effectiveRewardBaseField(
+  config: RewardConfig,
+  project: ProjectRewardInput,
+  kind: RewardKind,
+): string | null {
+  const snap = project.rewardSnapshot;
+  if (snap) return kind === 'shot' ? snap.shotBaseField : snap.stockBaseField;
+  return kind === 'shot' ? config.shotBaseField : config.stockBaseField;
+}
+
+/** 自社受取率の基準金額フィールド（凍結値→事業設定） */
+export function effectiveCompanyShareBaseField(
+  config: RewardConfig,
+  project: ProjectRewardInput,
+  kind: RewardKind,
+): string | null {
+  const snap = project.rewardSnapshot;
+  if (snap) {
+    return kind === 'shot' ? snap.companyShareShotBaseField : snap.companyShareStockBaseField;
+  }
+  return resolveCompanyShareBaseField(config, kind);
+}
+
+// ============================================
+// 凍結スナップショットの生成
+// ============================================
+
+/**
+ * いまのマスタ設定から、この案件の実効料率を丸ごと焼き付ける（純粋関数）。
+ *
+ * 収益確定した瞬間に呼ぶ。以後この案件はマスタの料率改定の影響を受けなくなる。
+ * 既にスナップショットを持つ案件でも現在値で作り直す（＝入力の rewardSnapshot は
+ * 無視する）ので、「収益確定を解除して再確定」で最新料率を取り込み直せる。
+ */
+export function buildRewardSnapshot(
+  config: RewardConfig,
+  chain: RewardChainNode[],
+  project: ProjectRewardInput,
+  capturedBy: RewardSnapshot['capturedBy'],
+  capturedAt: Date,
+): RewardSnapshot {
+  // 既存スナップショットを外した状態で解決し直す（自己参照で古い値が残るのを防ぐ）
+  const live: ProjectRewardInput = { ...project, rewardSnapshot: null };
+
+  const nodes: RewardSnapshotNode[] = chain.map((node) => {
+    const timing = timingFor(node, config, live);
+    const shot = settingForNode('shot', node, config, live);
+    const stock = settingForNode('stock', node, config, live);
+    return {
+      partnerId: node.partnerId,
+      isAssigned: node.isAssigned,
+      ...(shot ? { shot } : {}),
+      ...(stock ? { stock } : {}),
+      paymentTiming: timing.timing,
+      closingDay: timing.closingDay,
+    };
+  });
+
+  return {
+    version: 1,
+    capturedAt: capturedAt.toISOString(),
+    capturedBy,
+    companyShare: resolveEffectiveCompanyShare(config, chain, live).share,
+    chain: nodes,
+    shotBaseField: config.shotBaseField,
+    stockBaseField: config.stockBaseField,
+    companyShareShotBaseField: resolveCompanyShareBaseField(config, 'shot'),
+    companyShareStockBaseField: resolveCompanyShareBaseField(config, 'stock'),
+  };
 }
 
 /**
@@ -427,7 +603,7 @@ export function computeProjectEntries(
     for (const node of chain) {
       const setting = settingForNode(kind, node, config, project);
       if (!setting) continue;
-      const timing = timingFor(node.link, config);
+      const timing = timingFor(node, config, project);
       pushEntry(
         kind,
         node.isAssigned ? 'direct' : 'indirect',
@@ -444,7 +620,8 @@ export function computeProjectEntries(
   // --- ショット（確定月に1回）---
   const confirmedMonth = project.revenueConfirmedMonth;
   if (compareMonth(confirmedMonth, sourceFrom) >= 0 && compareMonth(confirmedMonth, sourceTo) <= 0) {
-    const shotBase = config.shotBaseField ? getRevenueAmount(revenueForField, config.shotBaseField) : 0;
+    const shotField = effectiveRewardBaseField(config, project, 'shot');
+    const shotBase = shotField ? getRevenueAmount(revenueForField, shotField) : 0;
     const confirmedDay = project.revenueConfirmedDay ?? lastDayOfMonth(confirmedMonth);
     pushChain('shot', shotBase, confirmedMonth, confirmedDay);
   }
@@ -452,7 +629,8 @@ export function computeProjectEntries(
   // --- ストック（有効な各発生月）---
   const hasStockSetting = chain.some((node) => settingForNode('stock', node, config, project));
   if (hasStockSetting) {
-    const stockBase = config.stockBaseField ? getRevenueAmount(revenueForField, config.stockBaseField) : 0;
+    const stockField = effectiveRewardBaseField(config, project, 'stock');
+    const stockBase = stockField ? getRevenueAmount(revenueForField, stockField) : 0;
     for (const month of getStockActiveMonths(project, sourceFrom, sourceTo)) {
       pushChain('stock', stockBase, month, lastDayOfMonth(month)); // ストックは末日基準
     }
@@ -468,6 +646,7 @@ export function computeProjectEntries(
 export type LinkRow = {
   partnerId: number;
   rewardSlots: unknown;
+  companyShareSlots: unknown;
   paymentTiming: string | null;
   closingDay: number | null;
   businessParentId: number | null;
@@ -487,6 +666,7 @@ export type ConfirmedProjectRow = {
   stockTermMonths: number | null;
   rewardOverride: unknown;
   companyShareOverride: unknown;
+  rewardSnapshot: unknown;
   customer: { customerName: string | null } | null;
   partner: { partnerName: string | null } | null;
 };
@@ -504,6 +684,7 @@ function toLinkInput(l: LinkRow | undefined): LinkRewardInput | null {
     ? {
         partnerId: l.partnerId,
         rewardSlots: parseRewardSlots(l.rewardSlots),
+        companyShareSlots: l.companyShareSlots ? parseCompanyShare(l.companyShareSlots) : null,
         paymentTiming: (l.paymentTiming as PaymentTiming | null) ?? null,
         closingDay: l.closingDay,
       }
@@ -527,6 +708,7 @@ export function toProjectRewardInput(p: ConfirmedProjectRow): ProjectRewardInput
     stockTermMonths: p.stockTermMonths,
     rewardOverride: parseRewardSlots(p.rewardOverride),
     companyShareOverride: parseCompanyShare(p.companyShareOverride),
+    rewardSnapshot: parseRewardSnapshot(p.rewardSnapshot),
   };
 }
 
@@ -561,6 +743,7 @@ export async function loadBusinessRewardContext(
     select: {
       partnerId: true,
       rewardSlots: true,
+      companyShareSlots: true,
       paymentTiming: true,
       closingDay: true,
       businessParentId: true,
@@ -589,12 +772,60 @@ export async function loadBusinessRewardContext(
       stockTermMonths: true,
       rewardOverride: true,
       companyShareOverride: true,
+      rewardSnapshot: true,
       customer: { select: { customerName: true } },
       partner: { select: { partnerName: true } },
     },
   });
 
   return { config, businessConfig: business.businessConfig, linkByPartner, projects };
+}
+
+/**
+ * 案件1件ぶんの凍結スナップショットを、現在のマスタ設定から組み立てる（DBラッパー）。
+ *
+ * 収益確定のラッチと同じ更新の中で使うことを想定し、案件の更新「前」に呼ぶ。
+ * そのため DB を読んだだけでは分からない「この PATCH で確定する値」は
+ * 呼び出し側から明示的に渡す。案件詳細の報酬タブは案件別上書きと収益確定日を
+ * 1回の PATCH でまとめて送るため、これらを渡さないと上書きを入れた当日に
+ * 確定した案件だけ、更新前の（＝上書き前の）料率で凍結されてしまう。
+ *
+ * 事業に rewardConfig が無い（手数料管理をしていない事業）場合は null を返す。
+ * 呼び出し側はスナップショットを書かずに進めてよい。
+ */
+export async function buildRewardSnapshotForProject(
+  prisma: PrismaClient,
+  params: {
+    businessId: number;
+    projectId: number;
+    /** この更新後の担当代理店。null=代理店の紐づかない自社直販 */
+    partnerId: number | null;
+    /** この更新後の案件別手数料上書き。undefined=この PATCH では変更しない */
+    rewardOverride?: RewardSlots | null;
+    /** この更新後の案件別自社受取率上書き。undefined=この PATCH では変更しない */
+    companyShareOverride?: CompanyShare | null;
+    capturedBy: RewardSnapshot['capturedBy'];
+    capturedAt: Date;
+  },
+): Promise<RewardSnapshot | null> {
+  const ctx = await loadBusinessRewardContext(prisma, params.businessId, {
+    includeUnconfirmed: true,
+    projectIds: [params.projectId],
+  });
+  if (!ctx) return null;
+
+  const row = ctx.projects.find((p) => p.id === params.projectId);
+  if (!row) return null;
+
+  const project: ProjectRewardInput = {
+    ...toProjectRewardInput(row),
+    ...(params.rewardOverride !== undefined ? { rewardOverride: params.rewardOverride } : {}),
+    ...(params.companyShareOverride !== undefined
+      ? { companyShareOverride: params.companyShareOverride }
+      : {}),
+  };
+  const chain = resolvePartnerChain(params.partnerId, ctx.linkByPartner);
+  return buildRewardSnapshot(ctx.config, chain, project, params.capturedBy, params.capturedAt);
 }
 
 /**

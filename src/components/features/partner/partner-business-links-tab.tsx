@@ -29,6 +29,7 @@ import { useBusiness } from '@/hooks/use-business';
 import { BusinessParentPartnerSelect } from './business-parent-partner-select';
 import { LinkRewardSettingsDialog } from './link-reward-settings-dialog';
 import { formatRewardSetting, type RewardSlots } from '@/lib/reward-slots';
+import type { CompanyShare } from '@/lib/company-share';
 
 // ============================================
 // 型定義
@@ -43,6 +44,13 @@ interface PartnerBusinessLink {
   linkStatus: string;
   rewardSlots: RewardSlots | null;
   businessDefaultRewardSlots: RewardSlots;
+  // 自社受取率（メーカー → 自社）。値を持てるのは1次代理店のリンクのみ
+  companyShareSlots: CompanyShare | null;
+  businessDefaultCompanyShare: CompanyShare;
+  companyShareIsEditable: boolean;
+  effectiveCompanyShare: CompanyShare;
+  companyShareGroupPartnerId: number | null;
+  companyShareGroupPartnerName: string | null;
   paymentTiming: string | null;
   closingDay: number | null;
   contactPerson: string | null;
@@ -226,7 +234,12 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
   // 手数料設定ダイアログの保存（4スロット + 支払いタイミング特例を一括更新）
   const handleSaveRewardSettings = (
     linkId: number,
-    data: { rewardSlots: RewardSlots; paymentTiming: string | null; closingDay: number | null },
+    data: {
+      rewardSlots: RewardSlots;
+      companyShareSlots?: CompanyShare | null;
+      paymentTiming: string | null;
+      closingDay: number | null;
+    },
   ) => {
     updateMutation.mutate(
       { linkId, data },
@@ -466,6 +479,11 @@ export function PartnerBusinessLinksTab({ entityId }: Props) {
             currentSlots={editingLink.rewardSlots}
             currentPaymentTiming={editingLink.paymentTiming}
             currentClosingDay={editingLink.closingDay}
+            companyShareIsEditable={editingLink.companyShareIsEditable}
+            currentCompanyShare={editingLink.companyShareSlots}
+            businessDefaultCompanyShare={editingLink.businessDefaultCompanyShare}
+            effectiveCompanyShare={editingLink.effectiveCompanyShare}
+            companyShareGroupPartnerName={editingLink.companyShareGroupPartnerName}
             onSave={(data) => handleSaveRewardSettings(editingLink.id, data)}
             isSaving={updateMutation.isPending}
           />

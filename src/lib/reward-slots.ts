@@ -11,6 +11,17 @@ import { z } from 'zod';
 
 export type RewardType = 'rate' | 'fixed';
 
+/**
+ * 支払い対象月の決め方。発生月に対して当月/翌月/翌々月/締め日基準。
+ *
+ * 型の置き場所は reward-helpers ではなくここ（依存の無い基底モジュール）。
+ * 凍結スナップショット（reward-snapshot.ts）が支払タイミングも焼き付けるため、
+ * reward-helpers に置いたままだと reward-helpers ⇄ reward-snapshot が循環する。
+ */
+export type PaymentTiming = 'same' | 'next' | 'next2' | 'closing';
+
+export const paymentTimingSchema = z.enum(['same', 'next', 'next2', 'closing']);
+
 export interface RewardSetting {
   type: RewardType;
   value: number;

@@ -14,9 +14,11 @@ interface Props {
   onChange: (next: RewardSetting | undefined) => void;
   /** 上書き画面向け: チェックを外すと「未設定＝上位層にフォールバック」を意味することを示す */
   unsetHint?: string;
+  /** 権限が無い閲覧者向け: 値は見せるが変更させない */
+  disabled?: boolean;
 }
 
-export function RewardSettingInput({ label, value, onChange, unsetHint }: Props) {
+export function RewardSettingInput({ label, value, onChange, unsetHint, disabled }: Props) {
   const enabled = value !== undefined;
   const type: RewardType = value?.type ?? 'rate';
   const rawValue = value?.value ?? 0;
@@ -27,6 +29,7 @@ export function RewardSettingInput({ label, value, onChange, unsetHint }: Props)
         <input
           type="checkbox"
           checked={enabled}
+          disabled={disabled}
           onChange={(e) => {
             if (e.target.checked) {
               onChange({ type: 'rate', value: 0 });
@@ -40,7 +43,8 @@ export function RewardSettingInput({ label, value, onChange, unsetHint }: Props)
       {enabled ? (
         <>
           <select
-            className="border rounded px-2 py-1 text-sm"
+            className="border rounded px-2 py-1 text-sm disabled:opacity-60"
+            disabled={disabled}
             value={type}
             onChange={(e) => onChange({ type: e.target.value as RewardType, value: rawValue })}
           >
@@ -51,7 +55,8 @@ export function RewardSettingInput({ label, value, onChange, unsetHint }: Props)
             type="number"
             step="0.01"
             min="0"
-            className="border rounded px-2 py-1 text-sm w-28"
+            className="border rounded px-2 py-1 text-sm w-28 disabled:opacity-60"
+            disabled={disabled}
             value={rawValue}
             onChange={(e) => onChange({ type, value: Number(e.target.value) })}
           />

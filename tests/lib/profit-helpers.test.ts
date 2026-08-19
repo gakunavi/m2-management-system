@@ -208,14 +208,16 @@ const project: ProjectRewardInput = {
   stockTermMonths: null,
   rewardOverride: null,
   companyShareOverride: null,
+  rewardSnapshot: null,
 };
 
-const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null };
+const responsible: LinkRewardInput = { partnerId: 100, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null };
 // 上位店は自身のリンク設定で料率を持つ（事業デフォルトは担当店にしか効かない）
 const PARENT_SLOTS = { shot: { indirect: { type: 'rate' as const, value: 2 } } };
 const parent: LinkRewardInput = {
   partnerId: 200,
   rewardSlots: PARENT_SLOTS,
+  companyShareSlots: null,
   paymentTiming: null,
   closingDay: null,
 };
@@ -230,7 +232,7 @@ const chainWithParent: RewardChainNode[] = [
 
 describe('resolveProjectCompanyShare', () => {
   it('案件別上書きが事業デフォルトに勝つ', () => {
-    const { share, isOverridden } = resolveProjectCompanyShare(config, {
+    const { share, isOverridden } = resolveProjectCompanyShare(config, chainSolo, {
       ...project,
       companyShareOverride: { shot: { type: 'rate', value: 15 } },
     });
@@ -241,7 +243,7 @@ describe('resolveProjectCompanyShare', () => {
   });
 
   it('上書きが無ければ事業デフォルト', () => {
-    const { share, isOverridden } = resolveProjectCompanyShare(config, project);
+    const { share, isOverridden } = resolveProjectCompanyShare(config, chainSolo, project);
     expect(share.shot).toEqual({ type: 'rate', value: 20 });
     expect(isOverridden).toBe(false);
   });
@@ -391,8 +393,8 @@ function makeContext(
     config,
     businessConfig,
     linkByPartner: new Map([
-      [100, { partnerId: 100, rewardSlots: null, paymentTiming: null, closingDay: null, businessParentId: 200 }],
-      [200, { partnerId: 200, rewardSlots: PARENT_SLOTS, paymentTiming: null, closingDay: null, businessParentId: null }],
+      [100, { partnerId: 100, rewardSlots: null, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: 200 }],
+      [200, { partnerId: 200, rewardSlots: PARENT_SLOTS, companyShareSlots: null, paymentTiming: null, closingDay: null, businessParentId: null }],
     ]),
     projects: [
       {
@@ -409,6 +411,7 @@ function makeContext(
         stockTermMonths: null,
         rewardOverride: null,
         companyShareOverride: null,
+        rewardSnapshot: null,
         customer: { customerName: '株式会社A' },
         partner: { partnerName: '株式会社パートナー' },
       },

@@ -10,12 +10,24 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { RewardSettingInput } from '@/components/features/business/reward-setting-input';
-import { unsetHintFor, type RewardSlots, type RewardSetting } from '@/lib/reward-slots';
+import {
+  formatRewardSetting,
+  unsetHintFor,
+  type RewardSlots,
+  type RewardSetting,
+} from '@/lib/reward-slots';
+import type { CompanyShare } from '@/lib/company-share';
 
 // ============================================
-// 代理店×事業リンクの手数料設定（4スロット + 支払いタイミング特例）
+// 代理店×事業リンクの手数料設定
 // ============================================
-// 事業デフォルトへの上書き。チェックを外したスロットは事業デフォルトにフォールバックする。
+// 2種類の手数料をここで設定する。向きが逆なので画面上も明確に分ける。
+//   支払手数料（RewardSlots）  … 自社 → 代理店。4スロット + 支払いタイミング特例
+//   自社受取率（CompanyShare） … メーカー → 自社。ショット/ストックの2スロット
+//
+// 自社受取率を代理店リンクに置くのは、メーカーとの手数料が
+// 「どの代理店グループ経由の案件か」で変わるため。値を持てるのは1次代理店だけで、
+// 2次・3次の画面では継承元と実効値を読み取り表示する。
 
 type PaymentTiming = 'same' | 'next' | 'next2' | 'closing';
 
@@ -36,8 +48,20 @@ interface Props {
   currentSlots: RewardSlots | null;
   currentPaymentTiming: string | null;
   currentClosingDay: number | null;
+  /** この代理店が代理店グループの頂点（1次代理店）か。false なら受取率は読み取り専用 */
+  companyShareIsEditable: boolean;
+  /** このリンク自身に設定されている受取率（1次代理店のみ意味を持つ） */
+  currentCompanyShare: CompanyShare | null;
+  /** 事業デフォルトの受取率。チェックを外したときのフォールバック先 */
+  businessDefaultCompanyShare: CompanyShare;
+  /** 実際に効いている受取率（事業デフォルト → 1次代理店） */
+  effectiveCompanyShare: CompanyShare;
+  /** 受取率の決め手になっている1次代理店名（読み取り表示用） */
+  companyShareGroupPartnerName: string | null;
   onSave: (data: {
     rewardSlots: RewardSlots;
+    /** 1次代理店のときだけ送る。未指定＝この画面では受取率を触っていない */
+    companyShareSlots?: CompanyShare | null;
     paymentTiming: PaymentTiming | null;
     closingDay: number | null;
   }) => void;
@@ -52,10 +76,16 @@ export function LinkRewardSettingsDialog({
   currentSlots,
   currentPaymentTiming,
   currentClosingDay,
+  companyShareIsEditable,
+  currentCompanyShare,
+  businessDefaultCompanyShare,
+  effectiveCompanyShare,
+  companyShareGroupPartnerName,
   onSave,
   isSaving,
 }: Props) {
   const [slots, setSlots] = useState<RewardSlots>(currentSlots ?? {});
+  const [companyShare, setCompanyShare] = useState<CompanyShare>(currentCompanyShare ?? {});
   const [useTimingOverride, setUseTimingOverride] = useState(currentPaymentTiming != null);
   const [paymentTiming, setPaymentTiming] = useState<PaymentTiming>(
     (currentPaymentTiming as PaymentTiming) ?? 'same',
@@ -66,11 +96,12 @@ export function LinkRewardSettingsDialog({
   useEffect(() => {
     if (open) {
       setSlots(currentSlots ?? {});
+      setCompanyShare(currentCompanyShare ?? {});
       setUseTimingOverride(currentPaymentTiming != null);
       setPaymentTiming((currentPaymentTiming as PaymentTiming) ?? 'same');
       setClosingDay(currentClosingDay);
     }
-  }, [open, currentSlots, currentPaymentTiming, currentClosingDay]);
+  }, [open, currentSlots, currentCompanyShare, currentPaymentTiming, currentClosingDay]);
 
   const updateSlot = (kind: 'shot' | 'stock', side: 'direct' | 'indirect', value: RewardSetting | undefined) => {
     setSlots((prev) => ({
@@ -80,8 +111,12 @@ export function LinkRewardSettingsDialog({
   };
 
   const handleSave = () => {
+    // 1次代理店以外は受取率のキー自体を送らない（API 側でも弾かれる）。
+    // 全スロット未設定なら null＝「設定なし」として事業デフォルトへ戻す
+    const hasAnyShare = companyShare.shot !== undefined || companyShare.stock !== undefined;
     onSave({
       rewardSlots: slots,
+      ...(companyShareIsEditable ? { companyShareSlots: hasAnyShare ? companyShare : null } : {}),
       paymentTiming: useTimingOverride ? paymentTiming : null,
       closingDay: useTimingOverride && paymentTiming === 'closing' ? closingDay : null,
     });
@@ -145,6 +180,52 @@ export function LinkRewardSettingsDialog({
                 unsetHint={unsetHintFor(businessDefaults.stock?.indirect)}
               />
             </div>
+          </div>
+
+          {/* --- 自社受取率（メーカー → 自社）--- */}
+          <div className="border-t pt-3">
+            <h4 className="text-sm font-medium mb-1">自社受取率（メーカーから自社に入る販売手数料）</h4>
+            <p className="text-xs text-muted-foreground mb-2">
+              代理店へ<strong className="text-foreground">支払う</strong>額ではなく、
+              この代理店グループ経由の案件で自社が
+              <strong className="text-foreground">受け取る</strong>率です。
+              メーカーとの手数料は代理店グループ単位で決まるため、
+              <strong className="text-foreground">1次代理店にのみ設定</strong>し、
+              配下の2次・3次代理店が担当した案件にも同じ値が適用されます。
+            </p>
+            {companyShareIsEditable ? (
+              <div className="pl-2">
+                <RewardSettingInput
+                  label="ショット"
+                  value={companyShare.shot}
+                  onChange={(v) => setCompanyShare((prev) => ({ ...prev, shot: v }))}
+                  unsetHint={unsetHintFor(businessDefaultCompanyShare.shot)}
+                />
+                <RewardSettingInput
+                  label="ストック"
+                  value={companyShare.stock}
+                  onChange={(v) => setCompanyShare((prev) => ({ ...prev, stock: v }))}
+                  unsetHint={unsetHintFor(businessDefaultCompanyShare.stock)}
+                />
+              </div>
+            ) : (
+              <div className="pl-2 text-sm text-muted-foreground space-y-1">
+                <p>
+                  この代理店は1次代理店ではないため、ここでは編集できません
+                  {companyShareGroupPartnerName && `（1次代理店: ${companyShareGroupPartnerName}）`}。
+                </p>
+                <p>
+                  適用中: ショット{' '}
+                  <strong className="text-foreground">
+                    {effectiveCompanyShare.shot ? formatRewardSetting(effectiveCompanyShare.shot) : '未設定'}
+                  </strong>
+                  {' / '}ストック{' '}
+                  <strong className="text-foreground">
+                    {effectiveCompanyShare.stock ? formatRewardSetting(effectiveCompanyShare.stock) : '未設定'}
+                  </strong>
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="border-t pt-3">

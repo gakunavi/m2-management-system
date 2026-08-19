@@ -6,9 +6,21 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { requireInternalUser } from '@/lib/authz';
-import { inheritBusinessHierarchyOnLink } from '@/lib/business-partner-hierarchy';
-import { serializeRewardLinkFields, rewardLinkInputSchema } from '@/lib/reward-link-serializer';
+import {
+  inheritBusinessHierarchyOnLink,
+  resolveTopBusinessLink,
+} from '@/lib/business-partner-hierarchy';
+import {
+  serializeRewardLinkFields,
+  rewardLinkInputSchema,
+  validateCompanyShareTier,
+} from '@/lib/reward-link-serializer';
 import { parseRewardSlots } from '@/lib/reward-slots';
+import {
+  mergeCompanyShare,
+  parseCompanyShare,
+  parseCompanyShareConfig,
+} from '@/lib/company-share';
 
 // ============================================
 // GET /api/v1/partners/:id/business-links
@@ -42,10 +54,25 @@ export async function GET(
       orderBy: { createdAt: 'asc' },
     });
 
+    // 自社受取率は1次代理店（代理店グループの頂点）の設定が効く。2次・3次の画面でも
+    // 「どのグループのどの値が効いているか」を出すため、事業ごとに頂点を解決しておく。
+    const topLinkByBusiness = new Map<number, Awaited<ReturnType<typeof resolveTopBusinessLink>>>();
+    for (const l of links) {
+      topLinkByBusiness.set(
+        l.businessId,
+        await resolveTopBusinessLink(prisma, l.businessId, partnerId),
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: links.map((l) => {
-        const bizConfig = l.business.businessConfig as { rewardConfig?: { defaults?: unknown } } | null;
+        const bizConfig = l.business.businessConfig as {
+          rewardConfig?: { defaults?: unknown; companyShare?: unknown };
+        } | null;
+        const businessDefaultCompanyShare = parseCompanyShareConfig(bizConfig?.rewardConfig?.companyShare);
+        const top = topLinkByBusiness.get(l.businessId) ?? null;
+        const groupShare = top ? parseCompanyShare(top.companyShareSlots) : {};
         return {
           id: l.id,
           partnerId: l.partnerId,
@@ -55,6 +82,21 @@ export async function GET(
           linkStatus: l.linkStatus,
           ...serializeRewardLinkFields(l),
           businessDefaultRewardSlots: parseRewardSlots(bizConfig?.rewardConfig?.defaults),
+          // --- 自社受取率（メーカーから自社に入る販売手数料）---
+          businessDefaultCompanyShare: {
+            shot: businessDefaultCompanyShare.shot,
+            stock: businessDefaultCompanyShare.stock,
+          },
+          /** この画面で受取率を編集できるか（＝このリンクが代理店グループの頂点か） */
+          companyShareIsEditable: l.businessParentId == null,
+          /** 実際に効いている受取率（事業デフォルト → 1次代理店） */
+          effectiveCompanyShare: mergeCompanyShare(
+            { shot: businessDefaultCompanyShare.shot, stock: businessDefaultCompanyShare.stock },
+            groupShare,
+          ),
+          /** 受取率の決め手になっている1次代理店。自分自身なら自分の情報が入る */
+          companyShareGroupPartnerId: top?.partnerId ?? null,
+          companyShareGroupPartnerName: top?.partnerName ?? null,
           contactPerson: l.contactPerson,
           linkCustomData: l.linkCustomData,
           businessTier: l.businessTier,
@@ -116,6 +158,9 @@ export async function POST(
           businessId: data.businessId,
           linkStatus: data.linkStatus,
           ...(data.rewardSlots != null ? { rewardSlots: data.rewardSlots as Prisma.InputJsonValue } : {}),
+          ...(data.companyShareSlots != null
+            ? { companyShareSlots: data.companyShareSlots as Prisma.InputJsonValue }
+            : {}),
           ...(data.paymentTiming != null ? { paymentTiming: data.paymentTiming } : {}),
           ...(data.closingDay != null ? { closingDay: data.closingDay } : {}),
           contactPerson: data.contactPerson ?? undefined,
@@ -124,6 +169,17 @@ export async function POST(
       });
       // 再発防止: グローバル親が同事業に階層設定済みなら事業別階層を継承
       await inheritBusinessHierarchyOnLink(tx, partnerId, data.businessId);
+
+      // 階層の継承後でないと1次代理店かどうかが確定しないため、ここで検証する。
+      // NG ならトランザクションごと巻き戻す（受取率だけ黙って捨てない）。
+      if (data.companyShareSlots != null) {
+        const after = await tx.partnerBusinessLink.findUnique({
+          where: { id: link.id },
+          select: { businessTier: true, businessParentId: true },
+        });
+        const tierError = validateCompanyShareTier(data.companyShareSlots, after!);
+        if (tierError) throw ApiError.badRequest(tierError);
+      }
       return link;
     });
 
