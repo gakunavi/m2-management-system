@@ -90,6 +90,22 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **受取率を保存できるのは1次代理店のリンクだけ**。2次以降に書けると「入力したのに効かない設定」が残るため、`validateCompanyShareTier` で API 入口から弾き、1次から降格したときは値をクリアする
 - **P/L の表示判定は事業デフォルトだけで見ない**。`isCompanyShareUsedInBusiness` で代理店リンク・案件上書き・スナップショットまで見る。デフォルト未設定でも代理店別に設定している事業があるため
 
+#### 収益確定のラッチ（どこで発火するか）
+
+`revenueConfirmedAt` のセットと凍結は2箇所で行う。**片方だけに足すと取りこぼす**。
+
+| 経路 | 実装 |
+|---|---|
+| `PATCH /projects/[id]` | ルート内にインライン。手動の日付訂正・確定解除・管理者によるスナップショット訂正まで扱う |
+| 新規作成 POST / CSV取り込み | `latchRevenueConfirmation`（`src/lib/revenue-confirm-latch.ts`）を書き込み後に呼ぶ |
+
+- **作成系にラッチが無いと永久に未確定のまま残る**。実際に本番で CSV 取り込み由来の5件を取りこぼしていた（2026-08-19に修復）。`/api/v1/rewards/warnings` は検出するだけの安全網で、人が見て直す前提
+- ラッチはトランザクションの外で呼ぶ。スナップショットの組み立てが事業設定・代理店階層を読むため、案件が確定済みで存在している必要がある
+- CSVのドライランは中身をロールバックするので対象外
+- 確定日は `projectStatusChangedAt`（＝そのステータスになった月を計上月にする）。PATCH 経由と揃えている
+- `version` は上げない。呼び出し元が直前に更新しており、二重に上がるため
+- `batch` ルートは論理削除のみでステータスを変えないのでラッチ不要
+
 #### 収益確定時の凍結（RewardSnapshot）
 
 `revenueConfirmedAt` が **null → 非null** になった瞬間、その時点の実効料率を `Project.rewardSnapshot` へ丸ごと焼き付ける。

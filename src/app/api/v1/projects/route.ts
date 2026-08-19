@@ -10,6 +10,7 @@ import { resolveSort, applyAppSort, withCustomDataFields } from '@/lib/sort/engi
 import { PROJECT_SORT_SPEC } from '@/lib/sort/specs';
 import type { AppSortContext } from '@/lib/sort/types';
 import { formatProject } from '@/lib/format-project';
+import { latchRevenueConfirmation } from '@/lib/revenue-confirm-latch';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 import { applyProjectListFilters, matchesCustomFieldFilters } from '@/lib/project-filters';
@@ -446,7 +447,20 @@ export async function POST(request: NextRequest) {
       return created;
     });
 
-    return NextResponse.json({ success: true, data: formatProject(project) }, { status: 201 });
+    // 収益確定ステータスでいきなり作られた案件をラッチする（確定日＋手数料の凍結）。
+    // トランザクションの外に置くのは、凍結スナップショットの組み立てが
+    // 事業設定・代理店階層を読むため、案件が確定済みで存在している必要があるから。
+    const latch = await latchRevenueConfirmation(prisma, data.businessId, {
+      projectIds: [project.id],
+    });
+
+    // ラッチした場合はレスポンスに確定日を反映させる（作成直後の画面が
+    // 「未確定」と表示されると、実際は確定済みなのに誤解を招く）
+    const responseProject = latch.latched > 0
+      ? (await prisma.project.findUnique({ where: { id: project.id }, include: PROJECT_INCLUDE })) ?? project
+      : project;
+
+    return NextResponse.json({ success: true, data: formatProject(responseProject) }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

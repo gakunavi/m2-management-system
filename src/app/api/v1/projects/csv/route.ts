@@ -9,6 +9,7 @@ import { resolveSort, applyAppSort } from '@/lib/sort/engine';
 import { PROJECT_CSV_SORT_SPEC } from '@/lib/sort/specs';
 import { escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
+import { latchRevenueConfirmation } from '@/lib/revenue-confirm-latch';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
 import { applyProjectListFilters, matchesCustomFieldFilters } from '@/lib/project-filters';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
@@ -400,7 +401,9 @@ export async function POST(request: NextRequest) {
     // projectNo列の有無（エクスポート→再インポート時のマッチングに利用）
     const hasProjectNoColumn = headers.some((h) => labelToKey[h] === 'projectNo');
 
-    const results = { created: 0, updated: 0, skipped: 0, errors: [] as string[], dryRun };
+    const results = { created: 0, updated: 0, skipped: 0, latched: 0, errors: [] as string[], dryRun };
+    // 取り込みで作成・更新した案件。取り込み後に収益確定のラッチをかける対象
+    const touchedProjectIds: number[] = [];
 
     try {
     await prisma.$transaction(async (tx) => {
@@ -545,6 +548,7 @@ export async function POST(request: NextRequest) {
               update: {},
               create: { customerId: customer.id, businessId, linkStatus: 'active' },
             });
+            touchedProjectIds.push(created.id);
             results.created++;
           } else {
             // upsert モード: projectNo優先 → businessId+customerId フォールバック
@@ -609,6 +613,7 @@ export async function POST(request: NextRequest) {
                 update: {},
                 create: { customerId: customer.id, businessId, linkStatus: 'active' },
               });
+              touchedProjectIds.push(existingProject.id);
               results.updated++;
             } else {
               const projectNo = await generateProjectNo(tx, businessId);
@@ -631,6 +636,7 @@ export async function POST(request: NextRequest) {
                 update: {},
                 create: { customerId: customer.id, businessId, linkStatus: 'active' },
               });
+              touchedProjectIds.push(created.id);
               results.created++;
             }
           }
@@ -651,6 +657,18 @@ export async function POST(request: NextRequest) {
       } else {
         throw err;
       }
+    }
+
+    // 収益確定ステータスで取り込まれた案件をラッチする（確定日＋手数料の凍結）。
+    //
+    // トランザクションの外で行う。ドライランは中身をロールバックするため対象外。
+    // ここが無いと、CSVで購入済みにした案件が未確定・未凍結のまま残り、
+    // 料率を改定するたびに過去の粗利が動く。
+    if (!dryRun && touchedProjectIds.length > 0) {
+      const latch = await latchRevenueConfirmation(prisma, businessId, {
+        projectIds: touchedProjectIds,
+      });
+      results.latched = latch.latched;
     }
 
     return NextResponse.json({
