@@ -307,6 +307,29 @@ function toDisplay(value: unknown): string | null {
 }
 
 // ============================================
+// 口座の突合
+// ============================================
+
+/**
+ * 更新対象の口座を1件選ぶ。
+ *
+ * 優先順位: 対象事業に紐付いた口座 → 事業共通（business_id=NULL）の口座。
+ * 同じスコープに複数あれば最も古いもの（id 昇順）。
+ *
+ * 事業で絞り込むだけだと、事業共通の口座しか持たない顧客で既存口座を見落とし、
+ * 口座5項目を送るたびに2件目を新規作成してしまう（振込先が2つ並ぶ）。
+ * 選んだ口座の business_id は書き換えない（共通口座を特定事業のものにしない）。
+ */
+export function pickBankAccountForBusiness<T extends { id: number; businessId: number | null }>(
+  accounts: T[],
+  businessId: number,
+): T | null {
+  const oldest = (rows: T[]): T | null =>
+    rows.length === 0 ? null : rows.reduce((a, b) => (a.id <= b.id ? a : b));
+  return oldest(accounts.filter((a) => a.businessId === businessId)) ?? oldest(accounts.filter((a) => a.businessId === null));
+}
+
+// ============================================
 // 本体
 // ============================================
 
@@ -381,10 +404,15 @@ export async function importCustomer(
           },
           orderBy: [{ contactSortOrder: 'asc' }, { id: 'asc' }],
         },
+        // 口座は「対象事業に紐付いたもの」と「事業共通（business_id=NULL）」の両方を読む。
+        // 事業で絞ると、事業共通口座しか持たない顧客に対して既存口座を見落とし、
+        // 2件目を新規作成してしまう（＝振込先が2つ並ぶ）。採用の優先順位は
+        // pickBankAccountForBusiness を参照。
         bankAccounts: {
-          where: { businessId: business.id },
+          where: { OR: [{ businessId: business.id }, { businessId: null }] },
           select: {
             id: true,
+            businessId: true,
             bankName: true,
             branchName: true,
             accountType: true,
@@ -392,7 +420,6 @@ export async function importCustomer(
             accountHolder: true,
           },
           orderBy: { id: 'asc' },
-          take: 1,
         },
       },
     });
@@ -553,7 +580,13 @@ export async function importCustomer(
     }
 
     // --- 銀行口座 ---------------------------------------------------------
-    const bank = customer.bankAccounts[0] ?? null;
+    const bank = pickBankAccountForBusiness(customer.bankAccounts, business.id);
+    if (bank && bank.businessId === null) {
+      // どの口座を書き換えたのか呼び出し側で追えるようにする（事業紐付けは変えない）
+      warnings.push(
+        '口座は事業共通（business_id=NULL）のレコードを更新対象にしました（対象事業に紐付いた口座が無いため）。事業への紐付けは変更していません。',
+      );
+    }
     const bankIncoming = {
       bank_name: input.bank_name ?? null,
       branch_name: input.branch_name ?? null,

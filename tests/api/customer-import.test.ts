@@ -627,3 +627,156 @@ describe('認証', () => {
     expectNoWrites();
   });
 });
+
+// ============================================
+// 口座の突合（事業共通口座の二重登録バグの再発防止）
+// ============================================
+
+/** 事業共通（business_id=NULL）の口座。値は既存と同じ＝更新も発生しないケース */
+const COMMON_BANK = {
+  id: 55,
+  businessId: null,
+  bankName: 'GMOあおぞらネット銀行',
+  branchName: '法人第二営業部',
+  accountType: '普通',
+  accountNumber: '1234567',
+  accountHolder: 'カ）テストシヨウジ',
+};
+
+/** 対象事業（ライト事業 id=5）に紐付いた口座。口座番号だけ既存が空欄 */
+const BUSINESS_BANK = {
+  id: 70,
+  businessId: 5,
+  bankName: 'GMOあおぞらネット銀行',
+  branchName: '法人第二営業部',
+  accountType: '普通',
+  accountNumber: null,
+  accountHolder: 'カ）テストシヨウジ',
+};
+
+/**
+ * 口座を持つ既存顧客をセットアップする。
+ *
+ * findUnique の select.bankAccounts.where / take を実際に適用する。
+ * ここを素通しにすると「事業で絞ったせいで既存口座を見落とす」という
+ * バグそのものが再現できず、修正前のコードでもテストが通ってしまう。
+ */
+function setupWithBankAccounts(bankAccounts: Array<Record<string, unknown>>) {
+  setupExisting();
+  mockPrisma.customer.findUnique.mockImplementation(async (args: unknown) => {
+    const spec = (args as { select?: { bankAccounts?: { where?: Record<string, unknown>; take?: number } } })
+      .select?.bankAccounts;
+    const where = spec?.where ?? {};
+    const conditions = (where.OR as Array<Record<string, unknown>> | undefined) ?? [where];
+    let rows = bankAccounts.filter((a) =>
+      conditions.some((c) => !('businessId' in c) || a.businessId === c.businessId),
+    );
+    rows = [...rows].sort((a, b) => (a.id as number) - (b.id as number));
+    if (spec?.take !== undefined) rows = rows.slice(0, spec.take);
+    return { ...EXISTING_CUSTOMER, bankAccounts: rows };
+  });
+}
+
+describe('口座の突合', () => {
+  it('事業共通口座しか無い顧客に同じ口座情報を送っても、2件目を作らない（dry_run）', async () => {
+    setupWithBankAccounts([COMMON_BANK]);
+
+    const response = await POST(buildRequest({ ...BODY, dry_run: true }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    // 既存と同値なので fill にも conflict にも出ない＝「新規登録」と判定されていない
+    expect(json.filled_fields).not.toContain('bank_account');
+    expect(json.conflicts.map((c: { field: string }) => c.field)).not.toContain('bank_account');
+    expect(json.warnings.join(' ')).toContain('事業共通');
+    expectNoWrites();
+  });
+
+  it('事業共通口座しか無い顧客に本実行しても、作成ではなく既存レコードを更新する', async () => {
+    // 口座番号だけ既存が空欄 → その1項目だけ更新されるはず
+    setupWithBankAccounts([{ ...COMMON_BANK, accountNumber: null }]);
+
+    const response = await POST(buildRequest(BODY));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.filled_fields).toContain('account_no');
+    expect(mockPrisma.customerBankAccount.create).not.toHaveBeenCalled();
+
+    const calls = mockPrisma.customerBankAccount.update.mock.calls as Array<[{ where: { id: number }; data: Record<string, unknown> }]>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].where.id).toBe(55);
+    expect(calls[0][0].data.accountNumber).toBe('1234567');
+    // 事業への紐付けは書き換えない
+    expect(calls[0][0].data.businessId).toBeUndefined();
+  });
+
+  it('口座が1件も無ければ従来どおり新規作成する', async () => {
+    setupWithBankAccounts([]);
+
+    const response = await POST(buildRequest(BODY));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.filled_fields).toContain('bank_account');
+    expect(mockPrisma.customerBankAccount.create).toHaveBeenCalledTimes(1);
+    const createArgs = mockPrisma.customerBankAccount.create.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(createArgs.data.businessId).toBe(5);
+    expect(json.warnings.join(' ')).not.toContain('事業共通');
+  });
+
+  it('対象事業の口座を持つ顧客は従来どおり更新される（挙動が変わらない）', async () => {
+    setupWithBankAccounts([BUSINESS_BANK]);
+
+    const response = await POST(buildRequest(BODY));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockPrisma.customerBankAccount.create).not.toHaveBeenCalled();
+    const calls = mockPrisma.customerBankAccount.update.mock.calls as Array<[{ where: { id: number } }]>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].where.id).toBe(70);
+    expect(json.warnings.join(' ')).not.toContain('事業共通');
+  });
+
+  it('事業の口座と共通口座の両方を持つ場合、事業側だけを更新し共通側は触らない', async () => {
+    // 事業側は口座番号が空欄 → 事業側に必ず1回 update が走る（空振りで通らないように）
+    setupWithBankAccounts([COMMON_BANK, BUSINESS_BANK]);
+
+    const response = await POST(buildRequest(BODY));
+
+    expect(response.status).toBe(200);
+    expect(mockPrisma.customerBankAccount.create).not.toHaveBeenCalled();
+    const calls = mockPrisma.customerBankAccount.update.mock.calls as Array<[{ where: { id: number } }]>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].where.id).toBe(70);
+  });
+
+  it('同じスコープに複数あれば最も古い1件を採用する', async () => {
+    setupWithBankAccounts([
+      { ...COMMON_BANK, id: 90, accountNumber: null },
+      { ...COMMON_BANK, id: 55, accountNumber: null },
+    ]);
+
+    const response = await POST(buildRequest(BODY));
+
+    expect(response.status).toBe(200);
+    expect(mockPrisma.customerBankAccount.create).not.toHaveBeenCalled();
+    const calls = mockPrisma.customerBankAccount.update.mock.calls as Array<[{ where: { id: number } }]>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].where.id).toBe(55);
+  });
+
+  it('口座の読み出しは対象事業と事業共通の両方を対象にしている', async () => {
+    setupWithBankAccounts([COMMON_BANK]);
+
+    await POST(buildRequest({ ...BODY, dry_run: true }));
+
+    const findArgs = mockPrisma.customer.findUnique.mock.calls[0][0] as {
+      select: { bankAccounts: { where: unknown; take?: number } };
+    };
+    expect(findArgs.select.bankAccounts.where).toEqual({ OR: [{ businessId: 5 }, { businessId: null }] });
+    // 1件に打ち切ると事業側の口座を取りこぼす可能性があるため take は付けない
+    expect(findArgs.select.bankAccounts.take).toBeUndefined();
+  });
+});

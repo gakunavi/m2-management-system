@@ -213,6 +213,20 @@ Content-Type: application/json
 - `filled_fields` / `updated_fields` / `conflicts[].field` は**リクエストJSONのフィールド名**
 - 連絡先は `contacts[<メール または 氏名>]`（新規追加）、`contacts[<キー>].department` のような形（既存の項目差異）
 - 口座を新規登録する場合は `bank_account`、既存口座の項目差異は `bank_name` などの個別名
+
+#### 口座の突合（2026-09-18 修正）
+
+更新対象の口座は次の優先順位で1件だけ選ぶ。
+
+1. **対象事業に紐付いた口座**（`business_id` = 取り込み対象事業）
+2. 無ければ**事業共通の口座**（`business_id IS NULL`）
+3. 同じスコープに複数あれば**最も古いもの**（`id` 昇順）
+4. どちらも無ければ新規作成（5項目すべて揃っている場合のみ。対象事業に紐付けて作成する）
+
+- 選んだ口座の `business_id` は**書き換えない**（事業共通の口座を特定事業のものにしない）。
+- 事業共通の口座を更新対象にした場合は `warnings` にその旨を出す。
+- **修正前は対象事業の口座しか見ていなかったため**、事業共通の口座しか持たない顧客に口座5項目を送ると、
+  既存口座を見落として2件目を新規作成していた（＝振込先が2つ並ぶ）。本番での重複発生は0件のまま修正済み。
 - `form_submitted_at` と連絡先の role 対応は顧客データの更新ではないため、`filled_fields` / `updated_fields` には含めず常に最新を保持する
 
 ### エラー
@@ -417,7 +431,7 @@ curl -s "$M2_API_BASE_PROD/api/integrations/customers/501" \
 | `industry` | `industries` マスタへの紐付け | 一致すれば紐付け、無ければ `null` + 警告。**マスタは自動作成しない** |
 | `representative_name` | `customer_contacts`（代表者フラグ付き） | Customer 本体に代表者名カラムは無い |
 | `contacts[]` | `customer_contacts` | `role:main` → 主担当フラグ / `role:cc` → 通常の連絡先。突合はメール優先、無ければ氏名 |
-| `bank_*` / `account_*` | `customer_bank_accounts` | 対象事業に紐付けて1件を管理。**新規登録時は5項目すべて必須** |
+| `bank_*` / `account_*` | `customer_bank_accounts` | 1顧客につき1件を更新。**新規登録時は5項目すべて必須**。突合の範囲は下記「口座の突合」を参照 |
 | `industry_raw` | `link_custom_data` | 送信された業種の原文字列（マスタ未一致でも追跡できるように） |
 | `gratitude_addressee` | `link_custom_data` | 感謝状の宛名。**`customer_salutation` には入れない** |
 | `gbiz_id_prime` | `link_custom_data` | |
