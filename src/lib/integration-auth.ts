@@ -21,6 +21,23 @@ export type IntegrationAuthResult =
   | { ok: true }
   | { ok: false; response: NextResponse };
 
+/**
+ * どのトークンで認証するか。
+ *
+ * - `write`: 既存の顧客取り込みAPI（INTEGRATION_API_TOKEN）
+ * - `read`:  契約読み出しAPI（INTEGRATION_READONLY_TOKEN）
+ *
+ * トークンは用途ごとに分ける（片方を受け付ける口でもう片方を通さない）。
+ * 読み出しAPIは全顧客の口座を一括で返せるため、書き込み用トークンが漏れたときに
+ * 被害が「照合で最大20件」から「全顧客の口座一覧」へ広がるのを避ける。
+ */
+export type IntegrationTokenKind = 'write' | 'read';
+
+const TOKEN_ENV: Record<IntegrationTokenKind, string> = {
+  write: 'INTEGRATION_API_TOKEN',
+  read: 'INTEGRATION_READONLY_TOKEN',
+};
+
 /** タイミング攻撃を避けるトークン比較 */
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
@@ -46,9 +63,15 @@ function unauthorized(): NextResponse {
 /**
  * 連携 API 共通の入口チェック。
  * 認証に成功したときだけ { ok: true } を返す。
+ *
+ * @param kind 受け付けるトークンの種類（既定は書き込み用＝既存の挙動）。
+ *   指定した種類のトークンだけを受け付ける。別種のトークンは 401。
  */
-export function authorizeIntegrationRequest(request: NextRequest): IntegrationAuthResult {
-  const token = process.env.INTEGRATION_API_TOKEN;
+export function authorizeIntegrationRequest(
+  request: NextRequest,
+  kind: IntegrationTokenKind = 'write',
+): IntegrationAuthResult {
+  const token = process.env[TOKEN_ENV[kind]];
 
   // トークン未設定 → エンドポイント無効化（存在自体を隠す）
   if (!token) {

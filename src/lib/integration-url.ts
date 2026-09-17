@@ -11,3 +11,8 @@ function baseUrl(): string {
 export function customerAdminUrl(customerId: number): string {
   return `${baseUrl()}/customers/${customerId}`;
 }
+
+/** 案件（契約マスタ）詳細画面のURL */
+export function projectAdminUrl(projectId: number): string {
+  return `${baseUrl()}/projects/${projectId}`;
+}

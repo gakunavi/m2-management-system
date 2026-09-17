@@ -72,6 +72,9 @@ export const env = {
   // 外部システム連携 API（/api/integrations/**・機械アクセス専用）
   // トークン未設定時はエンドポイント自体を無効化（404）
   INTEGRATION_API_TOKEN: optional('INTEGRATION_API_TOKEN'),
+  // 契約読み出し API（GET /api/integrations/contracts）専用の読み取り専用トークン。
+  // 全顧客の口座を一括で返せるため、書き込み用とは別系統にしている
+  INTEGRATION_READONLY_TOKEN: optional('INTEGRATION_READONLY_TOKEN'),
   // 取り込み対象事業を安定キー businessCode で指定（既定: LIGHT＝マイグレーションライト事業）
   INTEGRATION_BUSINESS_CODE: optional('INTEGRATION_BUSINESS_CODE', 'LIGHT') as string,
   // 呼び出し元IPの許可リスト（カンマ区切り）。未設定＝IP制限なし（トークンのみで認証）
