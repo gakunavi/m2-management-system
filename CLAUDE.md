@@ -71,6 +71,7 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **PATCHレスポンス整合性**: GETで返す全フィールドをPATCHレスポンスにも含めること（行全体置換でデータ消失防止）。特に案件PATCHではクロスエンティティのフラット展開フィールド（`customerName`, `customerVersion`, `partnerName`, `partnerVersion`等）を明示的に返す必要がある（`formatProject`だけではネスト構造のみで不足）
 - **子エンティティPATCH**: 連絡先等の子テーブルPATCHレスポンスは親行と別スキーマ。行置換せず一覧invalidate（`isSameEntity`判定）
 - **クロスエンティティキャッシュ**: 案件一覧から顧客/代理店を編集時、顧客/代理店の詳細・一覧キャッシュも無効化
+- **案件のコピー**（`POST /api/v1/projects/:id/copy`）: 案件番号のみ新規採番し、**営業ステータスもそのまま引き継ぐ**。ムーブメントは pending で作り直し、進捗・ファイル・コメント・リマインダー・`revenueConfirmedAt`・`rewardSnapshot` は引き継がない。**収益確定ステータスのままコピーした場合は必ず `latchRevenueConfirmation` を通すこと**（省くと「確定ステータスなのに未確定」の不整合案件ができ、`/api/v1/rewards/warnings` が鳴り続ける）。当月計上になる旨は確認モーダルで警告している
 - **Zodスキーマ外フィールド**: `body.xxx` で手動取り出し → マージ更新（POST/PATCH共通パターン）
 - **新規作成時の事業リンク**: 顧客・代理店POST APIで `businessId` がある場合、自動的に `CustomerBusinessLink` / `PartnerBusinessLink` を作成。`linkCustomData` がある場合はカスタムデータも同時保存
 - **楽観的ロック**: `version: { increment: 1 }` + 409 Conflict
@@ -124,12 +125,20 @@ grep -r "customerDetailConfig" src/app/ src/components/
 
 - **URLが正**: 絞り込み・検索・ソート・ページ・表示件数・**選択中のビューID（`?view=`）** を `useEntityList` がURLに同期する。戻る操作・ブックマークでの復元がこれで成立する
 - **デフォルトビューの自動適用**: URLに一覧状態がある場合はスキップする。適用すると戻ってきた直後にURL由来の状態を上書きしてしまうため
+- **既定の絞り込み（`EntityListConfig.defaultFilters`）**: 適用の優先順位は **URL > デフォルトビュー > defaultFilters**。ユーザーが明示的に作ったビューを config 側の既定で上書きしないこと。契約マスタは失注ステータスを外した状態で開く（`useProjectConfig`）。**最終（受注済み等）は除外しない**——契約マスタは受注後こそ見る台帳で、ムーブメント（`excludeFinal: true`）とは除外の強さが違う。判定は `src/lib/status-defaults.ts` に集約
 - **列設定のスコープ分離**: 「すべて」タブ＝グローバル設定（`user-preferences/table`）、自分のビュー＝ビューの `columnSettings`、共有ビュー＝セッション内ローカルのみ。**ビュー適用時にグローバル設定を書き換えないこと**（書き換えると「すべて」タブがビューの列構成に固定される）
 - **「すべて」タブは全列強制表示**: `SpreadsheetTable` の `forceAllColumnsVisible` で `defaultVisible: false` も含め全列を表示し、非表示操作を受け付けない。CSVの対象列・ビュー新規保存時の初期状態も全列に揃える
 - **デバウンス保存はunmountでフラッシュ**: `useTablePreferences` / `useSavedViews.updateViewSettings` は1秒デバウンス。クリーンアップで `clearTimeout` だけすると、列固定直後に画面遷移した場合に保存が消える
 - **列設定のZodスキーマは共有する**: グローバル設定（`user-preferences/table`）と保存済みビュー（`saved-views` POST/PATCH）は同じ `PersistedColumnSettings` を保存する。スキーマを各ルートに書くと片方への追加を忘れ、**zodが未定義キーを黙って削除する**（保存レスポンスでキャッシュが上書きされ「設定した瞬間に元に戻る」）。定義は `src/lib/table-settings-schema.ts` に集約し、`tests/lib/table-settings-schema.test.ts` にドリフト検知あり
 - **列設定の保存は「読み込み中」だけスキップ**: `preferences === null` は「未ロード」ではなく「保存レコード未作成」も含む。`if (!preferences) return` にすると新規ユーザーは列固定・列幅・列順を永久に保存できない。ロード完了フラグで判定する（`SpreadsheetTable` の `preferencesReady`）
 - **パンくず `?from=`**: `buildFromParam(label, fallbackPath)` で生成し、遷移時点の `location.search` を含める。値は必ずURLエンコードし、ラベルは「最後のカンマ以降」で切り出す（クエリ内にカンマが入るため）。`Link href` での使用はSSRとのhydration不一致になるのでイベントハンドラ内でのみ使う
+
+### 案件ムーブメントの並び替え
+
+- 「案件情報」列の並び替え候補は **`showOnMovement` を立てた項目と一致させる**（受注予定月・顧客名・代理店名＋案件カスタム項目）。表示していない項目で並ぶと何順なのか画面から分からないため、候補用の新しいフラグは作らない
+- 既定の並び順だけ事業ごとに `businessConfig.movementSettings.defaultSort` に保存する（事業マスタ→ムーブメントタブ）。候補から外れたキーは `resolveMovementDefaultSort` が無視する
+- 並び替えは**取得済みの行に対するクライアント側ソート**。`GET /api/v1/projects/movements` は `updatedAt desc` で最大200件しか取らないため、1事業の案件が200件を超えたらAPI側の並べ替えへ移すこと
+- 比較は `src/lib/movement-sort.ts` に集約。空値は昇順・降順とも常に末尾（`compareMovementSortValues` が direction ごと受け取るのはこのため）
 
 ### 一覧APIとCSVエクスポートAPIの絞り込み共有
 
