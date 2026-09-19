@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import type { SetStateAction } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
@@ -220,9 +221,10 @@ export function useEntityList(config: EntityListConfig) {
     [defaultSortItems],
   );
 
-  // フィルター一括置換（ビュー適用時に使用）
+  // フィルター一括置換（ビュー適用時に使用）。
+  // 関数形式も受け付ける（config.defaultFilters のマージ適用で使用）。
   const handleSetFilters = useCallback(
-    (newFilters: Record<string, string>) => {
+    (newFilters: SetStateAction<Record<string, string>>) => {
       setFiltersState(newFilters);
       setPage(1);
     },

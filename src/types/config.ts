@@ -136,6 +136,14 @@ export type EntityListConfig = {
     debounceMs?: number;
   };
   filters: FilterDef[];
+  /**
+   * 初回表示時に適用する絞り込み（例: 失注ステータスを外した状態で開く）。
+   * URL に一覧状態がある場合（詳細からの戻り・ブックマーク）と、
+   * デフォルトビューが設定されている場合は適用しない。
+   * ユーザーの明示的な状態を上書きしないための優先順位:
+   *   URL > デフォルトビュー > defaultFilters
+   */
+  defaultFilters?: Record<string, string>;
   defaultSort: {
     field: string;
     direction: 'asc' | 'desc';
@@ -253,6 +261,24 @@ export type EntityDetailConfig = {
   actions: {
     edit: boolean;
     delete: boolean;
+    /**
+     * 複製（コピーして新規作成）。設定すると詳細ヘッダーに複製ボタンを表示する。
+     * API は POST で新しいレコードを作り、`{ success, data }` を返すこと。
+     */
+    copy?: {
+      /** ボタンラベル。省略時は「コピーして新規作成」 */
+      label?: string;
+      /** 複製 API エンドポイント（例: (id) => `/projects/${id}/copy`） */
+      apiEndpoint: (id: string) => string;
+      /** 確認モーダルのタイトル */
+      confirmTitle: string;
+      /** 確認モーダルの本文。コピー元データを見て文面を変えられる */
+      confirmDescription: string | ((data: Record<string, unknown>) => string);
+      /** 作成後の遷移先。省略時は作成されたレコードの詳細画面 */
+      redirectTo?: (created: Record<string, unknown>) => string;
+      /** 複製に必要なロール。省略時は編集権限に従う */
+      requiredRole?: string[];
+    };
     /** 論理削除の復元設定。設定すると削除済みデータに「復元」ボタンを表示 */
     restore?: {
       /** 有効/無効を判定するフィールド名（例: 'customerIsActive'） */

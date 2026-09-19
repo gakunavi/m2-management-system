@@ -14,6 +14,7 @@ import {
   buildDynamicFilters,
 } from '@/lib/dynamic-field-helpers';
 import { buildDynamicFieldSchema } from '@/lib/validations/dynamic-fields';
+import { buildDefaultStatusCodes } from '@/lib/status-defaults';
 import { projectBaseSchema } from '@/lib/validations/project';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 import type { StatusDefinition } from '@/hooks/use-status-definitions';
@@ -78,6 +79,24 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
     [statusDefs]
   );
 
+  // 4b. 初期表示の営業ステータス（失注のみ除外）
+  // 契約マスタは受注済みの契約も台帳として見続けるため、最終ステータスは除外しない。
+  const defaultStatusCodes = useMemo(
+    () => buildDefaultStatusCodes(statusDefs ?? [], { excludeInactive: false }),
+    [statusDefs],
+  );
+  /** 収益確定フラグが立っているステータスコード（コピー時の警告に使う） */
+  const revenueConfirmedStatusCodes = useMemo(
+    () => new Set((statusDefs ?? []).filter((s) => s.isRevenueConfirmed).map((s) => s.statusCode)),
+    [statusDefs],
+  );
+
+  /** 失注ステータスが1つも無い事業では既定の絞り込みを入れない */
+  const hasLostStatus = useMemo(
+    () => (statusDefs ?? []).some((s) => s.statusIsLost),
+    [statusDefs],
+  );
+
   // 5. 動的 listConfig
   const listConfig = useMemo<EntityListConfig>(() => {
     const dynamicColumns = buildDynamicColumns(projectFields, {
@@ -137,6 +156,11 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
       ...projectListConfig,
       columns: mergedColumns,
       columnGroupOrder: ['契約マスタ情報', '顧客マスタ情報', '代理店マスタ情報', 'システム情報'],
+      // 初回表示は失注を除いた状態で開く。定義が未取得／失注定義なし／
+      // 全件失注のときは絞り込みを入れない（該当0件や無意味な長いURLを避ける）
+      ...(hasLostStatus && defaultStatusCodes.length > 0
+        ? { defaultFilters: { projectSalesStatus: defaultStatusCodes.join(',') } }
+        : {}),
       filters: [
         ...projectListConfig.filters.map((f) => {
           if (f.key === 'projectSalesStatus' && f.type === 'multi-select') {
@@ -171,7 +195,7 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
         },
       }),
     };
-  }, [projectFields, customerShowFields, partnerShowFields, statusOptions, businessId]);
+  }, [projectFields, customerShowFields, partnerShowFields, statusOptions, businessId, defaultStatusCodes, hasLostStatus]);
 
   // 6. 動的 formConfig
   const formConfig = useMemo<EntityFormConfig>(() => {
@@ -224,6 +248,25 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
 
     return {
       ...projectDetailConfig,
+      actions: {
+        ...projectDetailConfig.actions,
+        ...(projectDetailConfig.actions.copy
+          ? {
+              copy: {
+                ...projectDetailConfig.actions.copy,
+                // 収益確定ステータスのままコピーすると、コピー先も即座に確定扱いになり
+                // 当月の売上として計上される。気づかず二重計上するのを避けるため警告する
+                confirmDescription: (data: Record<string, unknown>) => {
+                  const base =
+                    '営業ステータスもそのままコピーされます。案件番号は新しく採番され、ムーブメントの進捗・ファイル・コメント・リマインダーはコピーされません。';
+                  return revenueConfirmedStatusCodes.has(String(data.projectSalesStatus))
+                    ? `${base}\n\n⚠ このステータスは収益確定の対象です。コピーした案件もそのまま収益確定（今月計上）になります。`
+                    : base;
+                },
+              },
+            }
+          : {}),
+      },
       tabs: [
         {
           ...infoTab,
@@ -258,7 +301,7 @@ export function useProjectConfig(businessId: number | null): UseProjectConfigRes
         ...projectDetailConfig.tabs.slice(1),
       ],
     };
-  }, [projectFields, customerShowFields, partnerShowFields]);
+  }, [projectFields, customerShowFields, partnerShowFields, revenueConfirmedStatusCodes]);
 
   return {
     listConfig,

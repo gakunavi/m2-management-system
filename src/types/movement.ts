@@ -1,4 +1,5 @@
 import type { MovementStatus } from '@/lib/validations/movement';
+import type { MovementSortOption, MovementSortSetting } from '@/lib/movement-sort';
 
 // ムーブメント一覧API (GET /api/v1/projects/movements) のレスポンス型
 
@@ -82,6 +83,10 @@ export interface MovementOverviewResponse {
     templates: TemplateHeader[];
     statusDefinitions: StatusDef[];
     filterableFields?: FilterableFieldDef[];
+    /** 「案件情報」列で選べる並び替え項目（受注予定月＋ムーブメント表示カスタム項目） */
+    sortOptions?: MovementSortOption[];
+    /** 事業マスタで設定された既定の並び順。未設定なら null */
+    defaultSort?: MovementSortSetting | null;
   };
 }
 

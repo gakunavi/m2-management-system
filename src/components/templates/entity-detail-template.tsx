@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { EntityDetailConfig, InfoTabConfig, RelatedTabConfig } from '@/types/config';
 import { useEntityDetail } from '@/hooks/use-entity-detail';
@@ -14,7 +15,7 @@ import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { RelatedTabContent } from '@/components/ui/related-tab-content';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Pencil, Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, RotateCcw, AlertTriangle, Copy } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import type { UserRole } from '@/hooks/use-auth';
 
@@ -28,14 +29,17 @@ interface EntityDetailTemplateProps {
 
 export function EntityDetailTemplate({ config, id, breadcrumbs, customTabs }: EntityDetailTemplateProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { canEdit, canDelete, hasRole } = useAuth();
   const { toast } = useToast();
   const { data, loading, error, refresh } = useEntityDetail(config, id);
   const entityPath = config.basePath ?? `/${config.entityType}s`;
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const [activeTab, setActiveTab] = useState(config.tabs[0]?.key ?? '');
 
   if (loading) return <LoadingSpinner />;
@@ -52,6 +56,47 @@ export function EntityDetailTemplate({ config, id, breadcrumbs, customTabs }: En
   const canRestore =
     restoreConfig && isDeleted &&
     (!restoreConfig.requiredRole?.length || restoreConfig.requiredRole.some((r) => hasRole(r as UserRole)));
+
+  // 複製（コピーして新規作成）
+  const copyConfig = config.actions.copy;
+  const canCopy =
+    !!copyConfig && !isDeleted && canEdit &&
+    (!copyConfig.requiredRole?.length ||
+      copyConfig.requiredRole.some((r) => hasRole(r as UserRole)));
+
+  const handleCopy = async () => {
+    if (!copyConfig) return;
+    setIsCopying(true);
+    try {
+      const response = await fetch(`/api/v1${copyConfig.apiEndpoint(id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const json = await response.json();
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.error?.message ?? 'コピーに失敗しました');
+      }
+      const created = json.data as Record<string, unknown>;
+      // 一覧のキャッシュ（staleTime 30秒）を捨てる。
+      // 捨てないと一覧に戻ったときコピーした行が出てこない
+      queryClient.invalidateQueries({
+        predicate: (query) => String(query.queryKey[0] ?? '').startsWith(entityPath),
+      });
+      toast({ message: 'コピーしました', type: 'success' });
+      router.push(
+        copyConfig.redirectTo
+          ? copyConfig.redirectTo(created)
+          : `${entityPath}/${created.id}`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'コピーに失敗しました';
+      toast({ title: 'エラー', message: msg, type: 'error' });
+    } finally {
+      setIsCopying(false);
+      setShowCopyModal(false);
+    }
+  };
 
   const handleRestore = async () => {
     if (!restoreConfig) return;
@@ -111,6 +156,12 @@ export function EntityDetailTemplate({ config, id, breadcrumbs, customTabs }: En
               >
                 <Pencil className="mr-2 h-4 w-4" />
                 編集
+              </Button>
+            )}
+            {canCopy && (
+              <Button variant="outline" onClick={() => setShowCopyModal(true)}>
+                <Copy className="mr-2 h-4 w-4" />
+                {copyConfig?.label ?? 'コピーして新規作成'}
               </Button>
             )}
             {config.actions.delete && canDelete && !isDeleted && (
@@ -174,6 +225,23 @@ export function EntityDetailTemplate({ config, id, breadcrumbs, customTabs }: En
             data={data as Record<string, unknown>}
           />
         )
+      )}
+
+      {/* コピー確認モーダル */}
+      {copyConfig && (
+        <ConfirmModal
+          open={showCopyModal}
+          onOpenChange={setShowCopyModal}
+          title={copyConfig.confirmTitle}
+          description={
+            typeof copyConfig.confirmDescription === 'function'
+              ? copyConfig.confirmDescription(data as Record<string, unknown>)
+              : copyConfig.confirmDescription
+          }
+          confirmLabel="コピーする"
+          isLoading={isCopying}
+          onConfirm={handleCopy}
+        />
       )}
 
       {/* 削除確認モーダル */}

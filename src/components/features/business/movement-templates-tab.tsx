@@ -11,6 +11,7 @@ import { TabCsvImport } from '@/components/shared/tab-csv-import';
 import { Button } from '@/components/ui/button';
 import { MOVEMENT_TEMPLATE_COLUMNS as MOVEMENT_CSV_COLUMNS } from '@/lib/csv-helpers';
 import { useToast } from '@/hooks/use-toast';
+import { MovementSortSettings } from './movement-sort-settings';
 
 interface Props {
   entityId: number;
@@ -158,37 +159,40 @@ export function MovementTemplatesTab({ entityId }: Props) {
   };
 
   return (
-    <SortableItemList
-      items={items}
-      isLoading={isLoading}
-      columns={columns}
-      addLabel="定義を追加"
-      formFields={MOVEMENT_FORM_FIELDS}
-      formTitle={{ create: '定義追加', edit: '定義編集' }}
-      onCreate={create}
-      onUpdate={update}
-      onDelete={remove}
-      onReorder={reorder}
-      disabledOnEditKeys={['stepCode']}
-      deleteConfirmMessage={(item) => `ムーブメント定義「${(item as MovementTemplate).stepName}」を削除しますか？`}
-      headerActions={
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSync}
-            disabled={syncing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? '同期中...' : '案件に同期'}
-          </Button>
-          <TabCsvImport
-            endpoint={`/businesses/${entityId}/movement-templates/csv`}
-            templateColumns={MOVEMENT_CSV_COLUMNS}
-            onImportComplete={handleImportComplete}
-          />
-        </div>
-      }
-    />
+    <div className="space-y-4">
+      <MovementSortSettings entityId={entityId} />
+      <SortableItemList
+        items={items}
+        isLoading={isLoading}
+        columns={columns}
+        addLabel="定義を追加"
+        formFields={MOVEMENT_FORM_FIELDS}
+        formTitle={{ create: '定義追加', edit: '定義編集' }}
+        onCreate={create}
+        onUpdate={update}
+        onDelete={remove}
+        onReorder={reorder}
+        disabledOnEditKeys={['stepCode']}
+        deleteConfirmMessage={(item) => `ムーブメント定義「${(item as MovementTemplate).stepName}」を削除しますか？`}
+        headerActions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? '同期中...' : '案件に同期'}
+            </Button>
+            <TabCsvImport
+              endpoint={`/businesses/${entityId}/movement-templates/csv`}
+              templateColumns={MOVEMENT_CSV_COLUMNS}
+              onImportComplete={handleImportComplete}
+            />
+          </div>
+        }
+      />
+    </div>
   );
 }

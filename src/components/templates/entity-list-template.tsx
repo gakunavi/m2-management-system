@@ -161,16 +161,24 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
    */
   const forceAllColumnsVisible = activeView === null;
 
-  // デフォルトビューの自動適用（初回ロード時のみ）
+  // デフォルトビュー / config.defaultFilters の自動適用（初回ロード時のみ）
   // - preferences のロード完了を待つ（グローバル設定の確定を先に済ませるため）
   // - URL に一覧状態がある場合は適用しない（詳細画面からの戻りを尊重）
+  // - 優先順位は URL > デフォルトビュー > defaultFilters。
+  //   ユーザーが明示的に作ったビューを config 側の既定で上書きしないため。
   const defaultAppliedRef = useRef(false);
   useEffect(() => {
     if (viewsLoading || prefsLoading || defaultAppliedRef.current) return;
     defaultAppliedRef.current = true;
-    if (defaultView && !hasUrlStateRef.current) {
+    if (hasUrlStateRef.current) return;
+    if (defaultView) {
       applyViewState(defaultView);
       setActiveViewId(defaultView.id);
+      return;
+    }
+    const defaults = config.defaultFilters;
+    if (defaults && Object.keys(defaults).length > 0) {
+      setFilters((prev) => ({ ...prev, ...defaults }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewsLoading, prefsLoading]);

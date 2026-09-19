@@ -786,6 +786,17 @@ export const projectDetailConfig: EntityDetailConfig = {
   actions: {
     edit: true,
     delete: true,
+    // 案件番号だけ新規採番して複製する。確認文面は営業ステータスの
+    // 収益確定フラグを見て切り替えるため useProjectConfig で差し替える
+    copy: {
+      label: 'コピーして新規作成',
+      apiEndpoint: (id) => `/projects/${id}/copy`,
+      confirmTitle: 'この案件をコピーしますか？',
+      confirmDescription:
+        '案件番号は新しく採番されます。ムーブメントの進捗・ファイル・コメント・リマインダーはコピーされません。',
+      redirectTo: (created) => `/projects/${created.id}/edit`,
+      requiredRole: ['admin', 'staff'],
+    },
     restore: {
       activeField: 'projectIsActive',
       apiEndpoint: (id) => `/projects/${id}/restore`,

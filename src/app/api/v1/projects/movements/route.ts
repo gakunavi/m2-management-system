@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { buildMovementSortOptions, resolveMovementDefaultSort } from '@/lib/movement-sort';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,6 +156,15 @@ export async function GET(request: NextRequest) {
     const movementShowFields = projectFields
       .filter((f) => f.showOnMovement)
       .sort((a, b) => a.sortOrder - b.sortOrder);
+    // 「案件情報」列の並び替え候補と、事業マスタで設定された既定の並び順。
+    // 候補は showOnMovement の項目に揃えているので専用の設定項目は持たない。
+    const movementSortOptions = buildMovementSortOptions(projectFields);
+    const movementSettings = (businessConfig.movementSettings ?? {}) as Record<string, unknown>;
+    const movementDefaultSort = resolveMovementDefaultSort(
+      movementSettings.defaultSort,
+      movementSortOptions,
+    );
+
     // filterable フィールド定義
     const filterableFieldDefs = projectFields
       .filter((f) => f.filterable)
@@ -263,6 +273,8 @@ export async function GET(request: NextRequest) {
           statusIsLost: s.statusIsLost,
         })),
         filterableFields: filterableFieldDefs,
+        sortOptions: movementSortOptions,
+        defaultSort: movementDefaultSort,
       },
     });
   } catch (error) {

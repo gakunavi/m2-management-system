@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, CheckCircle, Circle, Play, SkipForward, XCircle, LayoutGrid, GanttChartSquare } from 'lucide-react';
@@ -26,6 +26,13 @@ import { useStatusDefinitions } from '@/hooks/use-status-definitions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { buildFromParam } from '@/lib/breadcrumb-from';
+import { buildDefaultStatusCodes } from '@/lib/status-defaults';
+import {
+  MOVEMENT_CORE_SORT_OPTIONS,
+  compareMovementSortValues,
+  toCustomFieldKey,
+  type MovementSortValue,
+} from '@/lib/movement-sort';
 import type { MovementStatus } from '@/lib/validations/movement';
 
 const STATUS_CELL: Record<MovementStatus, { bg: string; icon: typeof CheckCircle; iconColor: string }> = {
@@ -67,7 +74,10 @@ export function MovementsClient() {
   const [viewMode, setViewMode] = useState<ViewMode>('matrix');
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Day');
   const [statusSort, setStatusSort] = useState<SortDirection>(null);
-  const [monthSort, setMonthSort] = useState<SortDirection>(null);
+  // 「案件情報」列の並び替え。項目はドロップダウンで選び、矢印で昇順/降順/解除を切り替える。
+  // 既定値は事業マスタの設定（businessConfig.movementSettings.defaultSort）から流し込む。
+  const [sortKey, setSortKey] = useState<string>(MOVEMENT_CORE_SORT_OPTIONS[0].key);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [expectedMonthFrom, setExpectedMonthFrom] = useState<string | null>(null);
   const [expectedMonthTo, setExpectedMonthTo] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -89,6 +99,9 @@ export function MovementsClient() {
       setExpectedMonthTo(null);
       setSearchText('');
       setCustomFieldFilters([]);
+      setStatusSort(null);
+      setSortKey(MOVEMENT_CORE_SORT_OPTIONS[0].key);
+      setSortDirection(null);
       prevBusinessIdRef.current = selectedBusinessId;
     }
   }, [selectedBusinessId]);
@@ -98,10 +111,9 @@ export function MovementsClient() {
 
   useEffect(() => {
     if (allStatusDefs.length > 0 && selectedStatuses === null) {
-      const activeStatuses = allStatusDefs
-        .filter((s) => s.statusIsActive && !s.statusIsFinal && !s.statusIsLost)
-        .map((s) => s.statusCode);
-      setSelectedStatuses(activeStatuses);
+      // ムーブメントは「いま動かす案件」の画面なので最終（受注済み等）も除外する。
+      // 契約マスタ一覧は失注のみ除外（受注済みの契約は台帳として見せ続ける）。
+      setSelectedStatuses(buildDefaultStatusCodes(allStatusDefs, { excludeFinal: true }));
     }
   }, [allStatusDefs, selectedStatuses]);
 
@@ -129,11 +141,45 @@ export function MovementsClient() {
   const statusDefinitions = data?.meta?.statusDefinitions ?? [];
   const rawProjects = data?.data ?? [];
   const filterableFields = (data?.meta?.filterableFields ?? []) as ProjectFieldDefinition[];
+  const sortOptions = data?.meta?.sortOptions ?? MOVEMENT_CORE_SORT_OPTIONS;
+
+  // 事業マスタの既定の並び順を流し込む（事業ごとに1回だけ）。
+  // ユーザーが画面で切り替えた後に再取得が走っても上書きしないよう ref で抑止する。
+  const defaultSortAppliedRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!selectedBusinessId || !data) return;
+    if (defaultSortAppliedRef.current === selectedBusinessId) return;
+    defaultSortAppliedRef.current = selectedBusinessId;
+    const configured = data.meta?.defaultSort ?? null;
+    if (configured) {
+      setSortKey(configured.key);
+      setSortDirection(configured.direction);
+    }
+  }, [data, selectedBusinessId]);
 
   // ソート切替ハンドラ（各列独立で asc → desc → 解除）
   const toggleSort = (setter: React.Dispatch<React.SetStateAction<SortDirection>>) => {
     setter((prev) => (prev === null ? 'asc' : prev === 'asc' ? 'desc' : null));
   };
+
+  // 事業マスタで「ムーブメントに表示する」を外された項目は候補から消えるので、
+  // 選択中のキーが候補外になったら先頭（受注予定月）に戻す
+  const activeSortOption =
+    sortOptions.find((o) => o.key === sortKey) ?? sortOptions[0] ?? MOVEMENT_CORE_SORT_OPTIONS[0];
+  const effectiveSortKey = activeSortOption.key;
+  const sortType = activeSortOption.type;
+  const sortLabel = activeSortOption.label;
+
+  /** 並び替えキーに対応する値を取り出す */
+  const getSortValue = useCallback((project: ProjectRow, key: string): MovementSortValue => {
+    const customKey = toCustomFieldKey(key);
+    if (customKey) {
+      return project.movementCustomFields?.find((f) => f.key === customKey)?.value ?? null;
+    }
+    if (key === 'customerName') return project.customerName;
+    if (key === 'partnerName') return project.partnerName;
+    return project.projectExpectedCloseMonth;
+  }, []);
 
   // ステータスのソート順マップ（statusDefinitionsから構築、fallbackでallStatusDefs）
   const statusSortMap = useMemo(() => {
@@ -146,9 +192,9 @@ export function MovementsClient() {
     return map;
   }, [statusDefinitions, allStatusDefs]);
 
-  // ソート済み案件リスト（両方独立に適用、営業ステータス→受注予定月の順で比較）
+  // ソート済み案件リスト（両方独立に適用、営業ステータス→選択中の項目の順で比較）
   const projects = useMemo(() => {
-    if (!statusSort && !monthSort) return rawProjects;
+    if (!statusSort && !sortDirection) return rawProjects;
     return [...rawProjects].sort((a, b) => {
       // 営業ステータスで比較
       if (statusSort) {
@@ -157,20 +203,19 @@ export function MovementsClient() {
         const cmp = aOrder - bOrder;
         if (cmp !== 0) return statusSort === 'desc' ? -cmp : cmp;
       }
-      // 受注予定月で比較
-      if (monthSort) {
-        const aVal = a.projectExpectedCloseMonth ?? '';
-        const bVal = b.projectExpectedCloseMonth ?? '';
-        let cmp = 0;
-        if (!aVal && !bVal) cmp = 0;
-        else if (!aVal) cmp = 1;
-        else if (!bVal) cmp = -1;
-        else cmp = aVal.localeCompare(bVal);
-        if (cmp !== 0) return monthSort === 'desc' ? -cmp : cmp;
+      // 選択中の案件情報項目で比較
+      if (sortDirection) {
+        const cmp = compareMovementSortValues(
+          getSortValue(a, effectiveSortKey),
+          getSortValue(b, effectiveSortKey),
+          sortType,
+          sortDirection,
+        );
+        if (cmp !== 0) return cmp;
       }
       return 0;
     });
-  }, [rawProjects, statusSort, monthSort, statusSortMap]);
+  }, [rawProjects, statusSort, sortDirection, effectiveSortKey, sortType, statusSortMap, getSortValue]);
 
   // 最終・失注ステータスのコードSet（行グレーアウト用）
   const inactiveStatusCodes = useMemo(() => {
@@ -307,21 +352,47 @@ export function MovementsClient() {
               <div style={{ minWidth: `${minWidth}px` }}>
                 {/* ヘッダー行 */}
                 <div className="bg-muted border-b flex sticky top-0 z-30">
-                  <div
-                    className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted z-20 cursor-pointer select-none hover:brightness-95 transition-all"
-                    onClick={() => toggleSort(setMonthSort)}
-                  >
-                    <span className="flex items-center gap-1">
-                      案件情報
-                      <span className="text-xs text-muted-foreground">/ 受注予定月</span>
-                      {monthSort === 'asc' ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-primary" />
-                      ) : monthSort === 'desc' ? (
-                        <ArrowDown className="h-3.5 w-3.5 text-primary" />
-                      ) : (
-                        <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/50" />
-                      )}
-                    </span>
+                  <div className="w-[200px] sm:w-[280px] shrink-0 px-3 sm:px-4 py-3 border-r font-medium text-sm sticky left-0 bg-muted z-20 select-none">
+                    <div className="flex items-center gap-1">
+                      <span className="shrink-0">案件情報</span>
+                      <select
+                        value={effectiveSortKey}
+                        onChange={(e) => {
+                          setSortKey(e.target.value);
+                          // 項目を選んだ時点で未ソートなら昇順から始める
+                          setSortDirection((prev) => prev ?? 'asc');
+                        }}
+                        className="min-w-0 flex-1 bg-transparent text-xs text-muted-foreground border rounded px-1 py-0.5 cursor-pointer"
+                        aria-label="並び替え項目"
+                      >
+                        {sortOptions.map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(setSortDirection)}
+                        className="shrink-0 p-0.5 rounded hover:bg-accent transition-colors"
+                        aria-label={`${sortLabel}で並び替え`}
+                        title={
+                          sortDirection === 'asc'
+                            ? `${sortLabel}：昇順`
+                            : sortDirection === 'desc'
+                              ? `${sortLabel}：降順`
+                              : '並び替えなし'
+                        }
+                      >
+                        {sortDirection === 'asc' ? (
+                          <ArrowUp className="h-3.5 w-3.5 text-primary" />
+                        ) : sortDirection === 'desc' ? (
+                          <ArrowDown className="h-3.5 w-3.5 text-primary" />
+                        ) : (
+                          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground/50" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div
                     className="w-[120px] sm:w-[140px] shrink-0 px-2 py-3 border-r text-xs text-center font-medium sticky left-[200px] sm:left-[280px] bg-muted z-20 cursor-pointer select-none hover:brightness-95 transition-all"
