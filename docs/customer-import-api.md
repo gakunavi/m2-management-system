@@ -117,7 +117,7 @@ Content-Type: application/json
 |---|---|
 | 常に | `mo_no` |
 | `allow_create: true` | `company_name` / `address` / `representative_name` / `customer_type` |
-| `allow_create: true` かつ `customer_type` が `法人` | `corporate_no`（13桁） |
+| `allow_create: true` かつ `customer_type` が `法人` | `corporate_no`（自由記述・100文字以内。「申請中」なども可） |
 
 `customer_type` は `法人` / `個人事業主` / `個人`。個人事業主・個人は法人番号を持たないため `corporate_no` は `null` で通る。
 
@@ -236,7 +236,7 @@ Content-Type: application/json
 | `404` | `mo_no` 未ヒット（更新のみモード） | `{"error":"mo_no=MO-9999 の顧客が m2 に見つかりません。新規作成する場合は allow_create: true を指定してください。","mo_no":"MO-9999"}` |
 | `422` | バリデーションエラー | `{"error":"Validation failed","errors":[{"field":"mo_no","message":"..."}]}` |
 | `409` | 同一 Idempotency-Key で異なる内容 | `{"error":"Idempotency-Key conflict: ..."}` |
-| `409` | 法人番号の一意制約違反（下記参照） | `{"error":"Conflict: 一意制約に違反しました（法人番号の重複の可能性があります）"}` |
+| `409` | 13桁の法人番号が既存顧客と重複（新規作成時のみ・下記参照） | `{"error":"法人番号 ... の顧客（id=...）が既に存在します"}` |
 | `409` | 事業リンクはあるが顧客レコードが無い（データ不整合） | `{"error":"mo_no=... の事業リンクは存在しますが、顧客レコード（id=...）が見つかりません"}` |
 | `400` | JSON パース失敗 | `{"error":"Invalid JSON body"}` |
 | `401` / `403` / `404` / `429` | [認証と共通仕様](#1-認証と共通仕様)を参照 | |
@@ -424,8 +424,8 @@ curl -s "$M2_API_BASE_PROD/api/integrations/customers/501" \
 | `address` | `customers.customer_address` | |
 | `phone` | `customers.customer_phone` | |
 | `company_email` | `customers.customer_email` | |
-| `corporate_no` | `customers.customer_corporate_number` | 13桁。UNIQUE制約あり |
-| `invoice_no` | `customers.customer_invoice_number` | `T` + 13桁 |
+| `corporate_no` | `customers.customer_corporate_number` | 自由記述（100文字以内）。13桁の数字のときだけ新規作成で重複を 409 |
+| `invoice_no` | `customers.customer_invoice_number` | 自由記述（100文字以内） |
 | `established_on` | `customers.customer_established_date` | `YYYY-MM-DD` |
 | `fiscal_month` | `customers.customer_fiscal_month` | 1〜12 |
 | `industry` | `industries` マスタへの紐付け | 一致すれば紐付け、無ければ `null` + 警告。**マスタは自動作成しない** |
@@ -517,3 +517,8 @@ PostgreSQL の UNIQUE 索引は NULL 同士を重複と見なさないため、�
 ライト事業は「1社＝1MO番号」で、追加購入も同じMO番号のまま台数を増やす運用。
 したがって同一法人番号で別MO番号の新規作成が起きたら、それは登録ミスである。
 UNIQUE インデックスは維持し、`409` を返して止める。呼び出し側で既存レコードのMO番号を確認し、名寄せする。
+
+**2026-09-24 変更: 法人番号・インボイス番号を自由記述にした。**
+画面から「なし」「申請中」を複数社に入れられるよう、DB の UNIQUE 索引は外した（`20260924100000`）。
+上の「同一法人番号での新規作成は 409」は、`corporate_no` が **13桁の数字のときだけ** アプリ側（`createCustomer`）で判定して維持している。
+`corporate_no` / `invoice_no` の形式チェックは廃止し、100文字以内であれば受け付ける。

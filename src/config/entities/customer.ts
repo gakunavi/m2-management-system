@@ -124,8 +124,8 @@ export const customerListConfig: EntityListConfig = {
         return industry?.industryName ?? '-';
       },
     },
-    { key: 'customerCorporateNumber', label: '法人番号', width: 150, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'text', placeholder: '13桁の数字' } },
-    { key: 'customerInvoiceNumber', label: 'インボイス番号', width: 160, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'text', placeholder: 'T + 13桁の数字' } },
+    { key: 'customerCorporateNumber', label: '法人番号', width: 150, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'text' } },
+    { key: 'customerInvoiceNumber', label: 'インボイス番号', width: 160, sortable: true, defaultVisible: false, group: '企業情報', edit: { type: 'text' } },
     {
       key: 'customerCapital',
       label: '資本金',
@@ -266,8 +266,8 @@ export const customerListConfig: EntityListConfig = {
       { key: 'primaryContactPhone', label: '主担当者TEL', description: '主担当者の電話番号', example: '03-1234-5680' },
       { key: 'primaryContactEmail', label: '主担当者メール', description: '主担当者のメールアドレス', example: 'suzuki@example.com' },
       { key: 'industryName', label: '業種', description: '業種マスタに登録済みの名称', example: '情報通信業' },
-      { key: 'customerCorporateNumber', label: '法人番号', description: '13桁の数字', example: '1234567890123' },
-      { key: 'customerInvoiceNumber', label: 'インボイス番号', description: 'T + 13桁の数字', example: 'T1234567890123' },
+      { key: 'customerCorporateNumber', label: '法人番号', description: '自由記述', example: '1234567890123' },
+      { key: 'customerInvoiceNumber', label: 'インボイス番号', description: '自由記述', example: 'T1234567890123' },
       { key: 'customerCapital', label: '資本金', description: '数値（円）', example: '10000000' },
       { key: 'customerFiscalMonth', label: '決算月', description: '1〜12の数字', example: '3' },
       { key: 'customerEstablishedDate', label: '設立日', description: 'YYYY-MM-DD 形式', example: '2020-01-01' },
@@ -462,8 +462,8 @@ export const customerFormConfig: EntityFormConfig = {
           placeholder: '決算月を選択',
         },
         { key: 'customerEstablishedDate', label: '設立日', type: 'date' },
-        { key: 'customerCorporateNumber', label: '法人番号', type: 'text', placeholder: '13桁の数字' },
-        { key: 'customerInvoiceNumber', label: 'インボイス登録番号', type: 'text', placeholder: 'T + 13桁の数字' },
+        { key: 'customerCorporateNumber', label: '法人番号', type: 'text' },
+        { key: 'customerInvoiceNumber', label: 'インボイス登録番号', type: 'text' },
         { key: 'customerCapital', label: '資本金（円）', type: 'number', placeholder: '0' },
       ],
     },
@@ -489,13 +489,13 @@ export const customerFormConfig: EntityFormConfig = {
     industryId: z.number().int().positive().optional().nullable(),
     customerCorporateNumber: z
       .string()
-      .regex(/^\d{13}$/, '法人番号は13桁の数字で入力してください')
+      .max(100, '法人番号は100文字以内で入力してください')
       .optional()
       .nullable()
       .or(z.literal('')),
     customerInvoiceNumber: z
       .string()
-      .regex(/^T\d{13}$/, 'インボイス番号は「T」+13桁の数字で入力してください')
+      .max(100, 'インボイス番号は100文字以内で入力してください')
       .optional()
       .nullable()
       .or(z.literal('')),

@@ -92,11 +92,12 @@ export const customerImportSchema = z
     ),
     corporate_no: z.preprocess(
       emptyToNull,
-      z.string().regex(/^\d{13}$/, 'corporate_no は13桁の数字です').nullable().optional(),
+      // 自由記述（「なし」「申請中」も入る）。13桁の数字のときだけ新規作成時に重複を止める
+      z.string().max(100, 'corporate_no は100文字以内です').nullable().optional(),
     ),
     invoice_no: z.preprocess(
       emptyToNull,
-      z.string().regex(/^T\d{13}$/, 'invoice_no は T + 13桁の数字です').nullable().optional(),
+      z.string().max(100, 'invoice_no は100文字以内です').nullable().optional(),
     ),
     fiscal_month: z.preprocess(
       emptyToNull,
@@ -183,6 +184,9 @@ export class CustomerNotFoundError extends Error {
     this.name = 'CustomerNotFoundError';
   }
 }
+
+/** 本物の法人番号（13桁の数字）。重複チェックはこの形のときだけ行う */
+const CORPORATE_NUMBER_PATTERN = /^\d{13}$/;
 
 /** 取り込みを続けると既存データの整合性を壊す場合（→ 409） */
 export class CustomerImportConflictError extends Error {
@@ -785,6 +789,21 @@ async function createCustomer(
       conflicts: [],
       warnings: ctx.warnings,
     };
+  }
+
+  // 同一法人番号での新規作成は登録ミスとして止める（2026-07-30 確定）。
+  // 法人番号は自由記述になり DB の UNIQUE を外したため、本物の番号（13桁の数字）だけここで見る。
+  // 「なし」「申請中」は何社でも入ってよい
+  if (input.corporate_no && CORPORATE_NUMBER_PATTERN.test(input.corporate_no)) {
+    const duplicate = await tx.customer.findFirst({
+      where: { customerCorporateNumber: input.corporate_no },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new CustomerImportConflictError(
+        `法人番号 ${input.corporate_no} の顧客（id=${duplicate.id}）が既に存在します`,
+      );
+    }
   }
 
   const customerCode = await generateCustomerCode(tx);

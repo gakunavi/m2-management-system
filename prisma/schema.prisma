@@ -232,10 +232,10 @@ model Customer {
   customerFax             String?                @map("customer_fax") @db.VarChar(20)
   customerEmail           String?                @map("customer_email") @db.VarChar(255)
   customerWebsite         String?                @map("customer_website") @db.VarChar(500)
-  /// 法人番号。UNIQUE（PostgreSQL の UNIQUE は NULL 同士を重複と見なさないため、
-  /// 実質「NOT NULL のときだけ一意」。空文字は全書き込み経路で null に正規化している）
-  customerCorporateNumber String?                @unique @map("customer_corporate_number") @db.VarChar(13)
-  customerInvoiceNumber   String?                @map("customer_invoice_number") @db.VarChar(14)
+  /// 法人番号。自由記述（「なし」「申請中」も入るため UNIQUE にしない）。
+  /// 取り込みAPIの新規作成だけ、13桁の数字のときに重複を 409 で止める（customer-import.ts）
+  customerCorporateNumber String?                @map("customer_corporate_number") @db.VarChar(100)
+  customerInvoiceNumber   String?                @map("customer_invoice_number") @db.VarChar(100)
   customerCapital         BigInt?                @map("customer_capital")
   customerEstablishedDate DateTime?              @map("customer_established_date") @db.Date
   customerFolderUrl       String?                @map("customer_folder_url") @db.VarChar(500)
@@ -447,8 +447,8 @@ model Partner {
   partnerBpFormKey       String?              @map("partner_bp_form_key") @db.VarChar(500)
   partnerBpFormUrl       String?              @map("partner_bp_form_url") @db.VarChar(500)
   partnerCapital         BigInt?              @map("partner_capital")
-  partnerCorporateNumber String?              @map("partner_corporate_number") @db.VarChar(13)
-  partnerInvoiceNumber   String?              @map("partner_invoice_number") @db.VarChar(14)
+  partnerCorporateNumber String?              @map("partner_corporate_number") @db.VarChar(100)
+  partnerInvoiceNumber   String?              @map("partner_invoice_number") @db.VarChar(100)
   bankAccounts           PartnerBankAccount[]
   contacts               PartnerContact[]
   creator                User?                @relation("PartnerCreator", fields: [createdBy], references: [id])

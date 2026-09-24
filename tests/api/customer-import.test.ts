@@ -524,6 +524,37 @@ describe('allow_create', () => {
     expect(response.status).toBe(422);
     expect((json.errors as Array<{ field: string }>).map((e) => e.field)).toContain('corporate_no');
   });
+
+  it('法人番号は「申請中」のような自由記述でも作成できる（重複チェックもしない）', async () => {
+    setupNotFound();
+
+    const response = await POST(
+      buildRequest({ ...BODY, mo_no: 'MO-103', allow_create: true, corporate_no: '申請中', invoice_no: 'なし' }),
+    );
+
+    expect(response.status).toBe(201);
+    const corporateLookups = mockPrisma.customer.findFirst.mock.calls.filter(
+      ([args]) => (args as { where?: Record<string, unknown> }).where?.customerCorporateNumber !== undefined,
+    );
+    expect(corporateLookups).toHaveLength(0);
+  });
+
+  it('13桁の法人番号が既存顧客と重複したら 409 で作成しない', async () => {
+    setupNotFound();
+    mockPrisma.customer.findFirst.mockImplementation(async (args: Record<string, never>) => {
+      const where = (args as { where?: Record<string, unknown> }).where ?? {};
+      if (where.customerCorporateNumber === BODY.corporate_no) return { id: 77 };
+      if ((where.customerCode as { startsWith?: string } | undefined)?.startsWith === 'CST-') {
+        return { customerCode: 'CST-0173' };
+      }
+      return null;
+    });
+
+    const response = await POST(buildRequest({ ...BODY, mo_no: 'MO-104', allow_create: true }));
+
+    expect(response.status).toBe(409);
+    expect(mockPrisma.customer.create).not.toHaveBeenCalled();
+  });
 });
 
 // ============================================
@@ -543,10 +574,10 @@ describe('バリデーション', () => {
     expectNoWrites();
   });
 
-  it('法人番号が13桁でなければ 422', async () => {
+  it('法人番号が100文字を超えたら 422', async () => {
     setupExisting();
 
-    const response = await POST(buildRequest({ ...BODY, corporate_no: '123' }));
+    const response = await POST(buildRequest({ ...BODY, corporate_no: '1'.repeat(101) }));
     const json = await response.json();
 
     expect(response.status).toBe(422);

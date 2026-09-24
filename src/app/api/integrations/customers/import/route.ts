@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return NextResponse.json(
-        { error: 'Conflict: 一意制約に違反しました（法人番号の重複の可能性があります）' },
+        { error: 'Conflict: 一意制約に違反しました' },
         { status: 409 },
       );
     }
