@@ -258,6 +258,9 @@ export function buildContractItem(row: ContractProjectRow, options: BuildContrac
     thank_you_recipient: customValue(data, 'thank_you_recipient'),
     gratitude_certificate_name: customValue(data, 'gratitude_certificate_name'),
 
+    // --- 中企庁申請 ---
+    sme_agency_applicant: customValue(data, 'sme_agency_applicant'),
+
     // --- 口座（平文。ログには出さない） ---
     bank_name: bank?.bankName ?? null,
     bank_branch: bank?.branchName ?? null,
@@ -279,5 +282,6 @@ export const CONTRACT_ITEM_KEYS = [
   'contact_name', 'contact_phone', 'contact_email',
   'postal_code', 'address', 'corporate_no', 'invoice_no', 'company_phone',
   'thank_you_recipient', 'gratitude_certificate_name',
+  'sme_agency_applicant',
   'bank_name', 'bank_branch', 'account_type', 'account_no', 'account_holder', 'bank_account_scope',
 ] as const;

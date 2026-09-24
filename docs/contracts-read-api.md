@@ -112,6 +112,7 @@ GET /api/integrations/contracts?status=purchased&limit=100
 | `company_phone` | `customers.customer_phone` | |
 | `thank_you_recipient` | `project_custom_data.thank_you_recipient` | 感謝状送付先＝工業会証明書の送り先（運用上同じものとして扱う） |
 | `gratitude_certificate_name` | `project_custom_data.gratitude_certificate_name` | 感謝状名義 |
+| `sme_agency_applicant` | `project_custom_data.sme_agency_applicant` | 中企庁申請者（テキスト・任意）。2026-09-24 追加 |
 | `bank_name` / `bank_branch` / `account_type` / `account_no` / `account_holder` | `customer_bank_accounts` | **平文** |
 | `bank_account_scope` | — | `business`（対象事業の口座）/ `common`（事業共通）/ `null`（口座なし） |
 
@@ -210,5 +211,5 @@ curl -s -o /dev/null -w "%{http_code}\n" \
   "https://manage.gakunavi.co.jp/api/integrations/contracts"
 ```
 
-自動テストは `tests/api/integration-contracts.test.ts`（29件）。
+自動テストは `tests/api/integration-contracts.test.ts`（30件）。
 ステータス絞り込み・ページングの重複欠落・トークン分離・キー欠落・読み取り専用性を固定している。

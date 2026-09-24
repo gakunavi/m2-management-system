@@ -80,6 +80,7 @@ function projectRow(over: Record<string, unknown> = {}, customerOver: Record<str
       payment_received_date: '2026-09-14',
       thank_you_recipient: '株式会社テスト 御中',
       gratitude_certificate_name: '株式会社テスト',
+      sme_agency_applicant: '山田花子',
     },
     customer: {
       id: 311,
@@ -459,6 +460,17 @@ describe('レスポンス', () => {
     }
   });
 
+  it('中企庁申請者が空文字なら null で返す', async () => {
+    mockPrisma.project.findMany.mockResolvedValue([
+      projectRow({ projectCustomData: { sme_agency_applicant: '' } }),
+    ]);
+
+    const response = await GET(buildRequest());
+    const item = (await response.json()).items[0];
+
+    expect(item).toHaveProperty('sme_agency_applicant', null);
+  });
+
   it('生の値をそのまま返す（ニーズ・決算月を整形しない）', async () => {
     const response = await GET(buildRequest());
     const item = (await response.json()).items[0];
@@ -471,6 +483,7 @@ describe('レスポンス', () => {
     expect(item.project_notes).toBe('初回提案済み');
     expect(item.thank_you_recipient).toBe('株式会社テスト 御中');
     expect(item.gratitude_certificate_name).toBe('株式会社テスト');
+    expect(item.sme_agency_applicant).toBe('山田花子');
   });
 
   it('購入金額は数式（購入単価×台数）を再計算して返す', async () => {
