@@ -9,6 +9,7 @@ import type {
   SavedTableView,
 } from '@/types/config';
 import { useEntityList } from '@/hooks/use-entity-list';
+import { mergeViewFilters } from '@/lib/view-filters';
 import { useTablePreferences } from '@/hooks/use-table-preferences';
 import { useInlineCellEdit } from '@/hooks/use-inline-cell-edit';
 import { useSavedViews } from '@/hooks/use-saved-views';
@@ -161,11 +162,18 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
    */
   const forceAllColumnsVisible = activeView === null;
 
+  // config の既定絞り込み。applyViewState から参照するが、config の再生成で
+  // コールバック識別子が変わらないよう ref 経由にする。
+  const defaultFiltersRef = useRef(config.defaultFilters);
+  defaultFiltersRef.current = config.defaultFilters;
+
   // デフォルトビュー / config.defaultFilters の自動適用（初回ロード時のみ）
   // - preferences のロード完了を待つ（グローバル設定の確定を先に済ませるため）
   // - URL に一覧状態がある場合は適用しない（詳細画面からの戻りを尊重）
-  // - 優先順位は URL > デフォルトビュー > defaultFilters。
-  //   ユーザーが明示的に作ったビューを config 側の既定で上書きしないため。
+  // - 優先順位は URL > デフォルトビュー > defaultFilters（キー単位）。
+  //   ビューが値を持つキーはビューが勝つが、ビューが持たないキーは
+  //   defaultFilters で補う（mergeViewFilters）。空の filters で保存された
+  //   古いビューが標準フィルタを打ち消すのを防ぐため。
   const defaultAppliedRef = useRef(false);
   useEffect(() => {
     if (viewsLoading || prefsLoading || defaultAppliedRef.current) return;
@@ -226,11 +234,14 @@ export function EntityListTemplate({ config }: EntityListTemplateProps) {
   const applyViewState = useCallback(
     (view: SavedTableView) => {
       const s = view.settings as SavedViewSettings;
-      setSearchQuery(s.searchQuery);
+      setSearchQuery(s.searchQuery ?? '');
       const viewPageSize = s.pageSize ?? s.columnSettings?.pageSize;
       if (viewPageSize) setPageSize(viewPageSize);
-      setFilters(s.filters);
-      setSortItems(s.sortItems);
+      // ビューが値を持たないキーは config の既定絞り込みで補う（キー単位で後勝ち）。
+      // 既定絞り込み機能より前に作られたビューは filters が空で保存されており、
+      // そのまま適用すると標準フィルタ（契約マスタの失注除外）が消える。
+      setFilters(mergeViewFilters(s.filters, defaultFiltersRef.current));
+      setSortItems(s.sortItems ?? []);
     },
     [setSearchQuery, setPageSize, setFilters, setSortItems],
   );

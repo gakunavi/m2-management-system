@@ -125,7 +125,7 @@ grep -r "customerDetailConfig" src/app/ src/components/
 
 - **URLが正**: 絞り込み・検索・ソート・ページ・表示件数・**選択中のビューID（`?view=`）** を `useEntityList` がURLに同期する。戻る操作・ブックマークでの復元がこれで成立する
 - **デフォルトビューの自動適用**: URLに一覧状態がある場合はスキップする。適用すると戻ってきた直後にURL由来の状態を上書きしてしまうため
-- **既定の絞り込み（`EntityListConfig.defaultFilters`）**: 適用の優先順位は **URL > デフォルトビュー > defaultFilters**。ユーザーが明示的に作ったビューを config 側の既定で上書きしないこと。契約マスタは失注ステータスを外した状態で開く（`useProjectConfig`）。**最終（受注済み等）は除外しない**——契約マスタは受注後こそ見る台帳で、ムーブメント（`excludeFinal: true`）とは除外の強さが違う。判定は `src/lib/status-defaults.ts` に集約
+- **既定の絞り込み（`EntityListConfig.defaultFilters`）**: 適用の優先順位は **URL > デフォルトビュー > defaultFilters**。ただしビューとの優先は**キー単位**で判定する（`mergeViewFilters`）。ビューが値を持つキーはビューが勝ち、**持たないキーは defaultFilters で補う**。全体で後勝ちにすると、既定絞り込み機能より前に作られた `filters: {}` のビューが標準フィルタを丸ごと打ち消す（本番のデフォルトビューがこれで失注除外が効かなくなっていた）。絞り込み解除はキーごと削除されるため「未設定」と「意図的に解除」は区別できない——区別が必要になったらビュー側に解除マーカーを持たせること。契約マスタは失注ステータスを外した状態で開く（`useProjectConfig`）。**最終（受注済み等）は除外しない**——契約マスタは受注後こそ見る台帳で、ムーブメント（`excludeFinal: true`）とは除外の強さが違う。判定は `src/lib/status-defaults.ts` に集約
 - **列設定のスコープ分離**: 「すべて」タブ＝グローバル設定（`user-preferences/table`）、自分のビュー＝ビューの `columnSettings`、共有ビュー＝セッション内ローカルのみ。**ビュー適用時にグローバル設定を書き換えないこと**（書き換えると「すべて」タブがビューの列構成に固定される）
 - **「すべて」タブは全列強制表示**: `SpreadsheetTable` の `forceAllColumnsVisible` で `defaultVisible: false` も含め全列を表示し、非表示操作を受け付けない。CSVの対象列・ビュー新規保存時の初期状態も全列に揃える
 - **デバウンス保存はunmountでフラッシュ**: `useTablePreferences` / `useSavedViews.updateViewSettings` は1秒デバウンス。クリーンアップで `clearTimeout` だけすると、列固定直後に画面遷移した場合に保存が消える
