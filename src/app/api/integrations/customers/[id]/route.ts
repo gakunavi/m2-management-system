@@ -4,6 +4,19 @@ import { authorizeIntegrationRequest } from '@/lib/integration-auth';
 import { resolveImportBusiness } from '@/lib/customer-import';
 import { customerAdminUrl } from '@/lib/integration-url';
 import { logger } from '@/lib/logger';
+import { findIntegrationCustomerByCode } from '@/lib/ml-scope';
+import {
+  handleIntegrationWrite,
+  IDEMPOTENCY_SCOPE_ML_CUSTOMER,
+  once,
+} from '@/lib/integration-write';
+import { applyCustomerUpdate } from '@/lib/customer-update';
+import {
+  buildMlCustomerItem,
+  mlCustomerPatchSchema,
+  toCustomerUpdateBody,
+} from '@/lib/ml-customer-fields';
+import { recordIntegrationChange } from '@/lib/integration-change-log';
 
 export const dynamic = 'force-dynamic';
 
@@ -145,4 +158,74 @@ export async function GET(
     logger.error('連携API: 顧客の読み戻しに失敗しました', error, 'customer-import');
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
+}
+
+// ============================================================================
+// PATCH /api/integrations/customers/{customer_code}
+//
+// ML管理システムからの顧客の書き戻し。**GET とは引数が違う**: GET は数値ID
+// （取り込み時の読み戻し検算用・既存の挙動）、PATCH は顧客コード（CST-0001）。
+// Next.js は同じ階層で別名の動的セグメントを持てないため、同じ [id] を共有して
+// いる。
+//
+// - 認証: Authorization: Bearer <INTEGRATION_API_TOKEN>（読み取り用では 401）
+// - 変更者: X-ML-User ヘッダー（変更履歴に "ML：<名前>" として残る）
+// - 対象: env INTEGRATION_BUSINESS_CODE（既定 LIGHT）に紐づく顧客のみ。それ以外は 404
+// - 画面と同じ更新処理（src/lib/customer-update.ts）を通る。社名＋電話の重複
+//   チェックもそのまま効く
+// ============================================================================
+
+/** 409 のときに返す現在値 */
+async function currentMlCustomer(customerId: number) {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, customerCode: true, customerName: true, customerType: true, version: true },
+  });
+  if (!customer) return null;
+  return buildMlCustomerItem(customer, { customerUrl: customerAdminUrl(customer.id) });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: customerCode } = await params;
+  // 認証前に DB を叩かないよう、対象の解決は handler の中まで遅延させる
+  const resolveScope = once(() => findIntegrationCustomerByCode(prisma, customerCode));
+
+  return handleIntegrationWrite(request, {
+    scope: IDEMPOTENCY_SCOPE_ML_CUSTOMER,
+    resourceKey: `customer:${customerCode}`,
+    logContext: 'ml-customer-write',
+    onConflict: async () => {
+      const scope = await resolveScope();
+      return scope ? currentMlCustomer(scope.customerId) : null;
+    },
+    handler: async ({ actor, body }) => {
+      const scope = await resolveScope();
+      if (!scope) return { status: 404, body: { error: 'Not found' } };
+
+      const input = mlCustomerPatchSchema.parse(body);
+
+      // 画面と同じ更新処理
+      const updated = await applyCustomerUpdate(prisma, {
+        customerId: scope.customerId,
+        body: toCustomerUpdateBody(input) as unknown as Record<string, unknown>,
+        actor,
+      });
+
+      await recordIntegrationChange(prisma, actor, {
+        entityType: 'customer',
+        entityId: updated.id,
+        entityKey: updated.customerCode,
+        action: 'update',
+        changedFields: Object.keys(input).filter((k) => k !== 'version').sort(),
+      });
+
+      return {
+        status: 200,
+        body: buildMlCustomerItem(updated, { customerUrl: customerAdminUrl(updated.id) }),
+      };
+    },
+  });
 }

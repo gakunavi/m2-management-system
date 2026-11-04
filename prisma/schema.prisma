@@ -1174,3 +1174,70 @@ model TaskBoardMember {
   @@id([boardId, userId])
   @@map("task_board_members")
 }
+
+// ============================================
+// ML管理システムとの双方向連携
+// ============================================
+
+/// ML管理システムから書き込まれた変更の履歴。
+///
+/// m2 には変更履歴テーブルが無く、更新者は `updated_by`（User への FK）でしか
+/// 表せない。ML の利用者は m2 のユーザーではないため FK に載せられないので、
+/// 「誰が・どの項目を」変えたかをここに残す。
+///
+/// 値そのものは保存しない（個人の連絡先が履歴に溜まるのを避ける）。変わった
+/// 項目名だけを持つ。
+model IntegrationChangeLog {
+  id Int @id @default(autoincrement())
+  /// 対象の種別。'project' | 'customer' | 'contact'
+  entityType String @map("entity_type") @db.VarChar(20)
+  /// 対象のID（projects.id / customers.id / customer_contacts.id）
+  entityId Int @map("entity_id")
+  /// 人が読めるキー（project_no / customer_code）。IDだけでは追えないため併記する
+  entityKey String? @map("entity_key") @db.VarChar(50)
+  /// 操作。'create' | 'update' | 'delete'
+  action String @db.VarChar(10)
+  /// 変更者の表示名。ML からの書き込みは "ML：<利用者名>"
+  actorLabel String @map("actor_label") @db.VarChar(100)
+  /// 変わった項目名の一覧（値は保存しない）
+  changedFields String[] @map("changed_fields")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([createdAt])
+  @@map("integration_change_logs")
+}
+
+/// ML管理システムへ送る「変わったよ」通知の控え（送信キュー）。
+///
+/// 本文は種別とキーだけ。値・個人の連絡先は入れない（ML は通知を受けたら
+/// 自分で読み出しAPIを引く）。
+///
+/// 送信は編集した人のレスポンスを待たせないため非同期。失敗したら
+/// `next_attempt_at` を後ろにずらして数回リトライする。本番の cron は実運用
+/// されていないため、次の通知の発生時に期限の来た pending 行をまとめて拾う
+/// （`integration_idempotency_keys` の遅延削除と同じ方針）。
+model IntegrationOutboxEvent {
+  id Int @id @default(autoincrement())
+  /// ML が冪等に扱えるようにする一意キー（UUID）
+  eventId String @unique @map("event_id") @db.VarChar(64)
+  /// 'project.updated' | 'customer.updated' | 'customer.contacts.updated'
+  eventType String @map("event_type") @db.VarChar(40)
+  /// 案件No（案件の通知のみ）
+  projectNo String? @map("project_no") @db.VarChar(30)
+  /// 顧客コード（顧客・担当者の通知）
+  customerCode String? @map("customer_code") @db.VarChar(20)
+  /// 'pending' | 'sent' | 'failed'
+  status String @default("pending") @db.VarChar(10)
+  attempts Int @default(0)
+  /// 次に送ってよい時刻。pending のあいだだけ意味を持つ
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  sentAt DateTime? @map("sent_at") @db.Timestamptz(6)
+  /// 最後の失敗理由（個人の情報を含めない）
+  lastError String? @map("last_error") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt])
+  @@map("integration_outbox_events")
+}
