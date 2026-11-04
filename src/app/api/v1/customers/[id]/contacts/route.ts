@@ -1,67 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { requireInternalUser } from '@/lib/authz';
-
-// ============================================
-// 入力バリデーションスキーマ
-// ============================================
-
-const createContactSchema = z.object({
-  contactName: z.string().min(1, '担当者名は必須です').max(100),
-  contactDepartment: z.string().max(100).optional().nullable(),
-  contactPosition: z.string().max(100).optional().nullable(),
-  contactIsRepresentative: z.boolean().default(false),
-  contactPhone: z.string().max(20).optional().nullable(),
-  contactFax: z.string().max(20).optional().nullable(),
-  contactEmail: z.string().email().optional().nullable().or(z.literal('')),
-  contactBusinessCardFrontUrl: z.string().max(500).optional().nullable().or(z.literal('')),
-  contactBusinessCardBackUrl: z.string().max(500).optional().nullable().or(z.literal('')),
-  contactIsPrimary: z.boolean().default(false),
-  contactSortOrder: z.number().int().min(0).default(0),
-  businessIds: z.array(z.number().int().positive()).default([]),
-});
-
-// ============================================
-// レスポンス整形
-// ============================================
-
-function formatContact(c: {
-  id: number;
-  customerId: number;
-  contactName: string;
-  contactDepartment: string | null;
-  contactPosition: string | null;
-  contactIsRepresentative: boolean;
-  contactPhone: string | null;
-  contactFax: string | null;
-  contactEmail: string | null;
-  contactBusinessCardFrontUrl: string | null;
-  contactBusinessCardBackUrl: string | null;
-  contactIsPrimary: boolean;
-  contactSortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
-  businessLinks: Array<{
-    business: { id: number; businessName: string; businessCode: string };
-  }>;
-}) {
-  return {
-    ...c,
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
-    businesses: c.businessLinks.map((bl) => ({
-      id: bl.business.id,
-      businessId: bl.business.id,
-      businessName: bl.business.businessName,
-      businessCode: bl.business.businessCode,
-    })),
-    businessLinks: undefined,
-  };
-}
+// 作成・更新ロジックは画面と ML連携
+// （/api/integrations/customers/[customer_code]/contacts）で共有する。
+// 主担当を1人までに保つ排他制御を2箇所に書かないため。
+import {
+  CONTACT_INCLUDE,
+  createCustomerContact,
+  formatContact,
+} from '@/lib/customer-contact-update';
+import { userActor } from '@/lib/update-actor';
 
 // ============================================
 // GET /api/v1/customers/:id/contacts
@@ -89,15 +40,7 @@ export async function GET(
     const contacts = await prisma.customerContact.findMany({
       where: { customerId },
       orderBy: [{ contactSortOrder: 'asc' }, { id: 'asc' }],
-      include: {
-        businessLinks: {
-          include: {
-            business: {
-              select: { id: true, businessName: true, businessCode: true },
-            },
-          },
-        },
-      },
+      include: CONTACT_INCLUDE,
     });
 
     return NextResponse.json({
@@ -122,7 +65,7 @@ export async function POST(
     if (!session?.user) throw ApiError.unauthorized();
     requireInternalUser(session);
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const { id } = await params;
@@ -136,58 +79,7 @@ export async function POST(
     if (!customer) throw ApiError.notFound('顧客が見つかりません');
 
     const body = await request.json();
-    const data = createContactSchema.parse(body);
-
-    const contact = await prisma.$transaction(async (tx) => {
-      // 主担当の排他制御: 新規が主担当の場合、既存の主担当を解除
-      if (data.contactIsPrimary) {
-        await tx.customerContact.updateMany({
-          where: { customerId, contactIsPrimary: true },
-          data: { contactIsPrimary: false },
-        });
-      }
-
-      const newContact = await tx.customerContact.create({
-        data: {
-          customerId,
-          contactName: data.contactName,
-          contactDepartment: data.contactDepartment ?? null,
-          contactPosition: data.contactPosition ?? null,
-          contactIsRepresentative: data.contactIsRepresentative,
-          contactPhone: data.contactPhone ?? null,
-          contactFax: data.contactFax ?? null,
-          contactEmail: data.contactEmail || null,
-          contactBusinessCardFrontUrl: data.contactBusinessCardFrontUrl || null,
-          contactBusinessCardBackUrl: data.contactBusinessCardBackUrl || null,
-          contactIsPrimary: data.contactIsPrimary,
-          contactSortOrder: data.contactSortOrder,
-        },
-      });
-
-      // 事業リンク作成
-      if (data.businessIds.length > 0) {
-        await tx.customerContactBusinessLink.createMany({
-          data: data.businessIds.map((businessId) => ({
-            contactId: newContact.id,
-            businessId,
-          })),
-          skipDuplicates: true,
-        });
-      }
-
-      return tx.customerContact.findUnique({
-        where: { id: newContact.id },
-        include: {
-          businessLinks: {
-            include: {
-              business: { select: { id: true, businessName: true, businessCode: true } },
-            },
-          },
-        },
-      });
-    });
-
-    if (!contact) throw new Error('担当者の作成に失敗しました');
+    const contact = await createCustomerContact(prisma, customerId, body, userActor(user));
 
     return NextResponse.json({ success: true, data: formatContact(contact) }, { status: 201 });
   } catch (error) {

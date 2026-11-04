@@ -154,6 +154,20 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **カスタムフィールド絞り込み**はJSONカラムのためPrismaでは絞れない。取得後に `matchesCustomFieldFilters` でアプリ側フィルターを両APIに適用する
 - `tests/lib/project-filters.test.ts` / `tests/lib/master-filters.test.ts` に**ドリフト検知**あり。ルート内で `searchParams.get('filter[...]')` を直接読むとテストが落ちる
 
+### ML管理システムとの双方向連携（ライト事業）
+
+詳細は `docs/ml-sync-api.md`。設計上の勘所だけここに置く。
+
+- **更新ロジックは画面とMLで共有する**。案件は `src/lib/project-update.ts` の `applyProjectUpdate`、顧客は `src/lib/customer-update.ts` の `applyCustomerUpdate`、担当者は `src/lib/customer-contact-update.ts`。ルートはレスポンス整形と権限チェックだけを持つ。**コピーして別経路を書くと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに入る**
+- **「誰が更新したか」は `UpdateActor`**（`src/lib/update-actor.ts`）に押し出してある。画面は `updated_by` に user.id が入り、ML は FK に載せられないので `integration_change_logs` に `ML：<名前>` と**項目名だけ**を残す（値は残さない）
+- **ML 利用者名のヘッダー（`X-ML-User`）は UTF-8 のパーセントエンコード**。HTTP ヘッダーの値は Latin-1 しか運べないため、日本語をそのまま入れると落ちるか文字化けする
+- **通知のループ防止は実行者で判定する**（`isMlActor`）。判定は通知の入口（`src/lib/ml-scope.ts`）1箇所にあり、呼び出し側は条件を持たない。更新経路を増やしても漏れない
+- **計算項目への書き戻しは 422 で弾く**。ライト事業の購入金額は「購入単価×台数」の数式項目で、共通の更新処理が保存前に再計算する。受け付けると ML が送った値が黙って消える（`assertNoFormulaFields`）
+- **担当者の楽観ロックは `updated_at`**。`CustomerContact` に `version` カラムが無いため。案件・顧客は `version`
+- **既存の契約読み出しAPI（`GET /api/integrations/contracts`）は version を返さない**。挙動を変えないため足していない。ML は編集直前に `GET /api/integrations/projects/{project_no}` を読む
+- `/api/integrations/customers/[id]` は **GET が数値ID・PATCH が顧客コード**。Next.js が同じ階層で別名の動的セグメントを持てないため同じ `[id]` を共有している
+- 通知の送信は `integration_outbox_events` 経由。**控えの作成だけ同期**で送信はレスポンス後。本番の cron が実運用されていないため、次の通知の発生時に期限の来た pending 行を拾う
+
 ## 技術スタック
 
 - Next.js 14 App Router + TypeScript

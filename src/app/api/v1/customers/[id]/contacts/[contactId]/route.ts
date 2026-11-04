@@ -1,66 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
-
-// ============================================
-// 入力バリデーションスキーマ
-// ============================================
-
-const updateContactSchema = z.object({
-  contactName: z.string().min(1).max(100).optional(),
-  contactDepartment: z.string().max(100).optional().nullable(),
-  contactPosition: z.string().max(100).optional().nullable(),
-  contactIsRepresentative: z.boolean().optional(),
-  contactPhone: z.string().max(20).optional().nullable(),
-  contactFax: z.string().max(20).optional().nullable(),
-  contactEmail: z.string().email().optional().nullable().or(z.literal('')),
-  contactBusinessCardFrontUrl: z.string().max(500).optional().nullable().or(z.literal('')),
-  contactBusinessCardBackUrl: z.string().max(500).optional().nullable().or(z.literal('')),
-  contactIsPrimary: z.boolean().optional(),
-  contactSortOrder: z.number().int().min(0).optional(),
-  businessIds: z.array(z.number().int().positive()).optional(),
-});
-
-// ============================================
-// レスポンス整形
-// ============================================
-
-function formatContact(c: {
-  id: number;
-  customerId: number;
-  contactName: string;
-  contactDepartment: string | null;
-  contactPosition: string | null;
-  contactIsRepresentative: boolean;
-  contactPhone: string | null;
-  contactFax: string | null;
-  contactEmail: string | null;
-  contactBusinessCardFrontUrl: string | null;
-  contactBusinessCardBackUrl: string | null;
-  contactIsPrimary: boolean;
-  contactSortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
-  businessLinks: Array<{
-    business: { id: number; businessName: string; businessCode: string };
-  }>;
-}) {
-  return {
-    ...c,
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
-    businesses: c.businessLinks.map((bl) => ({
-      id: bl.business.id,
-      businessId: bl.business.id,
-      businessName: bl.business.businessName,
-      businessCode: bl.business.businessCode,
-    })),
-    businessLinks: undefined,
-  };
-}
+// 更新・削除ロジックは画面と ML連携
+// （/api/integrations/customers/[customer_code]/contacts/[id]）で共有する
+import {
+  deleteCustomerContact,
+  formatContact,
+  updateCustomerContact,
+} from '@/lib/customer-contact-update';
+import { userActor } from '@/lib/update-actor';
 
 // ============================================
 // PATCH /api/v1/customers/:id/contacts/:contactId
@@ -74,7 +24,7 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const { id, contactId } = await params;
@@ -82,64 +32,8 @@ export async function PATCH(
     const contactIdNum = parseInt(contactId, 10);
     if (isNaN(customerId) || isNaN(contactIdNum)) throw ApiError.notFound('担当者が見つかりません');
 
-    const existing = await prisma.customerContact.findFirst({
-      where: { id: contactIdNum, customerId },
-    });
-    if (!existing) throw ApiError.notFound('担当者が見つかりません');
-
     const body = await request.json();
-    const data = updateContactSchema.parse(body);
-
-    const updated = await prisma.$transaction(async (tx) => {
-      // 主担当の排他制御
-      if (data.contactIsPrimary === true && !existing.contactIsPrimary) {
-        await tx.customerContact.updateMany({
-          where: { customerId, contactIsPrimary: true, id: { not: contactIdNum } },
-          data: { contactIsPrimary: false },
-        });
-      }
-
-      const { businessIds, ...contactData } = data;
-
-      await tx.customerContact.update({
-        where: { id: contactIdNum },
-        data: {
-          ...contactData,
-          contactEmail: contactData.contactEmail || null,
-          contactBusinessCardFrontUrl: contactData.contactBusinessCardFrontUrl || null,
-          contactBusinessCardBackUrl: contactData.contactBusinessCardBackUrl || null,
-        },
-      });
-
-      // 事業リンク差し替え（指定があった場合のみ）
-      if (businessIds !== undefined) {
-        await tx.customerContactBusinessLink.deleteMany({
-          where: { contactId: contactIdNum },
-        });
-        if (businessIds.length > 0) {
-          await tx.customerContactBusinessLink.createMany({
-            data: businessIds.map((bid) => ({
-              contactId: contactIdNum,
-              businessId: bid,
-            })),
-            skipDuplicates: true,
-          });
-        }
-      }
-
-      return tx.customerContact.findUnique({
-        where: { id: contactIdNum },
-        include: {
-          businessLinks: {
-            include: {
-              business: { select: { id: true, businessName: true, businessCode: true } },
-            },
-          },
-        },
-      });
-    });
-
-    if (!updated) throw new Error('担当者の更新に失敗しました');
+    const updated = await updateCustomerContact(prisma, customerId, contactIdNum, body, userActor(user));
 
     return NextResponse.json({ success: true, data: formatContact(updated) });
   } catch (error) {
@@ -159,7 +53,7 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const { id, contactId } = await params;
@@ -167,13 +61,7 @@ export async function DELETE(
     const contactIdNum = parseInt(contactId, 10);
     if (isNaN(customerId) || isNaN(contactIdNum)) throw ApiError.notFound('担当者が見つかりません');
 
-    const existing = await prisma.customerContact.findFirst({
-      where: { id: contactIdNum, customerId },
-    });
-    if (!existing) throw ApiError.notFound('担当者が見つかりません');
-
-    // onDelete: Cascade により customer_contact_business_links も自動削除される
-    await prisma.customerContact.delete({ where: { id: contactIdNum } });
+    await deleteCustomerContact(prisma, customerId, contactIdNum, userActor(user));
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
