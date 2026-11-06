@@ -15,7 +15,9 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   `ML_WEBHOOK_URL` / `ML_WEBHOOK_SECRET` は**意図的に未設定**なので、m2 → ML の通知は
   no-op（6章）
 - 2026-11-06 追記: ML の MO（マシンオーナー）詳細画面のため、顧客の読み出し口を追加し、
-  顧客の書き戻しを「画面で人が直せる項目全部」へ広げた（4章）。**この追記分は本番未適用**
+  顧客の書き戻しを「画面で人が直せる項目全部」へ広げた（4章）。
+  **MO番号も ML から直せる**（前の番号は履歴に残り、取り込みAPIは前の番号でも顧客を引ける）。
+  **この追記分は本番未適用**
 
 ---
 
@@ -282,7 +284,8 @@ ML の MO（マシンオーナー）詳細画面が使う。**顧客の画面に
 |---|---|---|
 | `customer_code` | m2 の採番コード（`CST-0001`） | × |
 | `customer_url` | 顧客詳細画面のURL | × |
-| `mo_no` | MO番号（`custom_fields.mo_no` と同じ値） | ×（下記） |
+| `mo_no` | MO番号（`custom_fields.mo_no` と同じ値） | ○（下記） |
+| `mo_no_previous` | 前のMO番号（古い順の配列） | × |
 | `company_name` | 社名 | ○ |
 | `customer_salutation` | 呼称（御中・様 など） | ○ |
 | `customer_type` | `法人` / `個人事業主` / `個人` / `確認中` / `未設定` | ○ |
@@ -322,11 +325,31 @@ ML の MO（マシンオーナー）詳細画面が使う。**顧客の画面に
 | `customer_code` | m2 の採番。変えると ML 側の紐づけが切れる |
 | `customer_url` / `updated_at` / `version` の書き換え | m2 が決める値（`version` は送るが更新対象ではない） |
 | `industry_options` | 業種マスタ（顧客の項目ではない） |
-| `mo_no`（`custom_fields.mo_no`） | 顧客取り込みAPI（`POST /api/integrations/customers/import`）が**これをキーに顧客を引く**。ここで改名すると次の取り込みが同じ MO の顧客を見つけられず、もう1件作ってしまう。MO番号の訂正は取り込みAPI か m2 の画面で行う |
+| `custom_fields.mo_no` | MO番号は**トップレベルの `mo_no`** で送る（入口を1つに絞っている）。`custom_fields` 側は `422` |
+| `mo_no_previous` | m2 が自動で積む履歴（直接は書けない） |
 | 計算項目（定義が `type: "formula"`） | 入力値ではない |
 | 口座 | ML は保存しない |
 
 知らないキーは `422`（黙って捨てない。ML 側のタイプミスに気づけるようにする）。
+
+### MO番号（`mo_no`）
+
+MO番号は顧客取り込みAPI（`POST /api/integrations/customers/import`）が**顧客を引くキー**
+なので、変えると次の取り込みで同じ顧客が見つからず、もう1件できてしまう。これを防ぐため:
+
+- **変えると前の番号が `mo_no_previous` に残る**（古い順。何回変えても全部残る）。
+  取り込みAPI・照合API（`GET /api/integrations/customers?mo_no=`）・契約読み出しの
+  `mo_no` 絞り込みは、今の番号で見つからなければ前の番号でも探す
+- **他の顧客の今／前の番号と同じなら `422`**（`field` は `mo_no`）。
+  どの顧客が使っているか分かるよう、相手の顧客コードを添えて返す
+- **`custom_fields.mo_no` は `422`。** トップレベルの `mo_no` で送る（2箇所から違う値が
+  来たときにどちらを採るかを決めずに済ませるため）。読み出しでは両方に同じ値が入る
+- 空文字・`null` を送ると未入力に戻るが、**前の番号は履歴に残る**ので取り込みAPIは
+  引き続き顧客を見つけられる
+- 前後の空白は落として保存する
+
+m2 の画面から変えたときも同じ処理（`src/lib/mo-number.ts`）を通り、同じように履歴が残り、
+重複は止まる（画面は `400`）。画面から変えたときは ML へ `customer.updated` を通知する。
 
 ### カスタム項目の検査
 
@@ -357,6 +380,7 @@ ML の MO（マシンオーナー）詳細画面が使う。**顧客の画面に
   "customer_code": "CST-0001",
   "customer_url": "https://manage.example.test/customers/11",
   "mo_no": "MO-0001",
+  "mo_no_previous": ["MO-0000"],
   "company_name": "テスト商事",
   "customer_salutation": "御中",
   "customer_type": "法人",
@@ -407,6 +431,7 @@ curl -s -X PATCH "https://manage.example.test/api/integrations/customers/CST-000
         "capital": 10000000,
         "established_on": "2015-04-01",
         "fiscal_month": 3,
+        "mo_no": "MO-0002",
         "custom_fields": { "machine_count": 4, "support_plan": "B" },
         "global_custom_fields": { "intro_route": "展示会" }
       }'
@@ -603,9 +628,12 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 | 案件の項目定義・整形 | `src/lib/ml-project-fields.ts` |
 | 顧客の項目定義・検査・整形 | `src/lib/ml-customer-fields.ts` |
 | 顧客1件の読み出し（業種マスタ・カスタム項目定義） | `src/lib/ml-customer-read.ts` |
+| MO番号の変更・履歴・重複チェック | `src/lib/mo-number.ts` |
 | 担当者読み出しの整形 | `src/lib/integration-contacts-read.ts` |
 
-テスト: `tests/api/ml-sync.test.ts`（エンドポイント）/ `tests/lib/ml-notify.test.ts`（通知・履歴）。
+テスト: `tests/api/ml-sync.test.ts`（エンドポイント）/ `tests/lib/ml-notify.test.ts`（通知・履歴）/
+`tests/lib/mo-number.test.ts`（MO番号の履歴）/ `tests/api/customer-mo-number.test.ts`（画面から
+MO番号を変えたとき）/ `tests/api/customer-import.test.ts`（前の番号での取り込み）。
 
 **更新ロジックは画面と共有している。** `applyProjectUpdate` 等をコピーして ML 用に
 書き直すと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに

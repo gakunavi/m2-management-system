@@ -14,6 +14,9 @@
 //
 //   2. 既定は「更新のみ」。mo_no で見つからなければ 404。
 //      `allow_create: true` のときだけ新規作成する。
+//      **今の mo_no で見つからなければ、前の mo_no（link_custom_data.mo_no_history）でも
+//      探す。** MO番号は画面・ML から変えられるため、ここで前の番号を見ないと、送信側の
+//      写しが古いだけで同じ顧客をもう1件作ってしまう（src/lib/mo-number.ts）。
 //
 //   3. 食い違いは黙って上書きしない。
 //        - 既存が空欄        → 自動で埋める（filled_fields）
@@ -33,6 +36,7 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { generateCustomerCode } from '@/lib/customer-code';
+import { findLinkByMoNo, readMoNo } from '@/lib/mo-number';
 
 // ============================================
 // 入力スキーマ
@@ -361,15 +365,23 @@ export async function importCustomer(
       }
     }
 
-    // --- mo_no で既存顧客を特定 -------------------------------------------
+    // --- mo_no で既存顧客を特定（今の番号 → 前の番号） --------------------
     // MO番号は事業別カスタムデータ（link_custom_data.mo_no）に入っている。
-    const link = await tx.customerBusinessLink.findFirst({
-      where: {
-        businessId: business.id,
-        linkCustomData: { path: ['mo_no'], equals: input.mo_no },
-      },
-      select: { id: true, customerId: true, linkCustomData: true },
-    });
+    const match = await findLinkByMoNo(tx, { businessId: business.id, moNo: input.mo_no });
+    const link = match
+      ? { id: match.linkId, customerId: match.customerId, linkCustomData: match.linkCustomData }
+      : null;
+
+    // 前の番号で当たったときは、**今の番号を送信値へ戻さない**。番号の変更は人が
+    // 意図したもので、送信側（Python スクリプト）の写しが古いだけ。
+    const matchedByPrevious = match?.matchedBy === 'previous';
+    const currentMoNo = matchedByPrevious ? readMoNo(match!.linkCustomData) : null;
+    if (matchedByPrevious) {
+      warnings.push(
+        `mo_no=${input.mo_no} は前のMO番号です（現在: ${currentMoNo ?? '未設定'}）。` +
+          '同じ顧客として更新し、現在のMO番号は変更していません',
+      );
+    }
 
     if (!link) {
       if (!input.allow_create) throw new CustomerNotFoundError(input.mo_no);
@@ -687,7 +699,9 @@ export async function importCustomer(
       const mergedLinkData: Record<string, unknown> = {
         ...previousLinkData,
         ...linkDataChanges,
-        mo_no: input.mo_no,
+        // 前の番号で当たったときは今の番号をそのまま保つ（上書きすると変更が巻き戻る）。
+        // 今の番号が未設定なら未設定のまま（勝手に入れ直さない）
+        mo_no: matchedByPrevious ? currentMoNo : input.mo_no,
         ...(input.form_submitted_at ? { form_submitted_at: input.form_submitted_at } : {}),
         ...(Object.keys(contactRoles).length > 0
           ? { contact_roles: { ...((previousLinkData.contact_roles as object) ?? {}), ...contactRoles } }
@@ -914,14 +928,3 @@ export async function resolveImportBusiness(): Promise<{ id: number; businessCod
   });
 }
 
-/** mo_no から顧客を引く（重複チェック用 GET で使用） */
-export async function findCustomerIdByMoNo(
-  businessId: number,
-  moNo: string,
-): Promise<number | null> {
-  const link = await prisma.customerBusinessLink.findFirst({
-    where: { businessId, linkCustomData: { path: ['mo_no'], equals: moNo } },
-    select: { customerId: true },
-  });
-  return link?.customerId ?? null;
-}

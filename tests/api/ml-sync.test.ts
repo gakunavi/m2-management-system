@@ -229,6 +229,7 @@ function customerFullRow(over: Record<string, unknown> = {}) {
       {
         linkCustomData: {
           mo_no: 'MO-0001',
+          mo_no_history: ['MO-0000'],
           machine_count: 2,
           // 定義に無い＝顧客の画面に出ていない内部データ（取り込みAPIが入れる）
           contact_roles: { '31': '経理' },
@@ -1377,6 +1378,10 @@ describe('顧客の読み出し', () => {
     const body = await res.json();
 
     expect(body.mo_no).toBe('MO-0001');
+    // 前のMO番号も返す（取り込みAPIはこの番号でも顧客を引ける）
+    expect(body.mo_no_previous).toEqual(['MO-0000']);
+    // 履歴そのもの（mo_no_history）は定義に無いので custom_fields には入らない
+    expect(body.custom_fields).not.toHaveProperty('mo_no_history');
     expect(Object.keys(body.custom_fields)).toEqual([
       'mo_no', 'machine_count', 'support_plan', 'mo_rank',
     ]);
@@ -1399,6 +1404,7 @@ describe('顧客の読み出し', () => {
     );
     const body = await res.json();
     expect(body.mo_no).toBeNull();
+    expect(body.mo_no_previous).toEqual([]);
     expect(body.custom_fields.mo_no).toBeNull();
   });
 });
@@ -1478,7 +1484,7 @@ describe('顧客PATCH の受付項目', () => {
   it('受け付けるキーの一覧が仕様と揃っている', () => {
     // 読み出しのキーのうち、人が直せないもの以外は全部書ける
     const readOnly = [
-      'customer_code', 'customer_url', 'mo_no', 'industry_options', 'version', 'updated_at',
+      'customer_code', 'customer_url', 'mo_no_previous', 'industry_options', 'version', 'updated_at',
     ];
     const expected = ML_CUSTOMER_ITEM_KEYS.filter((k) => !readOnly.includes(k));
     expect([...ML_CUSTOMER_WRITABLE_KEYS].sort()).toEqual([...expected].sort());
@@ -1561,7 +1567,7 @@ describe('顧客PATCH の受付項目', () => {
     expect(mockPrisma.customer.update).not.toHaveBeenCalled();
   });
 
-  it('MO番号は 422（取り込みAPIがキーとして使うため直させない）', async () => {
+  it('MO番号を custom_fields で送ると 422（トップレベルで送らせる）', async () => {
     stubLightScope();
     stubCustomerReads();
 
@@ -1576,6 +1582,7 @@ describe('顧客PATCH の受付項目', () => {
     expect(res.status).toBe(422);
     const body = await res.json();
     expect(body.errors[0].field).toBe('custom_fields.mo_no');
+    expect(body.errors[0].message).toContain('トップレベル');
     expect(mockPrisma.customer.update).not.toHaveBeenCalled();
     expect(mockPrisma.customerBusinessLink.update).not.toHaveBeenCalled();
   });
@@ -1657,5 +1664,173 @@ describe('顧客PATCH の受付項目', () => {
 
     expect(res.status).toBe(200);
     expect(mockPrisma.integrationOutboxEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// 12. MO番号の変更（ML から直す）
+// ============================================================================
+
+describe('MO番号の変更', () => {
+  /** 事業リンクの現在値と「その番号は空いている」状態 */
+  function stubLink(linkCustomData: Record<string, unknown>) {
+    mockPrisma.customerBusinessLink.findUnique.mockResolvedValue({ id: 77, linkCustomData });
+    // 重複チェック（他の顧客の今／前の番号）は既定で「見つからない」
+    mockPrisma.customerBusinessLink.findFirst.mockResolvedValue(null);
+    mockPrisma.customerBusinessLink.findMany.mockResolvedValue([
+      { businessId: 5, linkCustomData },
+    ]);
+  }
+
+  it('トップレベルの mo_no で直せて、前の番号が履歴に残る', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0001', machine_count: 2 });
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, mo_no: 'MO-0002' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.customerBusinessLink.update).toHaveBeenCalledWith({
+      where: { id: 77 },
+      data: {
+        linkCustomData: { mo_no: 'MO-0002', mo_no_history: ['MO-0001'], machine_count: 2 },
+      },
+    });
+  });
+
+  it('何回変えても前の番号が全部残る', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0003', mo_no_history: ['MO-0001', 'MO-0002'] });
+
+    await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, mo_no: 'MO-0004' },
+      }),
+      customerParams(),
+    );
+
+    const data = mockPrisma.customerBusinessLink.update.mock.calls[0][0].data as {
+      linkCustomData: Record<string, unknown>;
+    };
+    expect(data.linkCustomData.mo_no_history).toEqual(['MO-0001', 'MO-0002', 'MO-0003']);
+  });
+
+  it('他の顧客が今使っている番号は 422（顧客本体も更新しない）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0001' });
+    mockPrisma.customerBusinessLink.findFirst.mockResolvedValue({
+      linkCustomData: { mo_no: 'MO-0002' },
+      customer: { customerCode: 'CST-0002' },
+    });
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, mo_no: 'MO-0002' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.errors[0].field).toBe('mo_no');
+    expect(body.errors[0].message).toContain('CST-0002');
+    expect(body.errors[0].message).toContain('使用中');
+    // 422 を返すのに version を上げない（編集中のユーザーに意味のない 409 を出さない）
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+    expect(mockPrisma.customerBusinessLink.update).not.toHaveBeenCalled();
+  });
+
+  it('他の顧客が過去に使った番号も 422', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0001' });
+    mockPrisma.customerBusinessLink.findFirst.mockResolvedValue({
+      linkCustomData: { mo_no: 'MO-0009', mo_no_history: ['MO-0002'] },
+      customer: { customerCode: 'CST-0002' },
+    });
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, mo_no: 'MO-0002' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).errors[0].message).toContain('過去に使用');
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('重複チェックは自分自身を除く（同じ番号を送り直しても通る）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0001' });
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, mo_no: 'MO-0001' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(200);
+    // 値が変わらないので重複チェックもしない
+    expect(mockPrisma.customerBusinessLink.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('前後の空白は落として保存する', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0001' });
+
+    await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, mo_no: ' MO-0002 ' },
+      }),
+      customerParams(),
+    );
+
+    const data = mockPrisma.customerBusinessLink.update.mock.calls[0][0].data as {
+      linkCustomData: Record<string, unknown>;
+    };
+    expect(data.linkCustomData.mo_no).toBe('MO-0002');
+    // 重複チェックも空白を落とした値で引く
+    const where = mockPrisma.customerBusinessLink.findFirst.mock.calls[0][0].where as {
+      OR: Array<{ linkCustomData: { equals?: string; array_contains?: string[] } }>;
+    };
+    expect(where.OR[0].linkCustomData.equals).toBe('MO-0002');
+    expect(where.OR[1].linkCustomData.array_contains).toEqual(['MO-0002']);
+  });
+
+  it('変更履歴に mo_no が残る（値は残さない）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    stubLink({ mo_no: 'MO-0001' });
+
+    await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        mlUser: '鈴木花子',
+        body: { version: 2, mo_no: 'MO-0002' },
+      }),
+      customerParams(),
+    );
+
+    const data = mockPrisma.integrationChangeLog.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.changedFields).toEqual(['mo_no']);
+    expect(JSON.stringify(data)).not.toContain('MO-0002');
   });
 });

@@ -12,10 +12,12 @@
 // 受け付けないもの（それぞれ理由がある）:
 //   - `customer_code` … m2 の採番。変えると ML 側の紐づけが切れる
 //   - `customer_url` / `updated_at` … m2 が決める値
-//   - `mo_no`        … 顧客取り込みAPI（`POST /api/integrations/customers/import`）が
-//                      これをキーに顧客を引く。ここで改名すると次の取り込みが
-//                      同じ MO の顧客を見つけられず、もう1件作ってしまう
 //   - 計算項目（type: 'formula'） … 入力値ではない
+//
+// MO番号（`mo_no`）は**トップレベルのキーで**受け付ける。顧客取り込みAPIが
+// これをキーに顧客を引くため、変えたら前の番号を履歴に残し、他の顧客との重複を
+// 止める（`src/lib/mo-number.ts`）。`custom_fields.mo_no` は 422 にして入口を1つに
+// 絞っている（2箇所から違う値が来たときにどちらを採るかを決めずに済ませるため）。
 //
 // キー名は契約読み出しAPI（`GET /api/integrations/contracts`）と揃える。ML が
 // 「読むときの名前」と「書くときの名前」を2つ覚えなくて済むようにするため。
@@ -24,10 +26,8 @@
 
 import { z } from 'zod';
 import { ApiError } from '@/lib/error-handler';
+import { MO_NO_KEY, readMoNo, readMoNoHistory } from '@/lib/mo-number';
 import type { EntityFieldDefinition } from '@/types/dynamic-fields';
-
-/** MO番号のキー（事業別カスタム項目。取り込みAPIが所有するため書き込み不可） */
-export const MO_NO_KEY = 'mo_no';
 
 export const CUSTOMER_TYPES = ['法人', '個人事業主', '個人', '確認中', '未設定'] as const;
 
@@ -119,6 +119,11 @@ export const mlCustomerPatchSchema = z
     folder_url: formatted(500, '顧客フォルダ', isUrl, '顧客フォルダは http(s):// から始まるURLで指定してください'),
     /** 備考 */
     customer_notes: longText,
+    /**
+     * MO番号。変えると前の番号が `mo_no_previous` に残り、取り込みAPIは前の番号でも
+     * 顧客を引ける。他の顧客の今／前の番号と同じなら 422。
+     */
+    mo_no: text(50, 'MO番号'),
     /** ライト事業の事業別カスタム項目（customer_business_links.link_custom_data） */
     custom_fields: z.record(customFieldValue).optional(),
     /** 全事業共通のカスタム項目（customers.customer_custom_data） */
@@ -155,6 +160,7 @@ const COLUMN_MAP = {
 export const ML_CUSTOMER_WRITABLE_KEYS = [
   ...Object.keys(COLUMN_MAP),
   'industry',
+  'mo_no',
   'custom_fields',
   'global_custom_fields',
 ] as const;
@@ -190,8 +196,13 @@ export function toCustomerUpdateBody(
   if (input.industry !== undefined) body.industryId = options.industryId ?? null;
 
   // カスタムデータは共通側がマージ更新する（送られたキーだけ差し替わる）
-  if (input.custom_fields !== undefined) {
-    body.linkCustomData = normalizeCustomPatch(input.custom_fields);
+  if (input.custom_fields !== undefined || input.mo_no !== undefined) {
+    body.linkCustomData = {
+      ...normalizeCustomPatch(input.custom_fields ?? {}),
+      // MO番号はトップレベルで受けるが、保存先は事業別カスタムデータ。
+      // 前の番号の履歴づけと重複チェックは applyCustomerUpdate 側で行う
+      ...(input.mo_no !== undefined ? { [MO_NO_KEY]: input.mo_no === '' ? null : input.mo_no } : {}),
+    };
     body.businessId = options.businessId;
   }
   if (input.global_custom_fields !== undefined) {
@@ -245,7 +256,7 @@ export function assertCustomFieldsWritable(
         field: field(key),
         message:
           key === MO_NO_KEY
-            ? 'MO番号は顧客取り込みAPIが管理する項目のため、ここからは更新できません'
+            ? 'MO番号は custom_fields ではなくトップレベルの mo_no で指定してください'
             : `${key} は読み取り専用の項目です`,
       });
       continue;
@@ -366,8 +377,10 @@ export function buildMlCustomerItem(
   return {
     customer_code: row.customerCode,
     customer_url: options.customerUrl,
-    /** MO番号（事業別カスタム項目。読み取り専用。`custom_fields` にも同じ値が入る） */
-    mo_no: emptyToNull(linkData[MO_NO_KEY]),
+    /** MO番号（事業別カスタム項目。`custom_fields` にも同じ値が入る） */
+    mo_no: readMoNo(linkData),
+    /** 前のMO番号（古い順）。取り込みAPIはこの番号でも顧客を引ける */
+    mo_no_previous: readMoNoHistory(linkData),
 
     company_name: row.customerName,
     customer_salutation: row.customerSalutation,
@@ -420,6 +433,7 @@ function pickDefinedFields(
   defs: EntityFieldDefinition[],
   data: Record<string, unknown>,
 ): Record<string, unknown> {
+  // `mo_no_history` は定義に無いので、ここには入らない（前の番号は mo_no_previous で返す）
   const out: Record<string, unknown> = {};
   for (const def of [...defs].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))) {
     out[def.key] = emptyToNull(data[def.key]);
@@ -429,7 +443,7 @@ function pickDefinedFields(
 
 /** レスポンスが必ず持つキー（テストと仕様書のドリフト検知に使う） */
 export const ML_CUSTOMER_ITEM_KEYS = [
-  'customer_code', 'customer_url', 'mo_no',
+  'customer_code', 'customer_url', 'mo_no', 'mo_no_previous',
   'company_name', 'customer_salutation', 'customer_type',
   'postal_code', 'address', 'company_phone', 'company_fax', 'company_email', 'website',
   'corporate_no', 'invoice_no', 'capital', 'established_on', 'fiscal_month',

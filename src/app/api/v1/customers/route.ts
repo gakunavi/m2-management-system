@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client';
 import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } from '@/lib/sort/engine';
 import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
+import { assertMoNoAvailable, MO_NO_KEY, normalizeMoNo } from '@/lib/mo-number';
 import { formatCustomer } from '@/lib/format-customer';
 import { generateCustomerCode } from '@/lib/customer-code';
 import { buildCustomerListWhere } from '@/lib/master-filters';
@@ -135,8 +136,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // linkCustomData / businessId をスキーマ外で先に取り出す
-    const linkCustomData = body.linkCustomData as Record<string, unknown> | undefined;
+    const rawLinkCustomData = body.linkCustomData as Record<string, unknown> | undefined;
     const linkBusinessId = body.businessId as number | undefined;
+    // MO番号は前後の空白を落として保存する（空白混じりだと取り込みAPIが引けない）
+    const linkCustomData =
+      rawLinkCustomData && MO_NO_KEY in rawLinkCustomData
+        ? { ...rawLinkCustomData, [MO_NO_KEY]: normalizeMoNo(rawLinkCustomData[MO_NO_KEY]) }
+        : rawLinkCustomData;
 
     const data = createCustomerSchema.parse(body);
 
@@ -154,6 +160,15 @@ export async function POST(request: NextRequest) {
         throw ApiError.conflict(
           `同名+同電話番号の顧客が既に存在します（${duplicate.customerCode}: ${duplicate.customerName}）`,
         );
+      }
+    }
+
+    // MO番号が他の顧客の今／前の番号と重複していないか（重複すると取り込みAPIが
+    // どちらの顧客か決められなくなる。src/lib/mo-number.ts）
+    if (linkBusinessId && linkCustomData) {
+      const moNo = normalizeMoNo(linkCustomData[MO_NO_KEY]);
+      if (moNo !== null) {
+        await assertMoNoAvailable(prisma, { businessId: linkBusinessId, moNo });
       }
     }
 

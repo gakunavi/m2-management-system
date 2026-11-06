@@ -13,6 +13,13 @@ import { z } from 'zod';
 import { ApiError } from '@/lib/error-handler';
 import { updatedByFor, type UpdateActor } from '@/lib/update-actor';
 import { notifyCustomerChangedToMl } from '@/lib/ml-scope';
+import {
+  MO_NO_KEY,
+  moNoChangePatch,
+  normalizeMoNo,
+  resolveMoNoChange,
+  type MoNoChange,
+} from '@/lib/mo-number';
 
 export const updateCustomerSchema = z.object({
   customerName: z.string().min(1).max(200).optional(),
@@ -74,6 +81,8 @@ export interface ApplyCustomerUpdateInput {
  * - `customerCustomData`（本体のグローバルカスタム項目）のマージ更新
  * - `linkCustomData`（事業別カスタム項目）のマージ更新。**businessId 必須**
  *   中間テーブル `customer_business_links` のデータなので、事業が分からないと書けない。
+ * - MO番号（`linkCustomData.mo_no`）を変えたときは前の番号を履歴に残し、他の顧客と
+ *   重複していれば 422（`src/lib/mo-number.ts`）
  */
 export async function applyCustomerUpdate(
   prisma: PrismaClient,
@@ -119,6 +128,26 @@ export async function applyCustomerUpdate(
     }
   }
 
+  // --- MO番号の変更は顧客本体の更新より前に検証する -----------------------
+  // 422 を返すのに version を上げてしまうと、編集中のユーザーに意味のない 409 が出る。
+  // 事業リンクはここで一度だけ読み、下の linkCustomData の更新でも使い回す。
+  let existingLink: { id: number; linkCustomData: unknown } | null = null;
+  let moNoChange: MoNoChange | null = null;
+  if (linkCustomDataPatch && linkBusinessId) {
+    existingLink = await prisma.customerBusinessLink.findUnique({
+      where: { customerId_businessId: { customerId, businessId: linkBusinessId } },
+      select: { id: true, linkCustomData: true },
+    });
+    if (existingLink) {
+      moNoChange = await resolveMoNoChange(prisma, {
+        businessId: linkBusinessId,
+        customerId,
+        linkCustomData: existingLink.linkCustomData,
+        requested: linkCustomDataPatch[MO_NO_KEY],
+      });
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { version: _version, ...updateData } = data;
 
@@ -147,26 +176,30 @@ export async function applyCustomerUpdate(
     include: CUSTOMER_INCLUDE,
   });
 
-  // linkCustomData の更新（事業指定時のみ）
-  if (linkCustomDataPatch && linkBusinessId) {
-    const existingLink = await prisma.customerBusinessLink.findUnique({
-      where: { customerId_businessId: { customerId, businessId: linkBusinessId } },
+  // linkCustomData の更新（事業指定時のみ・リンクは上で読んである）
+  if (linkCustomDataPatch && existingLink) {
+    const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
+    await prisma.customerBusinessLink.update({
+      where: { id: existingLink.id },
+      data: {
+        linkCustomData: {
+          ...existingData,
+          ...linkCustomDataPatch,
+          // MO番号は前後の空白を落として保存する（空白混じりだと取り込みAPIが引けない）
+          ...(MO_NO_KEY in linkCustomDataPatch
+            ? { [MO_NO_KEY]: normalizeMoNo(linkCustomDataPatch[MO_NO_KEY]) }
+            : {}),
+          // 変えたときは前の番号を履歴に残す（取り込みAPIが前の番号でも引けるように）
+          ...(moNoChange ? moNoChangePatch(moNoChange) : {}),
+        } as unknown as Prisma.InputJsonValue,
+      },
     });
-    if (existingLink) {
-      const existingData = (existingLink.linkCustomData as Record<string, unknown>) ?? {};
-      await prisma.customerBusinessLink.update({
-        where: { id: existingLink.id },
-        data: {
-          linkCustomData: { ...existingData, ...linkCustomDataPatch } as unknown as Prisma.InputJsonValue,
-        },
-      });
-      // 更新後の linkCustomData を反映するため businessLinks を再取得
-      const freshLinks = await prisma.customerBusinessLink.findMany({
-        where: { customerId, linkStatus: 'active' },
-        select: { businessId: true, linkCustomData: true },
-      });
-      (updated as Record<string, unknown>).businessLinks = freshLinks;
-    }
+    // 更新後の linkCustomData を反映するため businessLinks を再取得
+    const freshLinks = await prisma.customerBusinessLink.findMany({
+      where: { customerId, linkStatus: 'active' },
+      select: { businessId: true, linkCustomData: true },
+    });
+    (updated as Record<string, unknown>).businessLinks = freshLinks;
   }
 
   // ML管理システムへ通知（ライト事業に紐づく顧客のみ・本文は customer_code だけ）。

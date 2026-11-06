@@ -12,7 +12,8 @@
 import type { PrismaClient } from '@prisma/client';
 import { ApiError } from '@/lib/error-handler';
 import { customerAdminUrl } from '@/lib/integration-url';
-import { buildMlCustomerItem, MO_NO_KEY } from '@/lib/ml-customer-fields';
+import { buildMlCustomerItem } from '@/lib/ml-customer-fields';
+import { MO_NO_KEY } from '@/lib/mo-number';
 import type { EntityFieldDefinition } from '@/types/dynamic-fields';
 
 /** グローバルカスタム項目の定義が入っている system_settings のキー */
@@ -114,7 +115,10 @@ export async function resolveIndustryId(
   ]);
 }
 
-/** MO番号は取り込みAPIが所有するため、ここからは書き込めない */
+/**
+ * `custom_fields` から書き込めないキー。
+ * MO番号はトップレベルの `mo_no` で受けるため、ここからは受け付けない（入口を1つに絞る）。
+ */
 export const CUSTOMER_READ_ONLY_LINK_KEYS = [MO_NO_KEY] as const;
 
 export interface ReadMlCustomerOptions {

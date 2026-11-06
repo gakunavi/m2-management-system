@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { findCustomerIdsByMoNo } from '@/lib/mo-number';
 import { authorizeIntegrationRequest } from '@/lib/integration-auth';
 import { resolveImportBusiness, pickBankAccountForBusiness } from '@/lib/customer-import';
 import { customerAdminUrl, projectAdminUrl } from '@/lib/integration-url';
@@ -59,11 +60,11 @@ export async function GET(request: NextRequest) {
     // --- mo_no 指定なら顧客を先に特定 --------------------------------------
     let moNoCustomerIds: number[] | null = null;
     if (moNo) {
-      const links = await prisma.customerBusinessLink.findMany({
-        where: { businessId: business.id, linkCustomData: { path: ['mo_no'], equals: moNo } },
-        select: { customerId: true },
+      // 前のMO番号でも当てる（返す mo_no は今の番号）。src/lib/mo-number.ts 参照
+      moNoCustomerIds = await findCustomerIdsByMoNo(prisma, {
+        businessId: business.id,
+        moNo,
       });
-      moNoCustomerIds = links.map((l) => l.customerId);
       if (moNoCustomerIds.length === 0) {
         return NextResponse.json({
           meta: { count: 0, excluded_inactive_projects: 0, excluded_inactive_customers: 0 },
