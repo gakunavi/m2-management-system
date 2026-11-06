@@ -76,7 +76,7 @@ const INDUSTRIES = ['IT・ソフトウェア', '製造業'];
 /**
  * ライト事業の案件カスタム項目の定義（本番の定義から代表的なものを抜いたもの）。
  * `unit_count` / `purchase_unit_price` / `needs` はトップレベルの専用キーがあり、
- * 工業会・強化税制・初回商談日は `custom_fields` 経由で読み書きする。
+ * 工業会・中企庁・初回商談日は `custom_fields` 経由で読み書きする。
  */
 const PROJECT_FIELD_DEFS = [
   {
@@ -105,7 +105,7 @@ const PROJECT_FIELD_DEFS = [
   },
   {
     key: 'tax_incentive_status',
-    label: '強化税制ステータス',
+    label: '中企庁ステータス',
     type: 'select',
     options: ['1_認定済', '2_申請中', '3_行政書士引継済', '4_未対応', '5_不要'],
     sortOrder: 15,
@@ -2095,7 +2095,7 @@ describe('案件のカスタム項目', () => {
     expect(amount.is_formula).toBe(true);
   });
 
-  it('custom_fields で工業会・強化税制まで直せる', async () => {
+  it('custom_fields で工業会・中企庁まで直せる', async () => {
     stubLightScope();
     mockPrisma.project.findUnique.mockResolvedValue(existingProject());
     mockPrisma.project.update.mockResolvedValue(updatedProject());

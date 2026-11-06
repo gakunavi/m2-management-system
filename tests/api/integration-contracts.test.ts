@@ -562,6 +562,12 @@ describe('meta', () => {
     expect(response.status).toBe(200);
     expect(json.items).toEqual([]);
     expect(mockPrisma.project.findMany).not.toHaveBeenCalled();
+    // 0件でも定義は返す（ML はこれで入力欄を組むため、件数で欠けさせない）
+    expect(json.meta.project_custom_field_defs.map((d: { key: string }) => d.key)).toEqual([
+      'purchase_unit_price',
+      'unit_count',
+      'purchase_amount',
+    ]);
   });
 
   it('mo_no 指定はその顧客の案件だけに絞る', async () => {

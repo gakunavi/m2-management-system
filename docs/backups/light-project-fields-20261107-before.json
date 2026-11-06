@@ -1,0 +1,385 @@
+[
+  {
+    "key": "needs",
+    "type": "select",
+    "label": "ニーズ",
+    "options": [
+      "未定",
+      "A_節税",
+      "A'_節税_割賦",
+      "B_純投資",
+      "B'_純投資_割賦",
+      "C_リース"
+    ],
+    "required": false,
+    "sortOrder": 1,
+    "filterable": true,
+    "showOnMovement": false,
+    "visibleToPartner": true
+  },
+  {
+    "key": "purchase_count",
+    "type": "number",
+    "label": "購入回数",
+    "required": false,
+    "sortOrder": 2,
+    "visibleToPartner": false
+  },
+  {
+    "key": "purchase_unit_price",
+    "type": "number",
+    "label": "購入単価",
+    "required": false,
+    "sortOrder": 3,
+    "visibleToPartner": true
+  },
+  {
+    "key": "unit_count",
+    "type": "number",
+    "label": "台数",
+    "required": false,
+    "sortOrder": 4,
+    "filterable": false,
+    "visibleToPartner": true
+  },
+  {
+    "key": "purchase_amount",
+    "type": "formula",
+    "label": "購入金額",
+    "formula": "purchase_unit_price* unit_count",
+    "required": false,
+    "sortOrder": 5,
+    "visibleToPartner": true
+  },
+  {
+    "key": "temporary_lease_credit_application_status",
+    "type": "select",
+    "label": "仮リース与信申込 ステータス",
+    "options": [
+      "1_仮与信通過",
+      "2_仮与信中",
+      "3_仮与信回収済",
+      "4_仮与信返送待ち",
+      "5_仮与信BO送付待ち",
+      "6_未対応",
+      "7_不要",
+      "8_見送り(次期改め)",
+      "8_見送り"
+    ],
+    "required": false,
+    "sortOrder": 6,
+    "filterable": true,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "mitsubishi_lease_status",
+    "type": "select",
+    "label": "三菱電機リースステータス",
+    "options": [
+      "1_審査OK",
+      "2_審査中",
+      "3_未申請",
+      "4_審査NG(次期あらため)",
+      "5_審査NG"
+    ],
+    "required": false,
+    "sortOrder": 7,
+    "filterable": true,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "ntt_finance_lease_status",
+    "type": "select",
+    "label": "NTTファイナンスリースステータス",
+    "options": [
+      "1_審査OK",
+      "2_審査中",
+      "3_未申請",
+      "4_審査NG(次期あらため)",
+      "5_審査NG"
+    ],
+    "required": false,
+    "sortOrder": 8,
+    "filterable": true,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "mitsui_sumitomo_lease_status",
+    "type": "select",
+    "label": "三井住友リース ステータス",
+    "options": [
+      "1_審査OK",
+      "2_審査中",
+      "3_未申請",
+      "4_審査NG(次期あらため)",
+      "5_審査NG"
+    ],
+    "required": false,
+    "sortOrder": 9,
+    "filterable": true,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "lease_credit_application_status",
+    "type": "select",
+    "label": "本リース与信申込 ステータス",
+    "options": [
+      "1_本与信通過",
+      "2_本与信申込中",
+      "3_本与信回収済",
+      "4_本与信返送待ち",
+      "5_本与信BO送付待ち",
+      "6_未対応",
+      "7_不要",
+      "8_見送り(次期改め)",
+      "9_見送り"
+    ],
+    "required": false,
+    "sortOrder": 10,
+    "filterable": true,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "lease_application_status",
+    "type": "select",
+    "label": "リース契約申込 ステータス",
+    "options": [
+      "1_リース契約締結済",
+      "2_リース契約締結中",
+      "3_リース契約書BO依頼待ち",
+      "4_未対応",
+      "5_不要",
+      "6_見送り(次期改め)",
+      "7_見送り"
+    ],
+    "required": false,
+    "sortOrder": 11,
+    "filterable": true,
+    "visibleToPartner": false
+  },
+  {
+    "key": "application_status",
+    "type": "select",
+    "label": "申込書ステータス",
+    "options": [
+      "1_回収済",
+      "2_先方返送待ち",
+      "3_BO送付待ち",
+      "4_未対応",
+      "5_不要"
+    ],
+    "required": false,
+    "sortOrder": 12,
+    "visibleToPartner": false
+  },
+  {
+    "key": "industry_assoc_status",
+    "type": "select",
+    "label": "工業会ステータス",
+    "options": [
+      "1_行政書士共有済",
+      "2_認定書受領",
+      "3_申請済",
+      "4_申請書推進中",
+      "5_未対応",
+      "6_不要"
+    ],
+    "required": false,
+    "sortOrder": 13,
+    "filterable": false,
+    "showOnMovement": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "sme_agency_applicant",
+    "type": "text",
+    "label": "中企庁申請者",
+    "required": false,
+    "sortOrder": 14,
+    "visibleToPartner": false
+  },
+  {
+    "key": "tax_incentive_status",
+    "type": "select",
+    "label": "強化税制ステータス",
+    "options": [
+      "1_認定済",
+      "2_申請中",
+      "3_行政書士引継済",
+      "4_未対応",
+      "5_不要"
+    ],
+    "required": false,
+    "sortOrder": 15,
+    "visibleToPartner": false
+  },
+  {
+    "key": "sales_contract_status",
+    "type": "select",
+    "label": "販売契約書ステータス",
+    "options": [
+      "1_締結済",
+      "2_先方返送待ち",
+      "3_BO送付待ち",
+      "4_先方確認中",
+      "5_準備中",
+      "6_未対応",
+      "7_不要"
+    ],
+    "required": false,
+    "sortOrder": 16,
+    "visibleToPartner": false
+  },
+  {
+    "key": "operation_contract_status",
+    "type": "select",
+    "label": "運用契約書ステータス",
+    "options": [
+      "1_締結済",
+      "2_先方返送待ち",
+      "3_BO送付待ち",
+      "4_先方確認中",
+      "5_準備中",
+      "6_未対応",
+      "7_不要"
+    ],
+    "required": false,
+    "sortOrder": 17,
+    "visibleToPartner": false
+  },
+  {
+    "key": "logo_collection_status",
+    "type": "select",
+    "label": "ロゴ収集ステータス",
+    "options": [
+      "1_完了",
+      "2_先方確認中",
+      "3_未対応",
+      "4_不要",
+      "5_NG"
+    ],
+    "required": false,
+    "sortOrder": 18,
+    "visibleToPartner": false
+  },
+  {
+    "key": "press_release_status",
+    "type": "select",
+    "label": "プレスリリースステータス",
+    "options": [
+      "1_投稿済",
+      "2_先方確認中",
+      "3_制作中",
+      "4_未対応",
+      "5_不要",
+      "6_NG"
+    ],
+    "required": false,
+    "sortOrder": 19,
+    "visibleToPartner": false
+  },
+  {
+    "key": "appreciation_status",
+    "type": "select",
+    "label": "感謝状ステータス",
+    "options": [
+      "1_MO郵送済",
+      "2_制作中",
+      "3_久能山伝達待ち",
+      "4_先方検討中",
+      "5_不要",
+      "6_NG"
+    ],
+    "required": false,
+    "sortOrder": 20,
+    "filterable": false,
+    "showOnMovement": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "first_meeting_date",
+    "type": "date",
+    "label": "初回商談日",
+    "required": false,
+    "sortOrder": 21,
+    "visibleToPartner": true
+  },
+  {
+    "key": "sales_contract_date",
+    "type": "date",
+    "label": "売買契約日",
+    "required": false,
+    "sortOrder": 22,
+    "visibleToPartner": false
+  },
+  {
+    "key": "operation_contract_date",
+    "type": "date",
+    "label": "運用契約日",
+    "required": false,
+    "sortOrder": 23,
+    "visibleToPartner": false
+  },
+  {
+    "key": "payment_received_date",
+    "type": "date",
+    "label": "着金日",
+    "required": false,
+    "sortOrder": 24,
+    "visibleToPartner": true
+  },
+  {
+    "key": "oogosho_csturl",
+    "type": "url",
+    "label": "大御所会顧客フォルダ",
+    "required": false,
+    "sortOrder": 27
+  },
+  {
+    "key": "first_payment_date",
+    "type": "month",
+    "label": "初回支払年月",
+    "required": false,
+    "sortOrder": 28,
+    "filterable": false,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "gratitude_certificate_name",
+    "type": "text",
+    "label": "感謝状名義",
+    "required": false,
+    "sortOrder": 28,
+    "filterable": false,
+    "showOnProject": false,
+    "showOnMovement": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "final_payment_date",
+    "type": "month",
+    "label": "最終支払年月",
+    "required": false,
+    "sortOrder": 29,
+    "filterable": false,
+    "showOnProject": false,
+    "visibleToPartner": false
+  },
+  {
+    "key": "thank_you_recipient",
+    "type": "text",
+    "label": "感謝状送付先",
+    "required": false,
+    "sortOrder": 29,
+    "filterable": false,
+    "showOnProject": false,
+    "showOnMovement": false,
+    "visibleToPartner": false
+  }
+]

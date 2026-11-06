@@ -29,6 +29,18 @@ export const dynamic = 'force-dynamic';
 // - 口座番号・法人番号は平文で返す（事務が振込に使うため）。ログには出さない
 // ============================================================================
 
+/** 事業設定の案件カスタム項目定義。数式計算と `project_custom_field_defs` の両方で使う */
+async function loadProjectFieldDefs(businessId: number): Promise<ProjectFieldDefinition[]> {
+  const business = await prisma.business.findUnique({
+    where: { id: businessId },
+    select: { businessConfig: true },
+  });
+  return (
+    (business?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null)
+      ?.projectFields ?? []
+  );
+}
+
 export async function GET(request: NextRequest) {
   const auth = authorizeIntegrationRequest(request, 'read');
   if (!auth.ok) return auth.response;
@@ -68,8 +80,15 @@ export async function GET(request: NextRequest) {
         moNo,
       });
       if (moNoCustomerIds.length === 0) {
+        // 0件でもカスタム項目の定義は返す。ML は件数に関わらずこれで入力欄を組むため、
+        // ここだけ meta を減らすと「MO番号で絞ると項目が消える」ことになる
         return NextResponse.json({
-          meta: { count: 0, excluded_inactive_projects: 0, excluded_inactive_customers: 0 },
+          meta: {
+            count: 0,
+            excluded_inactive_projects: 0,
+            excluded_inactive_customers: 0,
+            project_custom_field_defs: buildFieldDefs(await loadProjectFieldDefs(business.id)),
+          },
           items: [],
           next_cursor: null,
         });
@@ -162,13 +181,7 @@ export async function GET(request: NextRequest) {
 
     // 購入金額は数式フィールド（購入単価 × 台数）なので、保存値ではなく
     // 画面と同じ計算結果を返す
-    const businessConfig = await prisma.business.findUnique({
-      where: { id: business.id },
-      select: { businessConfig: true },
-    });
-    const projectFields =
-      ((businessConfig?.businessConfig as { projectFields?: ProjectFieldDefinition[] } | null)
-        ?.projectFields ?? []);
+    const projectFields = await loadProjectFieldDefs(business.id);
     injectFormulaValues(page, projectFields);
 
     const items = page.map((row) =>

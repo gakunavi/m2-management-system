@@ -271,7 +271,7 @@ export function buildContractItem(row: ContractProjectRow, options: BuildContrac
     sme_agency_applicant: customValue(data, 'sme_agency_applicant'),
 
     // --- 事業設定のカスタム項目を全部（上の個別キーと同じ値も含む） ---
-    // 工業会ステータス・強化税制ステータス・各リースのステータスなどはここに入る。
+    // 工業会ステータス・中企庁ステータス・各リースのステータスなどはここに入る。
     // 定義は meta.project_custom_field_defs（item ごとには入れない）
     custom_fields: pickDefinedFields(options.projectFieldDefs, data),
 
