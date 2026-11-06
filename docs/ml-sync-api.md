@@ -22,7 +22,7 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   案件の読み出しに**営業担当**（`assigned_user_name`）を足した。
   **本番反映済み（2026-11-06・PR #4・タスク定義 :260）**
 - 2026-11-06 追記3: 案件の**事業別カスタム項目を全部**読み書きできるようにした
-  （工業会ステータス・強化税制ステータス・各リースのステータスなど）。定義も返す。
+  （工業会ステータス・中企庁ステータス・各リースのステータスなど）。定義も返す。
   契約読み出しAPIにも `custom_fields` と `meta.project_custom_field_defs` を足した。
   **この追記分は本番未適用**
 
@@ -41,6 +41,10 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   手で足すこと
 - 例外（どちらからでも直せない項目）は、理由つきで各章の「受け付けない項目」に書く。
   **理由を書かずに閉じないこと**
+- **工業会・中企庁の日付は営業管理システムと ML の両方に持ち、同じ値にする**
+  （2026-11-07 石井さん：「日付はどちらのシステムにも必要」）。キーは下記
+  「工業会・中企庁の項目」の表のとおり。ML 側に日付を足すときも同じキーで持ち、
+  どちらから直しても相手に合わせること
 
 ---
 
@@ -203,8 +207,16 @@ GET /api/integrations/projects/{project_no}
     "unit_count": 5,
     "purchase_amount": 12000000,
     "industry_assoc_status": "3_申請済",
+    "industry_assoc_request_date": "2026-09-10",
+    "industry_assoc_application_date": "2026-09-14",
+    "industry_assoc_received_date": null,
+    "industry_assoc_fee_payment_date": null,
+    "industry_assoc_original_mailed_date": null,
     "sme_agency_applicant": "株式会社テスト",
     "tax_incentive_status": null,
+    "sme_agency_shared_date": "2026-09-20",
+    "sme_agency_application_date": null,
+    "sme_agency_approval_date": null,
     "first_meeting_date": "2026-09-01"
   },
   "project_custom_field_defs": [
@@ -213,16 +225,19 @@ GET /api/integrations/projects/{project_no}
     { "key": "unit_count", "label": "台数", "type": "number", "options": null, "is_formula": false, "sort_order": 4 },
     { "key": "purchase_amount", "label": "購入金額", "type": "formula", "options": null, "is_formula": true, "sort_order": 5 },
     { "key": "industry_assoc_status", "label": "工業会ステータス", "type": "select", "options": ["1_行政書士共有済", "2_認定書受領", "3_申請済", "4_申請書推進中", "5_未対応", "6_不要"], "is_formula": false, "sort_order": 13 },
-    { "key": "sme_agency_applicant", "label": "中企庁申請者", "type": "text", "options": null, "is_formula": false, "sort_order": 14 },
-    { "key": "tax_incentive_status", "label": "強化税制ステータス", "type": "select", "options": ["1_認定済", "2_申請中", "3_行政書士引継済", "4_未対応", "5_不要"], "is_formula": false, "sort_order": 15 },
-    { "key": "first_meeting_date", "label": "初回商談日", "type": "date", "options": null, "is_formula": false, "sort_order": 21 }
+    { "key": "industry_assoc_request_date", "label": "工業会 依頼日", "type": "date", "options": null, "is_formula": false, "sort_order": 14 },
+    { "key": "industry_assoc_application_date", "label": "工業会 申請日", "type": "date", "options": null, "is_formula": false, "sort_order": 15 },
+    { "key": "sme_agency_applicant", "label": "中企庁申請者", "type": "text", "options": null, "is_formula": false, "sort_order": 19 },
+    { "key": "tax_incentive_status", "label": "中企庁ステータス", "type": "select", "options": ["1_認定済", "2_申請中", "3_行政書士引継済", "4_未対応", "5_不要"], "is_formula": false, "sort_order": 20 },
+    { "key": "sme_agency_approval_date", "label": "中企庁 認定日", "type": "date", "options": null, "is_formula": false, "sort_order": 23 },
+    { "key": "first_meeting_date", "label": "初回商談日", "type": "date", "options": null, "is_formula": false, "sort_order": 29 }
   ],
 
   "version": 4
 }
 ```
 
-- `custom_fields` は**事業設定のカスタム項目を全部**（ライト事業は本番で29項目）。
+- `custom_fields` は**事業設定のカスタム項目を全部**（ライト事業は本番で37項目）。
   トップレベルの専用キー（`needs` / `unit_count` / `unit_price` / 各日付 /
   `sme_agency_applicant`）と同じ値もここに入る（キー名は m2 の保存キーそのまま。
   `unit_price` の保存キーは `purchase_unit_price`）
@@ -266,8 +281,31 @@ PATCH /api/integrations/projects/{project_no}
 
 #### `custom_fields`（専用キーの無い項目すべて）
 
-工業会ステータス・強化税制ステータス・各リースのステータス・初回商談日・感謝状関係など、
+工業会ステータス・中企庁ステータス・各リースのステータス・初回商談日・感謝状関係など、
 上の表に専用キーが無いカスタム項目はここで送る。**計算項目以外は全部書ける。**
+
+##### 工業会・中企庁の項目（2026-11-07 追加）
+
+ML の工業会・中企庁の記録と同じものを m2 にも持たせた。**両方に持ち、同じ値にする。**
+
+| キー | 画面の名前 | 種類 |
+|------|-----------|------|
+| `industry_assoc_status` | 工業会ステータス | select |
+| `industry_assoc_request_date` | 工業会 依頼日 | date |
+| `industry_assoc_application_date` | 工業会 申請日 | date |
+| `industry_assoc_received_date` | 工業会 受領日 | date |
+| `industry_assoc_fee_payment_date` | 工業会 発行費用の支払日 | date |
+| `industry_assoc_original_mailed_date` | 工業会 原本の郵送日 | date |
+| `sme_agency_applicant` | 中企庁申請者 | text |
+| `tax_incentive_status` | 中企庁ステータス | select |
+| `sme_agency_shared_date` | 中企庁 共有日（申請代行業者に共有した日） | date |
+| `sme_agency_application_date` | 中企庁 申請日 | date |
+| `sme_agency_approval_date` | 中企庁 認定日 | date |
+
+- **`tax_incentive_status` のキーは変えていない**。画面の名前だけ「強化税制ステータス」
+  から「中企庁ステータス」に変えた（2026-11-07）。選べる値・保存されている値も同じ。
+  キーが `tax_incentive_` で始まるのは元の名前の名残り
+- 日付は `YYYY-MM-DD`。空にするときは `null`
 
 ```json
 {
