@@ -177,6 +177,7 @@ function updatedProject(over: Record<string, unknown> = {}) {
     projectNo: 'LIGHT-0077',
     projectSalesStatus: 'informal_approval',
     projectStatusChangedAt: new Date('2026-11-05T01:00:00.000Z'),
+    projectAssignedUserName: '佐藤 次郎',
     projectCustomData: { needs: 'A_節税', unit_count: 8, purchase_unit_price: 2_400_000 },
     projectAssignedUserId: 42,
     businessId: 5,
@@ -1484,7 +1485,9 @@ describe('顧客PATCH の受付項目', () => {
   it('受け付けるキーの一覧が仕様と揃っている', () => {
     // 読み出しのキーのうち、人が直せないもの以外は全部書ける
     const readOnly = [
-      'customer_code', 'customer_url', 'mo_no_previous', 'industry_options', 'version', 'updated_at',
+      'customer_code', 'customer_url', 'mo_no_previous', 'industry_options',
+      'custom_field_defs', 'global_custom_field_defs',
+      'version', 'updated_at',
     ];
     const expected = ML_CUSTOMER_ITEM_KEYS.filter((k) => !readOnly.includes(k));
     expect([...ML_CUSTOMER_WRITABLE_KEYS].sort()).toEqual([...expected].sort());
@@ -1832,5 +1835,169 @@ describe('MO番号の変更', () => {
     const data = mockPrisma.integrationChangeLog.create.mock.calls[0][0].data as Record<string, unknown>;
     expect(data.changedFields).toEqual(['mo_no']);
     expect(JSON.stringify(data)).not.toContain('MO-0002');
+  });
+});
+
+// ============================================================================
+// 13. カスタム項目の定義（ML が入力欄を組むのに使う）
+// ============================================================================
+
+describe('カスタム項目の定義', () => {
+  it('キー・名前・種類・選べる値・計算項目か・並び順を返す', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+      customerCodeParams(),
+    );
+    const body = await res.json();
+
+    expect(body.custom_field_defs).toEqual([
+      { key: 'mo_no', label: 'MO番号', type: 'text', options: null, is_formula: false, sort_order: 1 },
+      { key: 'machine_count', label: '設置台数', type: 'number', options: null, is_formula: false, sort_order: 2 },
+      {
+        key: 'support_plan',
+        label: 'サポート区分',
+        type: 'select',
+        options: ['A', 'B'],
+        is_formula: false,
+        sort_order: 3,
+      },
+      { key: 'mo_rank', label: 'MOランク', type: 'formula', options: null, is_formula: true, sort_order: 4 },
+    ]);
+    expect(body.global_custom_field_defs).toEqual([
+      { key: 'intro_route', label: '紹介経路', type: 'text', options: null, is_formula: false, sort_order: 1 },
+    ]);
+  });
+
+  it('値と定義でキー集合と並びが揃っている', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const body = await (
+      await CUSTOMER_GET(
+        request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+        customerCodeParams(),
+      )
+    ).json();
+
+    expect(body.custom_field_defs.map((d: { key: string }) => d.key)).toEqual(
+      Object.keys(body.custom_fields),
+    );
+    expect(body.global_custom_field_defs.map((d: { key: string }) => d.key)).toEqual(
+      Object.keys(body.global_custom_fields),
+    );
+  });
+
+  it('定義に無い内部データ（contact_roles）は定義にも入らない', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const body = await (
+      await CUSTOMER_GET(
+        request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+        customerCodeParams(),
+      )
+    ).json();
+
+    const keys = body.custom_field_defs.map((d: { key: string }) => d.key);
+    expect(keys).not.toContain('contact_roles');
+    expect(keys).not.toContain('mo_no_history');
+  });
+
+  it('定義が無い事業では空配列（キーは落とさない）', async () => {
+    stubLightScope();
+    mockPrisma.business.findUnique.mockResolvedValue({ businessConfig: {} });
+    mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+    stubCustomerReads();
+
+    const body = await (
+      await CUSTOMER_GET(
+        request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+        customerCodeParams(),
+      )
+    ).json();
+
+    expect(body.custom_field_defs).toEqual([]);
+    expect(body.global_custom_field_defs).toEqual([]);
+    expect(body.custom_fields).toEqual({});
+  });
+});
+
+// ============================================================================
+// 14. 案件の営業担当
+// ============================================================================
+
+describe('案件の営業担当', () => {
+  it('読み出しに assigned_user_name が入る', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue({
+      ...updatedProject(),
+      customer: { customerCode: 'CST-0001' },
+    });
+
+    const res = await PROJECT_GET(
+      request('/api/integrations/projects/LIGHT-0077', { token: READ_TOKEN }),
+      projectParams(),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.assigned_user_name).toBe('佐藤 次郎');
+    // 読み出しで引いていること（select 漏れで常に null にならないように）
+    const select = mockPrisma.project.findUnique.mock.calls[0][0].select as Record<string, unknown>;
+    expect(select.projectAssignedUserName).toBe(true);
+  });
+
+  it('未設定なら null（キーは落とさない）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue({
+      ...updatedProject({ projectAssignedUserName: null }),
+      customer: { customerCode: 'CST-0001' },
+    });
+
+    const body = await (
+      await PROJECT_GET(
+        request('/api/integrations/projects/LIGHT-0077', { token: READ_TOKEN }),
+        projectParams(),
+      )
+    ).json();
+
+    expect(body).toHaveProperty('assigned_user_name');
+    expect(body.assigned_user_name).toBeNull();
+  });
+
+  it('PATCH のレスポンスにも入る（行全体を置き換えても欄が消えない）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    const body = await (
+      await PROJECT_PATCH(
+        request('/api/integrations/projects/LIGHT-0077', {
+          method: 'PATCH',
+          body: { version: 4, unit_count: 8 },
+        }),
+        projectParams(),
+      )
+    ).json();
+
+    expect(body.assigned_user_name).toBe('佐藤 次郎');
+  });
+
+  it('ML からは書き戻せない（422）', async () => {
+    stubLightScope();
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, assigned_user_name: '別の人' },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(422);
+    expect(mockPrisma.project.update).not.toHaveBeenCalled();
   });
 });

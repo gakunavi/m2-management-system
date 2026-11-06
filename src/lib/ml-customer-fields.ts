@@ -351,6 +351,30 @@ export interface MlCustomerItemSource {
   businessLinks: Array<{ linkCustomData: unknown }>;
 }
 
+/**
+ * ML へ返すカスタム項目の定義1件。
+ *
+ * ML は MO詳細画面の入力欄をこれで組む（名前・種類・選べる値）。m2 の事業マスタ・
+ * システム設定で項目を増やしても ML 側のコードを直さずに済む。
+ */
+export interface MlCustomFieldDef {
+  key: string;
+  /** 画面に出る名前 */
+  label: string;
+  /** m2 の種類。text / textarea / number / date / month / select / checkbox / url / formula */
+  type: EntityFieldDefinition['type'];
+  /** select のときの選べる値。それ以外は null */
+  options: string[] | null;
+  /**
+   * 計算項目（他の項目から計算される）か。
+   * `type === 'formula'` と同じだが、ML が種類の一覧を知らなくても
+   * 「入力させない」判定だけはできるように別で返す。書き込むと 422
+   */
+  is_formula: boolean;
+  /** 画面に並べる順（値のオブジェクトもこの順に入っている） */
+  sort_order: number;
+}
+
 export interface BuildMlCustomerItemOptions {
   customerUrl: string;
   /** 事業別カスタム項目の定義（businesses.business_config.customerFields） */
@@ -406,7 +430,9 @@ export function buildMlCustomerItem(
     customer_notes: row.customerNotes,
 
     custom_fields: pickDefinedFields(options.linkFieldDefs, linkData),
+    custom_field_defs: buildFieldDefs(options.linkFieldDefs),
     global_custom_fields: pickDefinedFields(options.globalFieldDefs, globalData),
+    global_custom_field_defs: buildFieldDefs(options.globalFieldDefs),
 
     version: row.version,
     updated_at: row.updatedAt.toISOString(),
@@ -435,10 +461,32 @@ function pickDefinedFields(
 ): Record<string, unknown> {
   // `mo_no_history` は定義に無いので、ここには入らない（前の番号は mo_no_previous で返す）
   const out: Record<string, unknown> = {};
-  for (const def of [...defs].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))) {
+  for (const def of sortByOrder(defs)) {
     out[def.key] = emptyToNull(data[def.key]);
   }
   return out;
+}
+
+/** 定義を画面の並び順にそろえる（値と定義で順を揃えるため1箇所にまとめる） */
+function sortByOrder(defs: EntityFieldDefinition[]): EntityFieldDefinition[] {
+  return [...defs].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+/**
+ * カスタム項目の定義を ML へ返す形にする。
+ *
+ * 値（`custom_fields`）と同じ並び・同じキー集合にする。定義に無いキー
+ * （取り込みAPIの内部データ）は値と同じく返さない。
+ */
+function buildFieldDefs(defs: EntityFieldDefinition[]): MlCustomFieldDef[] {
+  return sortByOrder(defs).map((def) => ({
+    key: def.key,
+    label: def.label,
+    type: def.type,
+    options: def.type === 'select' && def.options && def.options.length > 0 ? def.options : null,
+    is_formula: def.type === 'formula',
+    sort_order: def.sortOrder ?? 0,
+  }));
 }
 
 /** レスポンスが必ず持つキー（テストと仕様書のドリフト検知に使う） */
@@ -448,7 +496,8 @@ export const ML_CUSTOMER_ITEM_KEYS = [
   'postal_code', 'address', 'company_phone', 'company_fax', 'company_email', 'website',
   'corporate_no', 'invoice_no', 'capital', 'established_on', 'fiscal_month',
   'industry', 'industry_options', 'folder_url', 'customer_notes',
-  'custom_fields', 'global_custom_fields',
+  'custom_fields', 'custom_field_defs',
+  'global_custom_fields', 'global_custom_field_defs',
   'version', 'updated_at',
 ] as const;
 

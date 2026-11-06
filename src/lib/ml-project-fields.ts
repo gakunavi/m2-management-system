@@ -14,6 +14,7 @@
 //   - `mo_no`        … 顧客の事業別カスタム項目。顧客の取り込みAPIが正
 //   - `company_name` / `customer_type` / `customer_code` … 顧客の項目（顧客PATCHで直す）
 //   - `status_label` … 表示用。コードから引くもので入力値ではない
+//   - `assigned_user_name` … 社内の割り当て。m2 の画面で決める（読むだけ）
 //   - `status_changed_at` … m2 がステータス変更時に自分で打つ
 //   - 口座・法人番号・インボイス番号・住所・連絡先 … ML は保存しない（4-2「持たないもの」）
 //   - `project_notes` / `thank_you_recipient` / `gratitude_certificate_name`
@@ -142,6 +143,8 @@ export interface MlProjectItemSource {
   projectNo: string;
   projectSalesStatus: string;
   projectStatusChangedAt: Date | null;
+  /** 営業担当の名前。契約読み出しAPIの assigned_user_name と同じ値 */
+  projectAssignedUserName: string | null;
   projectCustomData: unknown;
   version: number;
   customer: { customerCode: string };
@@ -171,6 +174,8 @@ export function buildMlProjectItem(
     status_code: row.projectSalesStatus,
     status_label: options.statusLabel,
     status_changed_at: row.projectStatusChangedAt ? row.projectStatusChangedAt.toISOString() : null,
+    // 営業担当（m2 側で変わると project.updated を通知する）。書き戻しは受け付けない
+    assigned_user_name: row.projectAssignedUserName,
     needs: customValue(data, 'needs'),
     unit_count: customValue(data, 'unit_count'),
     unit_price: customValue(data, 'purchase_unit_price'),
@@ -186,7 +191,7 @@ export function buildMlProjectItem(
 /** レスポンスが必ず持つキー（テストと仕様書のドリフト検知に使う） */
 export const ML_PROJECT_ITEM_KEYS = [
   'project_no', 'project_url', 'customer_code',
-  'status_code', 'status_label', 'status_changed_at',
+  'status_code', 'status_label', 'status_changed_at', 'assigned_user_name',
   'needs', 'unit_count', 'unit_price', 'purchase_amount',
   'sales_contract_date', 'operation_contract_date', 'payment_received_date',
   'sme_agency_applicant', 'version',

@@ -17,7 +17,9 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
 - 2026-11-06 追記: ML の MO（マシンオーナー）詳細画面のため、顧客の読み出し口を追加し、
   顧客の書き戻しを「画面で人が直せる項目全部」へ広げた（4章）。
   **MO番号も ML から直せる**（前の番号は履歴に残り、取り込みAPIは前の番号でも顧客を引ける）。
-  **この追記分は本番未適用**
+  **本番反映済み（2026-11-06・PR #3・タスク定義 :259）**
+- 2026-11-06 追記2: 顧客の読み出しに**カスタム項目の定義**（名前・種類・選べる値）を足し、
+  案件の読み出しに**営業担当**（`assigned_user_name`）を足した。**この追記分は本番未適用**
 
 ---
 
@@ -151,6 +153,11 @@ GET /api/integrations/projects/{project_no}
 
 認証: **読み取り用トークン**。`PATCH` の前に `version` を取るための口。
 
+`assigned_user_name` は営業担当の名前。契約読み出しAPI（`GET /api/integrations/contracts`）の
+`assigned_user_name` と同じ値で、**読むだけ**（ML からは書き戻せない → `422`）。
+社内の割り当てなので m2 の画面で決める。**変わったときは `project.updated` を通知する**
+（ステータス変更に限らず、案件の更新はすべて通知の対象。6章）。
+
 ```json
 {
   "project_no": "LIGHT-0077",
@@ -159,6 +166,7 @@ GET /api/integrations/projects/{project_no}
   "status_code": "informal_approval",
   "status_label": "3_内諾",
   "status_changed_at": "2026-11-05T01:00:00.000Z",
+  "assigned_user_name": "佐藤 次郎",
   "needs": "A_節税",
   "unit_count": 5,
   "unit_price": 2400000,
@@ -213,6 +221,7 @@ PATCH /api/integrations/projects/{project_no}
 | `mo_no` | 顧客の事業別カスタム項目。顧客取り込みAPI（`/customers/import`）が正 |
 | `company_name` / `customer_type` | 顧客の項目 → 顧客PATCH（§4） |
 | `status_label` / `status_changed_at` | 表示用・m2 が自分で打つ値 |
+| `assigned_user_name` | 社内の割り当て。m2 の画面で決める（読むだけ） |
 | 口座・法人番号・インボイス番号・住所・連絡先 | ML は保存しない（ML設計書 4-2「持たないもの」） |
 | `project_notes` / `thank_you_recipient` / `gratitude_certificate_name` | 読み出しAPIは返すが ML の表に無い。写しを持っていない項目は直せない |
 
@@ -305,7 +314,9 @@ ML の MO（マシンオーナー）詳細画面が使う。**顧客の画面に
 | `folder_url` | 顧客フォルダのURL | ○ |
 | `customer_notes` | 備考 | ○ |
 | `custom_fields` | ライト事業の事業別カスタム項目（MO番号ほか） | ○ |
+| `custom_field_defs` | 上の項目の定義（名前・種類・選べる値） | × |
 | `global_custom_fields` | 全事業共通のカスタム項目 | ○ |
+| `global_custom_field_defs` | 上の項目の定義 | × |
 | `version` | 楽観ロック用 | × |
 | `updated_at` | 最終更新（ISO 8601） | × |
 
@@ -327,6 +338,7 @@ ML の MO（マシンオーナー）詳細画面が使う。**顧客の画面に
 | `industry_options` | 業種マスタ（顧客の項目ではない） |
 | `custom_fields.mo_no` | MO番号は**トップレベルの `mo_no`** で送る（入口を1つに絞っている）。`custom_fields` 側は `422` |
 | `mo_no_previous` | m2 が自動で積む履歴（直接は書けない） |
+| `custom_field_defs` / `global_custom_field_defs` | m2 の事業マスタ・システム設定で決める定義（値ではない） |
 | 計算項目（定義が `type: "formula"`） | 入力値ではない |
 | 口座 | ML は保存しない |
 
@@ -350,6 +362,34 @@ MO番号は顧客取り込みAPI（`POST /api/integrations/customers/import`）�
 
 m2 の画面から変えたときも同じ処理（`src/lib/mo-number.ts`）を通り、同じように履歴が残り、
 重複は止まる（画面は `400`）。画面から変えたときは ML へ `customer.updated` を通知する。
+
+### カスタム項目の定義（`custom_field_defs` / `global_custom_field_defs`）
+
+ML が MO詳細画面の入力欄を組むための定義。m2 の事業マスタ・システム設定で項目を
+増やしても ML 側のコードを直さずに済むよう、値と一緒に返す。
+
+| キー | 内容 |
+|---|---|
+| `key` | 値のオブジェクト（`custom_fields`）のキーと同じ |
+| `label` | m2 の画面に出る名前 |
+| `type` | `text` / `textarea` / `number` / `date` / `month` / `select` / `checkbox` / `url` / `formula` |
+| `options` | `select` のときの選べる値の配列。それ以外は `null` |
+| `is_formula` | 計算項目か（`type === "formula"` と同じ。種類の一覧を知らなくても「入力させない」判定だけできるように別で返す）。書き込むと `422` |
+| `sort_order` | m2 の画面に並べる順 |
+
+- **値と定義はキー集合も並びも同じ。** 定義に無いキー（取り込みAPIが内部的に持たせている
+  `contact_roles`・MO番号の履歴 `mo_no_history` など、顧客の画面に出ていないもの）は
+  どちらにも入らない
+- 定義が1件も無い事業では空配列（キーは落とさない）
+
+```json
+"custom_field_defs": [
+  { "key": "mo_no", "label": "MO番号", "type": "text", "options": null, "is_formula": false, "sort_order": 1 },
+  { "key": "machine_count", "label": "設置台数", "type": "number", "options": null, "is_formula": false, "sort_order": 2 },
+  { "key": "support_plan", "label": "サポート区分", "type": "select", "options": ["A", "B"], "is_formula": false, "sort_order": 3 },
+  { "key": "mo_rank", "label": "MOランク", "type": "formula", "options": null, "is_formula": true, "sort_order": 4 }
+]
+```
 
 ### カスタム項目の検査
 
@@ -400,7 +440,15 @@ m2 の画面から変えたときも同じ処理（`src/lib/mo-number.ts`）を�
   "folder_url": null,
   "customer_notes": null,
   "custom_fields": { "mo_no": "MO-0001", "machine_count": 2, "support_plan": null },
+  "custom_field_defs": [
+    { "key": "mo_no", "label": "MO番号", "type": "text", "options": null, "is_formula": false, "sort_order": 1 },
+    { "key": "machine_count", "label": "設置台数", "type": "number", "options": null, "is_formula": false, "sort_order": 2 },
+    { "key": "support_plan", "label": "サポート区分", "type": "select", "options": ["A", "B"], "is_formula": false, "sort_order": 3 }
+  ],
   "global_custom_fields": { "intro_route": "展示会" },
+  "global_custom_field_defs": [
+    { "key": "intro_route", "label": "紹介経路", "type": "text", "options": null, "is_formula": false, "sort_order": 1 }
+  ],
   "version": 3,
   "updated_at": "2026-11-06T01:00:00.000Z"
 }
@@ -582,6 +630,7 @@ hmac.compare_digest(expected, signature.removeprefix("sha256="))
 | 経路 | 通知 |
 |---|---|
 | `PATCH /api/v1/projects/[id]`（画面・インライン編集・フォーム編集） | ○ |
+| `PATCH /api/v1/projects/[id]`（画面・営業担当やステータスの変更を含む案件の更新すべて） | ○ |
 | `PATCH /api/v1/customers/[id]`（画面） | ○ |
 | `POST`/`PATCH`/`DELETE /api/v1/customers/[id]/contacts[/...]`（画面） | ○ |
 | `/api/integrations/**` の PATCH（ML 由来） | ×（ループ防止） |
@@ -633,7 +682,8 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 
 テスト: `tests/api/ml-sync.test.ts`（エンドポイント）/ `tests/lib/ml-notify.test.ts`（通知・履歴）/
 `tests/lib/mo-number.test.ts`（MO番号の履歴）/ `tests/api/customer-mo-number.test.ts`（画面から
-MO番号を変えたとき）/ `tests/api/customer-import.test.ts`（前の番号での取り込み）。
+MO番号を変えたとき）/ `tests/api/customer-import.test.ts`（前の番号での取り込み）/
+`tests/lib/project-update-notify.test.ts`（営業担当を変えたときの通知）。
 
 **更新ロジックは画面と共有している。** `applyProjectUpdate` 等をコピーして ML 用に
 書き直すと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに
