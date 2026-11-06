@@ -116,10 +116,12 @@ export async function resolveIndustryId(
 }
 
 /**
- * `custom_fields` から書き込めないキー。
+ * `custom_fields` から書き込めないキー → 返すメッセージ。
  * MO番号はトップレベルの `mo_no` で受けるため、ここからは受け付けない（入口を1つに絞る）。
  */
-export const CUSTOMER_READ_ONLY_LINK_KEYS = [MO_NO_KEY] as const;
+export const CUSTOMER_READ_ONLY_LINK_KEYS: Record<string, string> = {
+  [MO_NO_KEY]: 'MO番号は custom_fields ではなくトップレベルの mo_no で指定してください',
+};
 
 export interface ReadMlCustomerOptions {
   customerId: number;

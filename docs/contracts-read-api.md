@@ -74,6 +74,13 @@ GET /api/integrations/contracts?status=purchased&limit=100
 ```
 
 - **1件 = 1案件（契約）**。1顧客が複数の案件を持てるため、`mo_no` は複数の item に出うる。
+- **`custom_fields` に事業設定のカスタム項目が全部入る**（2026-11-06 追加）。
+  工業会ステータス・強化税制ステータス・各リースのステータスなど、個別キーが無い項目は
+  ここで読む。キーは m2 の保存キーそのまま（`unit_price` の保存キーは
+  `purchase_unit_price`）。未入力は null でキーは落とさない。
+  **項目の定義（名前・種類・選べる値）は `meta.project_custom_field_defs` に1回だけ**
+  入る（item ごとには繰り返さない）。書き込みは
+  `PATCH /api/integrations/projects/{project_no}`（`docs/ml-sync-api.md` 3章）。
 - **`mo_no` の絞り込みは前のMO番号でも当たる**（2026-11-06）。MO番号は m2 の画面と
   ML管理システムから変えられ、前の番号は `link_custom_data.mo_no_history` に残る。
   呼び出し側が古い番号を持っていても案件が引けるようにしてある。返す `mo_no` は常に
@@ -92,6 +99,7 @@ GET /api/integrations/contracts?status=purchased&limit=100
 | `project_no` | `projects.project_no` | スプレッドシートの更新キー |
 | `project_url` | 管理画面の案件詳細URL | |
 | `mo_no` | `customer_business_links.link_custom_data->>'mo_no'` | 常に**今の番号**。前の番号で絞り込んでも今の番号を返す |
+| `custom_fields` | `projects.project_custom_data` | 事業設定のカスタム項目**全部**（キー → 値）。2026-11-06 追加 |
 | `customer_id` / `customer_code` / `customer_url` | `customers.id` / `.customer_code` | |
 | `status_code` | `projects.project_sales_status` | 例 `purchased` |
 | `status` | `business_status_definitions.status_label` | 例 `1_購入済み` |

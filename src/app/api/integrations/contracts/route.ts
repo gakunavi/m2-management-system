@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { findCustomerIdsByMoNo } from '@/lib/mo-number';
+import { buildFieldDefs } from '@/lib/ml-custom-fields';
 import { authorizeIntegrationRequest } from '@/lib/integration-auth';
 import { resolveImportBusiness, pickBankAccountForBusiness } from '@/lib/customer-import';
 import { customerAdminUrl, projectAdminUrl } from '@/lib/integration-url';
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
       orderBy: { statusSortOrder: 'asc' },
     });
     const statusLabels = new Map(statusDefs.map((s) => [s.statusCode, s.statusLabel]));
+
 
     const parsed = parseContractQuery(request.nextUrl.searchParams, statusDefs);
     if (!parsed.ok) {
@@ -176,6 +178,8 @@ export async function GET(request: NextRequest) {
         projectUrl: projectAdminUrl(row.id),
         customerUrl: customerAdminUrl(row.customer.id),
         pickBankAccount: pickBankAccountForBusiness,
+        // 事業設定のカスタム項目定義（購入金額の数式計算と同じものを使う）
+        projectFieldDefs: projectFields,
       }),
     );
 
@@ -185,6 +189,8 @@ export async function GET(request: NextRequest) {
         count: items.length,
         excluded_inactive_projects: excludedInactiveProjects,
         excluded_inactive_customers: excludedInactiveCustomers,
+        // item の custom_fields を画面に出すための定義（全 item で同じなので1回だけ）
+        project_custom_field_defs: buildFieldDefs(projectFields),
       },
       items,
       next_cursor: hasMore && last ? encodeCursor({ t: last.projectStatusChangedAt, id: last.id }) : null,

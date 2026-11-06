@@ -2,26 +2,45 @@
 // ML管理システムが書き戻せる案件項目
 // ============================================
 //
-// ML 側が写しで持っている項目（設計書 `docs/phase1-spec.md` 4-2 の
-// `ml.m2_projects` / `ml.m2_project_details`）と、既存の契約読み出しAPI
-// （`GET /api/integrations/contracts`）が返している項目を突き合わせて決めた集合。
+// **ライト事業の案件は、営業管理システムと ML のどちらからでも直せて、いつも同じ値に
+// する**（2026-11-06 石井さん）。そのため事業設定のカスタム項目
+// （`businesses.business_config.projectFields`）は**計算項目を除いて全部**読めるし書ける。
+// 事業マスタに項目を足せば ML の口にも自動で出る（定義ごと返しているので ML 側の
+// コードを直さなくてよい）。
 //
-// 読み出しAPIと同じ snake_case のキー名を使う。ML が「読むときの名前」と
-// 「書くときの名前」を2つ覚えなくて済むようにするため。
+// 2つの入口がある:
+//   - **トップレベルの専用キー**（`needs` / `unit_count` / `unit_price` など）…
+//     契約読み出しAPI（`GET /api/integrations/contracts`）と同じ snake_case の名前。
+//     ML が「読むときの名前」と「書くときの名前」を2つ覚えなくて済むようにするため
+//   - **`custom_fields`**（キー → 値）… 上に専用キーの無い項目すべて。
+//     工業会ステータス・強化税制ステータス・各リースのステータスなどがこちら
+//
+// 専用キーのある項目を `custom_fields` から送ると 422（2経路から違う値が来たときに
+// どちらを採るかを決めずに済ませるため）。
 //
 // 含めないもの（それぞれ理由がある）:
+//   - 計算項目（`type: 'formula'`。購入金額＝購入単価×台数） … 入力値ではない。
+//     共通の更新処理が保存前に再計算するので、受け付けると黙って消える
 //   - `plan`         … ML 側が `needs`（A_節税 → A）から導く値。m2 に項目が無い
-//   - `mo_no`        … 顧客の事業別カスタム項目。顧客の取り込みAPIが正
-//   - `company_name` / `customer_type` / `customer_code` … 顧客の項目（顧客PATCHで直す）
+//   - `mo_no` / `company_name` / `customer_type` / `customer_code` … 顧客の項目
+//     （顧客の PATCH で直す）
 //   - `status_label` … 表示用。コードから引くもので入力値ではない
-//   - `assigned_user_name` … 社内の割り当て。m2 の画面で決める（読むだけ）
 //   - `status_changed_at` … m2 がステータス変更時に自分で打つ
-//   - 口座・法人番号・インボイス番号・住所・連絡先 … ML は保存しない（4-2「持たないもの」）
-//   - `project_notes` / `thank_you_recipient` / `gratitude_certificate_name`
-//                    … 読み出しAPIは返すが ML の表に無い（写しを持っていない項目は直せない）
+//   - `assigned_user_name` … 社内ユーザーへの割り当て。名前だけ書き換えると
+//     `project_assigned_user_id`（通知の宛先に使う FK）と食い違うため、読むだけ。
+//     開けるなら m2 のユーザー一覧を返す口と id での指定が先に必要
+//   - 報酬・自社取り分・収益確定日・解約日・凍結スナップショット … 社内の会計。
+//     権限（admin 限定の項目を含む）と発行済み明細との整合があるため ML には開けない
+//   - 口座・法人番号・インボイス番号・住所・連絡先 … ML は保存しない
 
 import { z } from 'zod';
 import { ApiError } from '@/lib/error-handler';
+import {
+  buildFieldDefs,
+  customFieldsPatch,
+  normalizeCustomPatch,
+  pickDefinedFields,
+} from '@/lib/ml-custom-fields';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 /** 'YYYY-MM-DD' か null */
@@ -54,6 +73,12 @@ export const mlProjectPatchSchema = z
     payment_received_date: dateOnly,
     /** 中企庁申請者 */
     sme_agency_applicant: z.string().max(200).nullable().optional(),
+    /**
+     * 上に専用キーの無いカスタム項目（工業会ステータス・強化税制ステータス・
+     * 各リースのステータス・初回商談日 など）。キーは事業設定の項目キーそのまま。
+     * 定義と突き合わせて検査する（未定義キー・計算項目・型違い・選択肢違反は 422）。
+     */
+    custom_fields: customFieldsPatch.optional(),
     /** 楽観ロック。編集前に読んだ案件の version */
     version: z.number().int().min(1),
   })
@@ -79,7 +104,21 @@ const CUSTOM_DATA_KEY_MAP: Record<string, string> = {
 export const ML_PROJECT_WRITABLE_KEYS = [
   'status_code',
   ...Object.keys(CUSTOM_DATA_KEY_MAP),
+  'custom_fields',
 ] as const;
+
+/**
+ * `custom_fields` から書き込めないキー → 返すメッセージ。
+ *
+ * トップレベルに専用キーがある項目は、そちらで送らせる（入口を1つに絞る）。
+ */
+export function projectCustomFieldsReadOnlyKeys(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [mlKey, dataKey] of Object.entries(CUSTOM_DATA_KEY_MAP)) {
+    out[dataKey] = `この項目は custom_fields ではなくトップレベルの ${mlKey} で指定してください`;
+  }
+  return out;
+}
 
 /**
  * 数式項目への書き込みを弾く。
@@ -134,6 +173,10 @@ export function toProjectUpdateBody(input: MlProjectPatchInput): ProjectUpdateBo
     // null は「空にする」。空文字ではなく null で保存する（読み出しAPIが null を返す形に合わせる）
     customData[dataKey] = value;
   }
+  // 専用キーの無い項目。キーが重なることはない（重なったら上で 422 にしている）
+  if (input.custom_fields !== undefined) {
+    Object.assign(customData, normalizeCustomPatch(input.custom_fields));
+  }
   if (Object.keys(customData).length > 0) body.projectCustomData = customData;
 
   return body;
@@ -164,7 +207,12 @@ function customValue(data: Record<string, unknown>, key: string): unknown {
  */
 export function buildMlProjectItem(
   row: MlProjectItemSource,
-  options: { statusLabel: string | null; projectUrl: string },
+  options: {
+    statusLabel: string | null;
+    projectUrl: string;
+    /** 事業設定のカスタム項目定義（businesses.business_config.projectFields） */
+    projectFieldDefs: ProjectFieldDefinition[];
+  },
 ) {
   const data = (row.projectCustomData ?? {}) as Record<string, unknown>;
   return {
@@ -184,6 +232,13 @@ export function buildMlProjectItem(
     operation_contract_date: customValue(data, 'operation_contract_date'),
     payment_received_date: customValue(data, 'payment_received_date'),
     sme_agency_applicant: customValue(data, 'sme_agency_applicant'),
+
+    // 事業設定のカスタム項目を全部（上の専用キーと同じ値も含む）。
+    // 定義に無いキーは入らない。未入力は null でキーは落とさない
+    custom_fields: pickDefinedFields(options.projectFieldDefs, data),
+    // ML が入力欄を組むための定義（名前・種類・選べる値・計算項目か・並び順）
+    project_custom_field_defs: buildFieldDefs(options.projectFieldDefs),
+
     version: row.version,
   };
 }
@@ -194,5 +249,7 @@ export const ML_PROJECT_ITEM_KEYS = [
   'status_code', 'status_label', 'status_changed_at', 'assigned_user_name',
   'needs', 'unit_count', 'unit_price', 'purchase_amount',
   'sales_contract_date', 'operation_contract_date', 'payment_received_date',
-  'sme_agency_applicant', 'version',
+  'sme_agency_applicant',
+  'custom_fields', 'project_custom_field_defs',
+  'version',
 ] as const;
