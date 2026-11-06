@@ -73,6 +73,46 @@ const LIGHT_BUSINESS = { id: 5, businessCode: 'LIGHT' };
 /** 業種マスタ（有効なもの） */
 const INDUSTRIES = ['IT・ソフトウェア', '製造業'];
 
+/**
+ * ライト事業の案件カスタム項目の定義（本番の定義から代表的なものを抜いたもの）。
+ * `unit_count` / `purchase_unit_price` / `needs` はトップレベルの専用キーがあり、
+ * 工業会・強化税制・初回商談日は `custom_fields` 経由で読み書きする。
+ */
+const PROJECT_FIELD_DEFS = [
+  {
+    key: 'needs',
+    label: 'ニーズ',
+    type: 'select',
+    options: ['未定', 'A_節税', 'B_純投資'],
+    sortOrder: 1,
+  },
+  { key: 'purchase_unit_price', label: '購入単価', type: 'number', sortOrder: 3 },
+  { key: 'unit_count', label: '台数', type: 'number', sortOrder: 4 },
+  // ライト事業の購入金額は「購入単価 × 台数」の数式項目
+  {
+    key: 'purchase_amount',
+    label: '購入金額',
+    type: 'formula',
+    formula: 'purchase_unit_price * unit_count',
+    sortOrder: 5,
+  },
+  {
+    key: 'industry_assoc_status',
+    label: '工業会ステータス',
+    type: 'select',
+    options: ['1_行政書士共有済', '2_認定書受領', '3_申請済', '4_申請書推進中', '5_未対応', '6_不要'],
+    sortOrder: 13,
+  },
+  {
+    key: 'tax_incentive_status',
+    label: '強化税制ステータス',
+    type: 'select',
+    options: ['1_認定済', '2_申請中', '3_行政書士引継済', '4_未対応', '5_不要'],
+    sortOrder: 15,
+  },
+  { key: 'first_meeting_date', label: '初回商談日', type: 'date', sortOrder: 21 },
+];
+
 /** ライト事業の顧客カスタム項目の定義（businesses.business_config.customerFields） */
 const CUSTOMER_FIELD_DEFS = [
   { key: 'mo_no', label: 'MO番号', type: 'text', sortOrder: 1 },
@@ -122,12 +162,7 @@ function stubLightScope() {
   mockPrisma.business.findUnique.mockResolvedValue({
     businessConfig: {
       customerFields: CUSTOMER_FIELD_DEFS,
-      projectFields: [
-        { key: 'unit_count', label: '台数', type: 'number' },
-        { key: 'purchase_unit_price', label: '購入単価', type: 'number' },
-        // ライト事業の購入金額は「購入単価 × 台数」の数式項目
-        { key: 'purchase_amount', label: '購入金額', type: 'formula', formula: 'purchase_unit_price * unit_count' },
-      ],
+      projectFields: PROJECT_FIELD_DEFS,
     },
   });
   mockPrisma.project.findFirst.mockResolvedValue({
@@ -1999,5 +2034,216 @@ describe('案件の営業担当', () => {
 
     expect(res.status).toBe(422);
     expect(mockPrisma.project.update).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// 15. 案件のカスタム項目を全部読み書きする（両方向で同じ値にする）
+// ============================================================================
+
+describe('案件のカスタム項目', () => {
+  it('読み出しに全項目と定義が入る（定義順・計算項目は is_formula）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue({
+      ...updatedProject({
+        projectCustomData: {
+          needs: 'A_節税',
+          unit_count: 8,
+          purchase_unit_price: 2_400_000,
+          purchase_amount: 19_200_000,
+          industry_assoc_status: '3_申請済',
+          first_meeting_date: '2026-09-01',
+        },
+      }),
+      customer: { customerCode: 'CST-0001' },
+    });
+
+    const body = await (
+      await PROJECT_GET(
+        request('/api/integrations/projects/LIGHT-0077', { token: READ_TOKEN }),
+        projectParams(),
+      )
+    ).json();
+
+    // 定義順・キーは落とさない（未入力は null）
+    expect(Object.keys(body.custom_fields)).toEqual([
+      'needs', 'purchase_unit_price', 'unit_count', 'purchase_amount',
+      'industry_assoc_status', 'tax_incentive_status', 'first_meeting_date',
+    ]);
+    expect(body.custom_fields.industry_assoc_status).toBe('3_申請済');
+    expect(body.custom_fields.tax_incentive_status).toBeNull();
+    expect(body.custom_fields.first_meeting_date).toBe('2026-09-01');
+
+    // 定義も値と同じ並び・同じキー集合
+    expect(body.project_custom_field_defs.map((d: { key: string }) => d.key)).toEqual(
+      Object.keys(body.custom_fields),
+    );
+    const industryAssoc = body.project_custom_field_defs.find(
+      (d: { key: string }) => d.key === 'industry_assoc_status',
+    );
+    expect(industryAssoc).toEqual({
+      key: 'industry_assoc_status',
+      label: '工業会ステータス',
+      type: 'select',
+      options: ['1_行政書士共有済', '2_認定書受領', '3_申請済', '4_申請書推進中', '5_未対応', '6_不要'],
+      is_formula: false,
+      sort_order: 13,
+    });
+    const amount = body.project_custom_field_defs.find(
+      (d: { key: string }) => d.key === 'purchase_amount',
+    );
+    expect(amount.is_formula).toBe(true);
+  });
+
+  it('custom_fields で工業会・強化税制まで直せる', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: {
+          version: 4,
+          custom_fields: {
+            industry_assoc_status: '2_認定書受領',
+            tax_incentive_status: '1_認定済',
+            first_meeting_date: '2026-09-01',
+          },
+        },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.project.update.mock.calls[0][0].data as {
+      projectCustomData: Record<string, unknown>;
+    };
+    expect(data.projectCustomData.industry_assoc_status).toBe('2_認定書受領');
+    expect(data.projectCustomData.tax_incentive_status).toBe('1_認定済');
+    expect(data.projectCustomData.first_meeting_date).toBe('2026-09-01');
+    // 送っていない項目は残る（マージ更新）
+    expect(data.projectCustomData.needs).toBe('A_節税');
+  });
+
+  it('トップレベルの専用キーと custom_fields を混ぜて送れる', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: {
+          version: 4,
+          unit_count: 9,
+          custom_fields: { industry_assoc_status: '3_申請済' },
+        },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.project.update.mock.calls[0][0].data as {
+      projectCustomData: Record<string, unknown>;
+    };
+    expect(data.projectCustomData.unit_count).toBe(9);
+    expect(data.projectCustomData.industry_assoc_status).toBe('3_申請済');
+  });
+
+  it('専用キーのある項目を custom_fields で送ると 422', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, custom_fields: { unit_count: 9 } },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.errors[0].field).toBe('custom_fields.unit_count');
+    expect(body.errors[0].message).toContain('unit_count');
+    expect(mockPrisma.project.update).not.toHaveBeenCalled();
+  });
+
+  it('計算項目を custom_fields で送っても 422', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, custom_fields: { purchase_amount: 1_000_000 } },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(422);
+    expect(mockPrisma.project.update).not.toHaveBeenCalled();
+  });
+
+  it('定義に無いキー・選択肢違反・型違いは 422', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+
+    for (const custom of [
+      { no_such_field: 'x' },
+      { industry_assoc_status: '9_知らない値' },
+      { first_meeting_date: '2026/09/01' },
+    ]) {
+      const res = await PROJECT_PATCH(
+        request('/api/integrations/projects/LIGHT-0077', {
+          method: 'PATCH',
+          body: { version: 4, custom_fields: custom },
+        }),
+        projectParams(),
+      );
+      expect(res.status).toBe(422);
+    }
+    expect(mockPrisma.project.update).not.toHaveBeenCalled();
+  });
+
+  it('null は未入力に戻す', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(
+      existingProject({ projectCustomData: { industry_assoc_status: '3_申請済' } }),
+    );
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, custom_fields: { industry_assoc_status: null } },
+      }),
+      projectParams(),
+    );
+
+    const data = mockPrisma.project.update.mock.calls[0][0].data as {
+      projectCustomData: Record<string, unknown>;
+    };
+    expect(data.projectCustomData.industry_assoc_status).toBeNull();
+  });
+
+  it('PATCH のレスポンスにも全項目と定義が入る', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    const body = await (
+      await PROJECT_PATCH(
+        request('/api/integrations/projects/LIGHT-0077', {
+          method: 'PATCH',
+          body: { version: 4, custom_fields: { industry_assoc_status: '3_申請済' } },
+        }),
+        projectParams(),
+      )
+    ).json();
+
+    expect(Object.keys(body).sort()).toEqual([...ML_PROJECT_ITEM_KEYS].sort());
+    expect(body.project_custom_field_defs.length).toBe(7);
   });
 });

@@ -453,10 +453,16 @@ describe('レスポンス', () => {
     const item = json.items[0];
 
     expect(Object.keys(item).sort()).toEqual([...CONTRACT_ITEM_KEYS].sort());
-    // 必ず入る3つ以外は null
+    // 必ず入る項目と custom_fields（オブジェクト）以外は null
     const alwaysPresent = ['project_no', 'project_url', 'customer_id', 'customer_code', 'customer_url', 'status_code', 'status', 'company_name', 'customer_type'];
     for (const [key, value] of Object.entries(item)) {
+      if (key === 'custom_fields') continue;
       if (!alwaysPresent.includes(key)) expect(value, `${key} は null であるべき`).toBeNull();
+    }
+    // custom_fields も「キーは落とさず値は null」
+    expect(Object.keys(item.custom_fields).length).toBeGreaterThan(0);
+    for (const [key, value] of Object.entries(item.custom_fields)) {
+      expect(value, `custom_fields.${key} は null であるべき`).toBeNull();
     }
   });
 
@@ -534,7 +540,13 @@ describe('meta', () => {
     const response = await GET(buildRequest('?status=purchased'));
     const json = await response.json();
 
-    expect(json.meta).toEqual({ count: 1, excluded_inactive_projects: 2, excluded_inactive_customers: 1 });
+    expect(json.meta).toMatchObject({
+      count: 1,
+      excluded_inactive_projects: 2,
+      excluded_inactive_customers: 1,
+    });
+    // カスタム項目の定義は meta に1回だけ（item ごとには入れない）
+    expect(Array.isArray(json.meta.project_custom_field_defs)).toBe(true);
 
     const where = mockPrisma.project.findMany.mock.calls[0][0].where as Record<string, unknown>;
     expect(where.projectIsActive).toBe(true);

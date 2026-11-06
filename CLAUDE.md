@@ -158,6 +158,10 @@ grep -r "customerDetailConfig" src/app/ src/components/
 
 詳細は `docs/ml-sync-api.md`。設計上の勘所だけここに置く。
 
+- **ライト事業の案件・顧客・顧客担当者は、画面と ML のどちらからでも直せ、いつも同じ値にする**（2026-11-06 石井さん）。**m2 に新しい項目を足したら ML の口にも入れること。** 事業マスタのカスタム項目は定義ごと返しているので項目追加だけなら自動で出るが、専用カラムを足したときは `src/lib/ml-project-fields.ts` / `src/lib/ml-customer-fields.ts` と仕様書の受付項目表に手で足す。閉じる項目は**理由を仕様書に書く**（今閉じているのは計算項目・表示用・顧客側の項目・社内の会計・営業担当の割り当て）
+- **カスタム項目の入出力は `src/lib/ml-custom-fields.ts` に集約**。返すのは定義されている項目だけ（取り込みAPIの内部キー `contact_roles` / `mo_no_history` は返さない）、未入力は null でキーは落とさない、値と定義はキー集合も並びも同じ。書き込みは定義と突き合わせ（未定義キー・計算項目・型違い・選択肢違反は422）
+- **専用のトップレベルキーがある項目は `custom_fields` から書かせない**（422）。2経路から違う値が来たときにどちらを採るか決めずに済ませるため。MO番号も同じ扱い（トップレベルの `mo_no` のみ）
+
 - **更新ロジックは画面とMLで共有する**。案件は `src/lib/project-update.ts` の `applyProjectUpdate`、顧客は `src/lib/customer-update.ts` の `applyCustomerUpdate`、担当者は `src/lib/customer-contact-update.ts`。ルートはレスポンス整形と権限チェックだけを持つ。**コピーして別経路を書くと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに入る**
 - **「誰が更新したか」は `UpdateActor`**（`src/lib/update-actor.ts`）に押し出してある。画面は `updated_by` に user.id が入り、ML は FK に載せられないので `integration_change_logs` に `ML：<名前>` と**項目名だけ**を残す（値は残さない）
 - **ML 利用者名のヘッダー（`X-ML-User`）は UTF-8 のパーセントエンコード**。HTTP ヘッダーの値は Latin-1 しか運べないため、日本語をそのまま入れると落ちるか文字化けする

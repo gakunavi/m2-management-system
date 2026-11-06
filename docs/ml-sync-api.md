@@ -19,7 +19,28 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   **MO番号も ML から直せる**（前の番号は履歴に残り、取り込みAPIは前の番号でも顧客を引ける）。
   **本番反映済み（2026-11-06・PR #3・タスク定義 :259）**
 - 2026-11-06 追記2: 顧客の読み出しに**カスタム項目の定義**（名前・種類・選べる値）を足し、
-  案件の読み出しに**営業担当**（`assigned_user_name`）を足した。**この追記分は本番未適用**
+  案件の読み出しに**営業担当**（`assigned_user_name`）を足した。
+  **本番反映済み（2026-11-06・PR #4・タスク定義 :260）**
+- 2026-11-06 追記3: 案件の**事業別カスタム項目を全部**読み書きできるようにした
+  （工業会ステータス・強化税制ステータス・各リースのステータスなど）。定義も返す。
+  契約読み出しAPIにも `custom_fields` と `meta.project_custom_field_defs` を足した。
+  **この追記分は本番未適用**
+
+## 決まり: ライト事業は両方から直せて、いつも同じ値
+
+> 2026-11-06 石井さん：「基本的に全て両方（営業管理システム、ML事業管理システム）から
+> 修正できるようにする」「両方のデータは一致するようにして欲しい」
+
+- **ライト事業の案件・顧客・顧客担当者は、営業管理システムと ML のどちらからでも直せ、
+  いつも同じ値にする。**
+- **m2 に新しい項目を足したら、ML の口にも入れる。** 事業マスタのカスタム項目
+  （`business_config.projectFields` / `customerFields`）は定義ごと返しているので、
+  項目を足しただけなら ML の口にも自動で出る（ML 側のコードも直さなくてよい）。
+  専用カラム（`projects.*` / `customers.*`）を足したときは、このドキュメントの
+  受付項目の表と `src/lib/ml-project-fields.ts` / `src/lib/ml-customer-fields.ts` に
+  手で足すこと
+- 例外（どちらからでも直せない項目）は、理由つきで各章の「受け付けない項目」に書く。
+  **理由を書かずに閉じないこと**
 
 ---
 
@@ -175,9 +196,39 @@ GET /api/integrations/projects/{project_no}
   "operation_contract_date": "2026-09-12",
   "payment_received_date": "2026-09-14",
   "sme_agency_applicant": "株式会社テスト",
+
+  "custom_fields": {
+    "needs": "A_節税",
+    "purchase_unit_price": 2400000,
+    "unit_count": 5,
+    "purchase_amount": 12000000,
+    "industry_assoc_status": "3_申請済",
+    "sme_agency_applicant": "株式会社テスト",
+    "tax_incentive_status": null,
+    "first_meeting_date": "2026-09-01"
+  },
+  "project_custom_field_defs": [
+    { "key": "needs", "label": "ニーズ", "type": "select", "options": ["未定", "A_節税", "B_純投資"], "is_formula": false, "sort_order": 1 },
+    { "key": "purchase_unit_price", "label": "購入単価", "type": "number", "options": null, "is_formula": false, "sort_order": 3 },
+    { "key": "unit_count", "label": "台数", "type": "number", "options": null, "is_formula": false, "sort_order": 4 },
+    { "key": "purchase_amount", "label": "購入金額", "type": "formula", "options": null, "is_formula": true, "sort_order": 5 },
+    { "key": "industry_assoc_status", "label": "工業会ステータス", "type": "select", "options": ["1_行政書士共有済", "2_認定書受領", "3_申請済", "4_申請書推進中", "5_未対応", "6_不要"], "is_formula": false, "sort_order": 13 },
+    { "key": "sme_agency_applicant", "label": "中企庁申請者", "type": "text", "options": null, "is_formula": false, "sort_order": 14 },
+    { "key": "tax_incentive_status", "label": "強化税制ステータス", "type": "select", "options": ["1_認定済", "2_申請中", "3_行政書士引継済", "4_未対応", "5_不要"], "is_formula": false, "sort_order": 15 },
+    { "key": "first_meeting_date", "label": "初回商談日", "type": "date", "options": null, "is_formula": false, "sort_order": 21 }
+  ],
+
   "version": 4
 }
 ```
+
+- `custom_fields` は**事業設定のカスタム項目を全部**（ライト事業は本番で29項目）。
+  トップレベルの専用キー（`needs` / `unit_count` / `unit_price` / 各日付 /
+  `sme_agency_applicant`）と同じ値もここに入る（キー名は m2 の保存キーそのまま。
+  `unit_price` の保存キーは `purchase_unit_price`）
+- `project_custom_field_defs` は入力欄を組むための定義。中身は顧客の
+  `custom_field_defs` と同じ形（4章）
+- **値と定義はキー集合も並びも同じ。** 未入力は null でキーは落とさない
 
 ```bash
 curl -s "https://manage.example.test/api/integrations/projects/LIGHT-0077" \
@@ -208,26 +259,54 @@ PATCH /api/integrations/projects/{project_no}
 | `operation_contract_date` | `YYYY-MM-DD` / null | `project_custom_data.operation_contract_date` |
 | `payment_received_date` | `YYYY-MM-DD` / null | `project_custom_data.payment_received_date` |
 | `sme_agency_applicant` | 文字列 / null | `project_custom_data.sme_agency_applicant` |
+| `custom_fields` | キー → 値（下記） | `project_custom_data.<キー>` |
 | `version` | 整数（**必須**） | 楽観ロック |
 
 **知らないキーは `422`。** ML 側のタイプミスを黙って捨てない（`.strict()`）。
+
+#### `custom_fields`（専用キーの無い項目すべて）
+
+工業会ステータス・強化税制ステータス・各リースのステータス・初回商談日・感謝状関係など、
+上の表に専用キーが無いカスタム項目はここで送る。**計算項目以外は全部書ける。**
+
+```json
+{
+  "version": 4,
+  "custom_fields": {
+    "industry_assoc_status": "2_認定書受領",
+    "tax_incentive_status": "1_認定済",
+    "first_meeting_date": "2026-09-01"
+  }
+}
+```
+
+- 送ったキーだけが差し替わる（マージ更新）。省いたキーは残る
+- `null` / 空文字は「空にする」
+- 定義と突き合わせて検査する。次はすべて `422`（`field` は `custom_fields.<キー>`）:
+  - 定義に無いキー
+  - 計算項目（`is_formula: true`）
+  - **トップレベルに専用キーがある項目**（`unit_count` など）→ そちらで送る。
+    2経路から違う値が来たときにどちらを採るかを決めずに済ませるため
+  - 型違い（数値項目に文字列、`select` に無い選択肢、`date` が `YYYY-MM-DD` でない など）
+- トップレベルの専用キーと `custom_fields` は同時に送ってよい（キーが重ならない限り）
 
 ### 受け付けない項目とその理由
 
 | キー | 理由 |
 |---|---|
-| `purchase_amount` | ライト事業では「購入単価 × 台数」の**計算項目**。送っても m2 が再計算して上書きするため、黙って消えるより `422` で理由を返す。金額を直すには `unit_price` か `unit_count` を直す |
+| 計算項目（`purchase_amount` など `is_formula: true`） | ライト事業の購入金額は「購入単価 × 台数」。送っても m2 が保存前に再計算して上書きするため、黙って消えるより `422` で理由を返す。金額を直すには `unit_price` か `unit_count` を直す |
 | `plan` | ML 側が `needs`（`A_節税` → `A`）から導く値。m2 に項目が無い |
-| `mo_no` | 顧客の事業別カスタム項目。顧客取り込みAPI（`/customers/import`）が正 |
-| `company_name` / `customer_type` | 顧客の項目 → 顧客PATCH（§4） |
+| `mo_no` / `company_name` / `customer_type` / `customer_code` | 顧客の項目 → 顧客PATCH（§4。MO番号もそこで直せる） |
 | `status_label` / `status_changed_at` | 表示用・m2 が自分で打つ値 |
-| `assigned_user_name` | 社内の割り当て。m2 の画面で決める（読むだけ） |
+| `assigned_user_name` | 社内ユーザーへの割り当て。名前だけ書き換えると `project_assigned_user_id`（通知の宛先に使う FK）と食い違う。開けるなら m2 のユーザー一覧を返す口と id での指定が先に必要 |
+| 報酬・自社取り分・収益確定日・解約日・凍結スナップショット | 社内の会計。admin 限定の項目を含み、発行済みの支払明細との整合もあるため ML には開けない |
+| `project_notes` | 案件の備考（専用カラム）。ML の画面に相当する欄が無い。必要なら開ける |
 | 口座・法人番号・インボイス番号・住所・連絡先 | ML は保存しない（ML設計書 4-2「持たないもの」） |
-| `project_notes` / `thank_you_recipient` / `gratitude_certificate_name` | 読み出しAPIは返すが ML の表に無い。写しを持っていない項目は直せない |
 
-この集合は ML リポジトリの `docs/phase1-spec.md` 4-2（`ml.m2_projects` /
-`ml.m2_project_details`）の列と、既存の契約読み出しAPI が返す項目を突き合わせて決めた。
-定義は `src/lib/ml-project-fields.ts`。
+**カスタム項目はこの表の例外以外すべて書ける**（上の「決まり」のとおり）。
+`thank_you_recipient` / `gratitude_certificate_name` / 各リースのステータスなども
+`custom_fields` 経由で直せる。定義は `src/lib/ml-project-fields.ts` と
+`src/lib/ml-custom-fields.ts`。
 
 ### 画面と同じ更新処理を通る
 
@@ -675,6 +754,7 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 | ML 由来の変更履歴 | `src/lib/integration-change-log.ts` |
 | 書き込み口の共通入口（認証・冪等・エラー変換） | `src/lib/integration-write.ts` |
 | 案件の項目定義・整形 | `src/lib/ml-project-fields.ts` |
+| カスタム項目の入出力・定義・検査（顧客・案件で共通） | `src/lib/ml-custom-fields.ts` |
 | 顧客の項目定義・検査・整形 | `src/lib/ml-customer-fields.ts` |
 | 顧客1件の読み出し（業種マスタ・カスタム項目定義） | `src/lib/ml-customer-read.ts` |
 | MO番号の変更・履歴・重複チェック | `src/lib/mo-number.ts` |

@@ -7,6 +7,9 @@
 // キー集合と「生の値をそのまま返す」方針をテストで固定する。
 
 /** クエリの上限。Google スプレッドシート転記では100件ずつ取る想定 */
+import { pickDefinedFields } from '@/lib/ml-custom-fields';
+import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
+
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
@@ -176,6 +179,12 @@ export interface ContractProjectRow {
 }
 
 export interface BuildContractItemOptions {
+  /**
+   * 事業設定のカスタム項目定義（businesses.business_config.projectFields）。
+   * `custom_fields` を定義順・定義どおりのキーで返すのに使う。
+   * 定義そのものはレスポンスの meta に1回だけ入れる（item ごとには繰り返さない）。
+   */
+  projectFieldDefs: ProjectFieldDefinition[];
   businessId: number;
   statusLabel: string;
   projectUrl: string;
@@ -261,6 +270,11 @@ export function buildContractItem(row: ContractProjectRow, options: BuildContrac
     // --- 中企庁申請 ---
     sme_agency_applicant: customValue(data, 'sme_agency_applicant'),
 
+    // --- 事業設定のカスタム項目を全部（上の個別キーと同じ値も含む） ---
+    // 工業会ステータス・強化税制ステータス・各リースのステータスなどはここに入る。
+    // 定義は meta.project_custom_field_defs（item ごとには入れない）
+    custom_fields: pickDefinedFields(options.projectFieldDefs, data),
+
     // --- 口座（平文。ログには出さない） ---
     bank_name: bank?.bankName ?? null,
     bank_branch: bank?.branchName ?? null,
@@ -283,5 +297,6 @@ export const CONTRACT_ITEM_KEYS = [
   'postal_code', 'address', 'corporate_no', 'invoice_no', 'company_phone',
   'thank_you_recipient', 'gratitude_certificate_name',
   'sme_agency_applicant',
+  'custom_fields',
   'bank_name', 'bank_branch', 'account_type', 'account_no', 'account_holder', 'bank_account_scope',
 ] as const;
