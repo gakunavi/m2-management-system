@@ -25,6 +25,8 @@ const { mockPrisma, mockBuildSnapshot, mockCreateNotifications } = vi.hoisted(()
       businessStatusDefinition: model(),
       customer: model(),
       customerBusinessLink: model(),
+      industry: model(),
+      systemSetting: model(),
       customerContact: model(),
       customerContactBusinessLink: model(),
       project: model(),
@@ -46,6 +48,7 @@ vi.mock('@/lib/notification-helper', () => ({
 
 import { GET as PROJECT_GET, PATCH as PROJECT_PATCH } from '@/app/api/integrations/projects/[projectNo]/route';
 import { PATCH as CUSTOMER_PATCH } from '@/app/api/integrations/customers/[id]/route';
+import { GET as CUSTOMER_GET } from '@/app/api/integrations/customers/by-code/[customerCode]/route';
 import {
   GET as CONTACTS_GET,
   POST as CONTACTS_POST,
@@ -56,12 +59,32 @@ import {
 } from '@/app/api/integrations/customers/[id]/contacts/[contactId]/route';
 import { CONTACT_FORBIDDEN_KEYS, CONTACT_ITEM_KEYS } from '@/lib/integration-contacts-read';
 import { ML_PROJECT_ITEM_KEYS } from '@/lib/ml-project-fields';
-import { ML_CUSTOMER_ITEM_KEYS } from '@/lib/ml-customer-fields';
+import {
+  ML_CUSTOMER_FORBIDDEN_KEYS,
+  ML_CUSTOMER_ITEM_KEYS,
+  ML_CUSTOMER_WRITABLE_KEYS,
+} from '@/lib/ml-customer-fields';
 
 const READ_TOKEN = 'readonly-token-xyz';
 const WRITE_TOKEN = 'write-token-abc';
 const BASE = 'https://manage.example.test';
 const LIGHT_BUSINESS = { id: 5, businessCode: 'LIGHT' };
+
+/** 業種マスタ（有効なもの） */
+const INDUSTRIES = ['IT・ソフトウェア', '製造業'];
+
+/** ライト事業の顧客カスタム項目の定義（businesses.business_config.customerFields） */
+const CUSTOMER_FIELD_DEFS = [
+  { key: 'mo_no', label: 'MO番号', type: 'text', sortOrder: 1 },
+  { key: 'machine_count', label: '設置台数', type: 'number', sortOrder: 2 },
+  { key: 'support_plan', label: 'サポート区分', type: 'select', options: ['A', 'B'], sortOrder: 3 },
+  { key: 'mo_rank', label: 'MOランク', type: 'formula', formula: 'machine_count * 2', sortOrder: 4 },
+];
+
+/** 全事業共通の顧客カスタム項目（system_settings.globalCustomerFields） */
+const GLOBAL_CUSTOMER_FIELD_DEFS = [
+  { key: 'intro_route', label: '紹介経路', type: 'text', sortOrder: 1 },
+];
 
 const STATUS_DEFS: Record<string, { statusLabel: string; isRevenueConfirmed: boolean }> = {
   informal_approval: { statusLabel: '3_内諾', isRevenueConfirmed: false },
@@ -86,6 +109,9 @@ function request(
 
 const projectParams = (projectNo = 'LIGHT-0077') => ({ params: Promise.resolve({ projectNo }) });
 const customerParams = (id = 'CST-0001') => ({ params: Promise.resolve({ id }) });
+const customerCodeParams = (customerCode = 'CST-0001') => ({
+  params: Promise.resolve({ customerCode }),
+});
 const contactParams = (id = 'CST-0001', contactId = '31') => ({
   params: Promise.resolve({ id, contactId }),
 });
@@ -95,6 +121,7 @@ function stubLightScope() {
   mockPrisma.business.findFirst.mockResolvedValue(LIGHT_BUSINESS);
   mockPrisma.business.findUnique.mockResolvedValue({
     businessConfig: {
+      customerFields: CUSTOMER_FIELD_DEFS,
       projectFields: [
         { key: 'unit_count', label: '台数', type: 'number' },
         { key: 'purchase_unit_price', label: '購入単価', type: 'number' },
@@ -108,7 +135,21 @@ function stubLightScope() {
     projectNo: 'LIGHT-0077',
     customer: { id: 11, customerCode: 'CST-0001' },
   });
-  mockPrisma.customer.findFirst.mockResolvedValue({ id: 11, customerCode: 'CST-0001' });
+  // 顧客の findFirst は2通り: 対象の特定（顧客コード）と重複チェック（自身を除く同名＋同電話）。
+  // 既定では「重複なし」にする
+  mockPrisma.customer.findFirst.mockImplementation((args: { where?: { id?: unknown } }) =>
+    Promise.resolve(args?.where?.id ? null : { id: 11, customerCode: 'CST-0001' }),
+  );
+  mockPrisma.systemSetting.findUnique.mockResolvedValue({
+    settingValue: JSON.stringify(GLOBAL_CUSTOMER_FIELD_DEFS),
+  });
+  mockPrisma.industry.findMany.mockResolvedValue(
+    INDUSTRIES.map((industryName) => ({ industryName })),
+  );
+  mockPrisma.industry.findFirst.mockImplementation(
+    ({ where }: { where: { industryName: string } }) =>
+      Promise.resolve(INDUSTRIES.includes(where.industryName) ? { id: 3 } : null),
+  );
   mockPrisma.businessStatusDefinition.findFirst.mockImplementation(
     ({ where }: { where: { statusCode: string } }) => {
       const def = STATUS_DEFS[where.statusCode];
@@ -145,6 +186,75 @@ function updatedProject(over: Record<string, unknown> = {}) {
     partner: null,
     ...over,
   };
+}
+
+/** applyCustomerUpdate が楽観ロックで読む行 */
+function customerLockRow(over: Record<string, unknown> = {}) {
+  return {
+    version: 2,
+    customerIsActive: true,
+    customerName: '元の名前',
+    customerPhone: null,
+    customerCustomData: { intro_route: '展示会' },
+    ...over,
+  };
+}
+
+/** ML向けの読み出し（readMlCustomer）が読む行 */
+function customerFullRow(over: Record<string, unknown> = {}) {
+  return {
+    id: 11,
+    customerCode: 'CST-0001',
+    customerName: 'テスト商事',
+    customerSalutation: '御中',
+    customerType: '法人',
+    customerPostalCode: '153-0051',
+    customerAddress: '東京都目黒区中目黒1-1-1',
+    customerPhone: '03-1234-5678',
+    customerFax: null,
+    customerEmail: 'info@example.test',
+    customerWebsite: null,
+    customerCorporateNumber: '1234567890123',
+    customerInvoiceNumber: 'T1234567890123',
+    customerCapital: BigInt(10_000_000),
+    customerEstablishedDate: new Date('2015-04-01T00:00:00.000Z'),
+    customerFiscalMonth: 3,
+    customerFolderUrl: null,
+    customerNotes: null,
+    customerCustomData: { intro_route: '展示会' },
+    version: 3,
+    updatedAt: new Date('2026-11-06T01:00:00.000Z'),
+    industry: { industryName: 'IT・ソフトウェア' },
+    businessLinks: [
+      {
+        linkCustomData: {
+          mo_no: 'MO-0001',
+          machine_count: 2,
+          // 定義に無い＝顧客の画面に出ていない内部データ（取り込みAPIが入れる）
+          contact_roles: { '31': '経理' },
+        },
+      },
+    ],
+    ...over,
+  };
+}
+
+/**
+ * 顧客の findUnique を2通りに出し分ける。
+ * ML向けの読み出しだけが industry を select するので、それで判別する。
+ */
+function stubCustomerReads(
+  lock: Record<string, unknown> = customerLockRow(),
+  full: Record<string, unknown> = customerFullRow(),
+) {
+  mockPrisma.customer.findUnique.mockImplementation((args: { select?: Record<string, unknown> }) =>
+    Promise.resolve(args.select && 'industry' in args.select ? full : lock),
+  );
+  mockPrisma.customer.update.mockResolvedValue({
+    id: 11,
+    customerCode: 'CST-0001',
+    businessLinks: [],
+  });
 }
 
 beforeEach(() => {
@@ -413,21 +523,10 @@ describe('409（楽観ロック）', () => {
 
   it('顧客: version が古ければ 409 と現在値を返す', async () => {
     stubLightScope();
-    mockPrisma.customer.findUnique
-      .mockResolvedValueOnce({
-        version: 9,
-        customerIsActive: true,
-        customerName: '元の名前',
-        customerPhone: null,
-        customerCustomData: {},
-      })
-      .mockResolvedValueOnce({
-        id: 11,
-        customerCode: 'CST-0001',
-        customerName: '元の名前',
-        customerType: '法人',
-        version: 9,
-      });
+    stubCustomerReads(
+      customerLockRow({ version: 9 }),
+      customerFullRow({ version: 9, customerName: '元の名前' }),
+    );
 
     const res = await CUSTOMER_PATCH(
       request('/api/integrations/customers/CST-0001', {
@@ -968,13 +1067,7 @@ describe('画面と同じ更新処理（ステータス変更の副作用）', (
 
   it('顧客PATCH でも画面と同じ重複チェックが効く', async () => {
     stubLightScope();
-    mockPrisma.customer.findUnique.mockResolvedValue({
-      version: 2,
-      customerIsActive: true,
-      customerName: '元の名前',
-      customerPhone: '03-1234-5678',
-      customerCustomData: {},
-    });
+    stubCustomerReads(customerLockRow({ customerPhone: '03-1234-5678' }));
     // 同名＋同電話の別顧客が既にいる
     mockPrisma.customer.findFirst
       .mockResolvedValueOnce({ id: 11, customerCode: 'CST-0001' })
@@ -1168,23 +1261,9 @@ describe('レスポンスのキー集合', () => {
     expect(body.version).toBe(5);
   });
 
-  it('顧客PATCH は仕様どおりのキーを返し、住所・法人番号・口座を含まない', async () => {
+  it('顧客PATCH は読み出しと同じキーを返し、口座を含まない', async () => {
     stubLightScope();
-    mockPrisma.customer.findUnique.mockResolvedValue({
-      version: 2,
-      customerIsActive: true,
-      customerName: '元の名前',
-      customerPhone: null,
-      customerCustomData: {},
-    });
-    mockPrisma.customer.update.mockResolvedValue({
-      id: 11,
-      customerCode: 'CST-0001',
-      customerName: 'テスト商事',
-      customerType: '法人',
-      version: 3,
-      businessLinks: [],
-    });
+    stubCustomerReads();
 
     const res = await CUSTOMER_PATCH(
       request('/api/integrations/customers/CST-0001', {
@@ -1196,5 +1275,387 @@ describe('レスポンスのキー集合', () => {
     const body = await res.json();
     expect(Object.keys(body).sort()).toEqual([...ML_CUSTOMER_ITEM_KEYS].sort());
     expect(body.version).toBe(3);
+    for (const key of ML_CUSTOMER_FORBIDDEN_KEYS) {
+      expect(body).not.toHaveProperty(key);
+    }
+  });
+});
+
+// ============================================================================
+// 10. 顧客の読み出し（GET /api/integrations/customers/by-code/{customer_code}）
+// ============================================================================
+
+describe('顧客の読み出し', () => {
+  it('読み取り用トークンで通り、書き込み用では 401', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const ok = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+      customerCodeParams(),
+    );
+    expect(ok.status).toBe(200);
+
+    const ng = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: WRITE_TOKEN }),
+      customerCodeParams(),
+    );
+    expect(ng.status).toBe(401);
+  });
+
+  it('ライト事業に紐づかない顧客は 404', async () => {
+    mockPrisma.business.findFirst.mockResolvedValue(LIGHT_BUSINESS);
+    mockPrisma.customer.findFirst.mockResolvedValue(null);
+
+    const res = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-9999', { token: READ_TOKEN }),
+      customerCodeParams('CST-9999'),
+    );
+    expect(res.status).toBe(404);
+    expect(mockPrisma.customer.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('仕様どおりのキーを返す（未入力は null でキーを落とさない）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+      customerCodeParams(),
+    );
+    const body = await res.json();
+
+    expect(Object.keys(body).sort()).toEqual([...ML_CUSTOMER_ITEM_KEYS].sort());
+    expect(body.company_name).toBe('テスト商事');
+    expect(body.address).toBe('東京都目黒区中目黒1-1-1');
+    expect(body.corporate_no).toBe('1234567890123');
+    expect(body.invoice_no).toBe('T1234567890123');
+    expect(body.capital).toBe(10_000_000);
+    expect(body.established_on).toBe('2015-04-01');
+    expect(body.fiscal_month).toBe(3);
+    expect(body.industry).toBe('IT・ソフトウェア');
+    expect(body.industry_options).toEqual(INDUSTRIES);
+    expect(body.customer_url).toBe(`${BASE}/customers/11`);
+    expect(body.version).toBe(3);
+    // 未入力でもキーは落とさない
+    expect(body.company_fax).toBeNull();
+    expect(body.website).toBeNull();
+    expect(body.folder_url).toBeNull();
+    expect(body.customer_notes).toBeNull();
+  });
+
+  it('口座は返さない', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+      customerCodeParams(),
+    );
+    const body = await res.json();
+
+    for (const key of ML_CUSTOMER_FORBIDDEN_KEYS) {
+      expect(body).not.toHaveProperty(key);
+    }
+    // 口座の select 自体していない（将来 select を足したときに気づけるように）
+    const selects = mockPrisma.customer.findUnique.mock.calls.map((call: unknown[]) =>
+      Object.keys((call[0] as { select?: Record<string, unknown> }).select ?? {}),
+    );
+    for (const keys of selects) {
+      expect(keys).not.toContain('bankAccounts');
+    }
+  });
+
+  it('事業別の項目は定義されたものだけを返す（内部データは返さない）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+      customerCodeParams(),
+    );
+    const body = await res.json();
+
+    expect(body.mo_no).toBe('MO-0001');
+    expect(Object.keys(body.custom_fields)).toEqual([
+      'mo_no', 'machine_count', 'support_plan', 'mo_rank',
+    ]);
+    expect(body.custom_fields.machine_count).toBe(2);
+    // 値が無い定義も null で埋める
+    expect(body.custom_fields.support_plan).toBeNull();
+    // 顧客の画面に出ていない内部データ（取り込みAPIが入れる）は返さない
+    expect(body.custom_fields).not.toHaveProperty('contact_roles');
+    expect(JSON.stringify(body)).not.toContain('contact_roles');
+    expect(body.global_custom_fields).toEqual({ intro_route: '展示会' });
+  });
+
+  it('ライト事業のリンクが読めなくても事業別の項目は null で返る', async () => {
+    stubLightScope();
+    stubCustomerReads(customerLockRow(), customerFullRow({ businessLinks: [] }));
+
+    const res = await CUSTOMER_GET(
+      request('/api/integrations/customers/by-code/CST-0001', { token: READ_TOKEN }),
+      customerCodeParams(),
+    );
+    const body = await res.json();
+    expect(body.mo_no).toBeNull();
+    expect(body.custom_fields.mo_no).toBeNull();
+  });
+});
+
+// ============================================================================
+// 11. 顧客PATCH の受付項目（画面で人が直せる項目を全部）
+// ============================================================================
+
+describe('顧客PATCH の受付項目', () => {
+  it('住所・番号・業種・カスタム項目まで1回で直せる', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    mockPrisma.customerBusinessLink.findUnique.mockResolvedValue({
+      id: 77,
+      linkCustomData: { mo_no: 'MO-0001', machine_count: 2 },
+    });
+    mockPrisma.customerBusinessLink.findMany.mockResolvedValue([
+      { businessId: 5, linkCustomData: { mo_no: 'MO-0001', machine_count: 4 } },
+    ]);
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: {
+          version: 2,
+          company_name: 'テスト商事',
+          customer_salutation: '御中',
+          customer_type: '法人',
+          postal_code: '153-0051',
+          address: '東京都目黒区中目黒1-1-1',
+          company_phone: '03-1234-5678',
+          company_fax: '03-1234-5679',
+          company_email: 'info@example.test',
+          website: 'https://example.test',
+          corporate_no: '1234567890123',
+          invoice_no: 'T1234567890123',
+          capital: 10_000_000,
+          established_on: '2015-04-01',
+          fiscal_month: 3,
+          industry: '製造業',
+          folder_url: 'https://drive.example.test/folders/abc',
+          customer_notes: '紹介経由',
+          custom_fields: { machine_count: 4, support_plan: 'B' },
+          global_custom_fields: { intro_route: '展示会' },
+        },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.customer.update.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.customerName).toBe('テスト商事');
+    expect(data.customerSalutation).toBe('御中');
+    expect(data.customerPostalCode).toBe('153-0051');
+    expect(data.customerAddress).toBe('東京都目黒区中目黒1-1-1');
+    expect(data.customerPhone).toBe('03-1234-5678');
+    expect(data.customerFax).toBe('03-1234-5679');
+    expect(data.customerEmail).toBe('info@example.test');
+    expect(data.customerWebsite).toBe('https://example.test');
+    expect(data.customerCorporateNumber).toBe('1234567890123');
+    expect(data.customerInvoiceNumber).toBe('T1234567890123');
+    expect(data.customerCapital).toBe(BigInt(10_000_000));
+    expect(data.customerFiscalMonth).toBe(3);
+    expect(data.customerFolderUrl).toBe('https://drive.example.test/folders/abc');
+    expect(data.customerNotes).toBe('紹介経由');
+    // 業種は名前 → ID に解決して渡す
+    expect(data.industryId).toBe(3);
+    // グローバルのカスタム項目は既存値にマージ
+    expect(data.customerCustomData).toEqual({ intro_route: '展示会' });
+    // 事業別のカスタム項目は中間テーブル側（businessId で特定）
+    expect(mockPrisma.customerBusinessLink.update).toHaveBeenCalledWith({
+      where: { id: 77 },
+      data: { linkCustomData: { mo_no: 'MO-0001', machine_count: 4, support_plan: 'B' } },
+    });
+  });
+
+  it('受け付けるキーの一覧が仕様と揃っている', () => {
+    // 読み出しのキーのうち、人が直せないもの以外は全部書ける
+    const readOnly = [
+      'customer_code', 'customer_url', 'mo_no', 'industry_options', 'version', 'updated_at',
+    ];
+    const expected = ML_CUSTOMER_ITEM_KEYS.filter((k) => !readOnly.includes(k));
+    expect([...ML_CUSTOMER_WRITABLE_KEYS].sort()).toEqual([...expected].sort());
+  });
+
+  it('空文字は null として保存する（未入力に戻す）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, company_fax: '', address: '', website: '', industry: '' },
+      }),
+      customerParams(),
+    );
+
+    const data = mockPrisma.customer.update.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.customerFax).toBeNull();
+    expect(data.customerAddress).toBeNull();
+    expect(data.customerWebsite).toBeNull();
+    expect(data.industryId).toBeNull();
+  });
+
+  it('登録されていない業種は 422（選べる値を返す）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, industry: '宇宙開発' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.errors[0].field).toBe('industry');
+    expect(body.errors[0].message).toContain('製造業');
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('メールアドレス・URL の形式違反は 422', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    for (const body of [
+      { version: 2, company_email: 'not-an-email' },
+      { version: 2, website: 'example.test' },
+      { version: 2, folder_url: 'drive/abc' },
+      { version: 2, established_on: '2015/04/01' },
+      { version: 2, fiscal_month: 13 },
+      { version: 2, capital: -1 },
+    ]) {
+      const res = await CUSTOMER_PATCH(
+        request('/api/integrations/customers/CST-0001', { method: 'PATCH', body }),
+        customerParams(),
+      );
+      expect(res.status).toBe(422);
+    }
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('定義に無いカスタム項目は 422', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, custom_fields: { no_such_field: 'x' } },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.errors[0].field).toBe('custom_fields.no_such_field');
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('MO番号は 422（取り込みAPIがキーとして使うため直させない）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, custom_fields: { mo_no: 'MO-9999' } },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.errors[0].field).toBe('custom_fields.mo_no');
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+    expect(mockPrisma.customerBusinessLink.update).not.toHaveBeenCalled();
+  });
+
+  it('計算項目は 422', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, custom_fields: { mo_rank: 8 } },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(422);
+    expect((await res.json()).errors[0].field).toBe('custom_fields.mo_rank');
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('カスタム項目の型違い・選択肢違反は 422', async () => {
+    stubLightScope();
+    stubCustomerReads();
+
+    for (const custom of [{ machine_count: '4台' }, { support_plan: 'C' }]) {
+      const res = await CUSTOMER_PATCH(
+        request('/api/integrations/customers/CST-0001', {
+          method: 'PATCH',
+          body: { version: 2, custom_fields: custom },
+        }),
+        customerParams(),
+      );
+      expect(res.status).toBe(422);
+    }
+    expect(mockPrisma.customer.update).not.toHaveBeenCalled();
+  });
+
+  it('変更履歴にはカスタム項目のキーまで残る（値は残さない）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    mockPrisma.customerBusinessLink.findUnique.mockResolvedValue({ id: 77, linkCustomData: {} });
+    mockPrisma.customerBusinessLink.findMany.mockResolvedValue([]);
+
+    await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        mlUser: '鈴木花子',
+        body: {
+          version: 2,
+          address: '東京都目黒区中目黒1-1-1',
+          custom_fields: { machine_count: 4 },
+        },
+      }),
+      customerParams(),
+    );
+
+    const data = mockPrisma.integrationChangeLog.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.actorLabel).toBe('ML：鈴木花子');
+    expect(data.entityType).toBe('customer');
+    expect(data.changedFields).toEqual(['address', 'custom_fields.machine_count']);
+    expect(JSON.stringify(data)).not.toContain('中目黒');
+  });
+
+  it('ML から直した変更は ML へ通知し返さない（ループ防止）', async () => {
+    stubLightScope();
+    stubCustomerReads();
+    // 通知の設定は揃っている状態にする（それでも ML 由来なので送らない）
+    process.env.ML_WEBHOOK_URL = 'https://ml.example.test/webhooks/m2';
+    process.env.ML_WEBHOOK_SECRET = 'shhh';
+
+    const res = await CUSTOMER_PATCH(
+      request('/api/integrations/customers/CST-0001', {
+        method: 'PATCH',
+        body: { version: 2, address: '東京都目黒区中目黒1-1-1' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockPrisma.integrationOutboxEvent.create).not.toHaveBeenCalled();
   });
 });

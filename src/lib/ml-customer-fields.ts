@@ -1,22 +1,128 @@
 // ============================================
-// ML管理システムが書き戻せる顧客項目
+// ML管理システムが読み書きする顧客項目
 // ============================================
 //
-// ML が顧客について持っているのは `ml.m2_project_details` の `company_name` と
-// `customer_type` だけ（設計書 `docs/phase1-spec.md` 4-2。住所・法人番号・
-// インボイス番号・連絡先は「持たないもの」として取り込み時に捨てている）。
-// 写しを持っていない項目は ML の画面に出ていないので、直す口も開けない。
+// ML の MO（マシンオーナー）詳細画面が、顧客の画面に出ている項目をそのまま表示・
+// 編集する。そのため**口座以外は全部返す／人が直す項目は全部受け付ける**。
 //
-// キー名は契約読み出しAPI（`GET /api/integrations/contracts`）と揃える。
+// 返さないもの:
+//   - 口座（銀行名・支店・種別・口座番号・名義）。読み出しは既存の
+//     `GET /api/integrations/contracts` と取り込み検算用の数値ID GET だけが返す
+//
+// 受け付けないもの（それぞれ理由がある）:
+//   - `customer_code` … m2 の採番。変えると ML 側の紐づけが切れる
+//   - `customer_url` / `updated_at` … m2 が決める値
+//   - `mo_no`        … 顧客取り込みAPI（`POST /api/integrations/customers/import`）が
+//                      これをキーに顧客を引く。ここで改名すると次の取り込みが
+//                      同じ MO の顧客を見つけられず、もう1件作ってしまう
+//   - 計算項目（type: 'formula'） … 入力値ではない
+//
+// キー名は契約読み出しAPI（`GET /api/integrations/contracts`）と揃える。ML が
+// 「読むときの名前」と「書くときの名前」を2つ覚えなくて済むようにするため。
+// 電話・FAX・メールが `company_` 接頭辞なのは、担当者の `phone` / `email` と
+// 区別するためで、読み出しAPIの `company_phone` に倣っている。
 
 import { z } from 'zod';
+import { ApiError } from '@/lib/error-handler';
+import type { EntityFieldDefinition } from '@/types/dynamic-fields';
+
+/** MO番号のキー（事業別カスタム項目。取り込みAPIが所有するため書き込み不可） */
+export const MO_NO_KEY = 'mo_no';
+
+export const CUSTOMER_TYPES = ['法人', '個人事業主', '個人', '確認中', '未設定'] as const;
+
+// ============================================
+// 値の形
+// ============================================
+
+const DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** 任意の文字列（空文字は「空にする」の意味。保存時に null へ寄せる） */
+const text = (max: number, label: string) =>
+  z.string().max(max, `${label}は${max}文字以内で指定してください`).nullable().optional();
+
+/** 長さ上限の無い自由記述（住所・備考） */
+const longText = z.string().nullable().optional();
+
+/** 形式チェックつきの文字列。空文字・null は「空にする」 */
+function formatted(max: number, label: string, check: (v: string) => boolean, message: string) {
+  return z
+    .string()
+    .max(max, `${label}は${max}文字以内で指定してください`)
+    .nullable()
+    .optional()
+    .refine((v) => v == null || v === '' || check(v), { message });
+}
+
+const isEmail = (v: string) => z.string().email().safeParse(v).success;
+const isUrl = (v: string) => z.string().url().safeParse(v).success;
+
+const dateOnly = z
+  .string()
+  .nullable()
+  .optional()
+  .refine((v) => v == null || v === '' || DATE_PATTERN.test(v), {
+    message: '日付は YYYY-MM-DD 形式で指定してください',
+  });
+
+/** カスタム項目の値。型の妥当性は定義（EntityFieldDefinition）側で見る */
+const customFieldValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 export const mlCustomerPatchSchema = z
   .object({
     /** 社名（m2 の customer_name） */
-    company_name: z.string().min(1, '社名は必須です').max(200).optional(),
-    /** 法人／個人事業主／個人（m2 の customer_type） */
-    customer_type: z.enum(['法人', '個人事業主', '個人', '確認中', '未設定']).optional(),
+    company_name: z.string().min(1, '社名は必須です').max(200, '社名は200文字以内で指定してください').optional(),
+    /** 呼称（御中・様 など） */
+    customer_salutation: text(100, '呼称'),
+    /** 法人／個人事業主／個人 */
+    customer_type: z.enum(CUSTOMER_TYPES).optional(),
+    /** 郵便番号 */
+    postal_code: text(10, '郵便番号'),
+    /** 住所 */
+    address: longText,
+    /** 会社の電話番号 */
+    company_phone: text(20, '電話番号'),
+    /** 会社のFAX番号 */
+    company_fax: text(20, 'FAX番号'),
+    /** 会社のメールアドレス */
+    company_email: formatted(255, 'メールアドレス', isEmail, 'メールアドレスの形式が正しくありません'),
+    /** ホームページ */
+    website: formatted(500, 'ホームページ', isUrl, 'ホームページは http(s):// から始まるURLで指定してください'),
+    /** 法人番号（「なし」「申請中」も入るため自由記述） */
+    corporate_no: text(100, '法人番号'),
+    /** インボイス番号（同じく自由記述） */
+    invoice_no: text(100, 'インボイス番号'),
+    /** 資本金（円） */
+    capital: z
+      .number()
+      .int('資本金は整数で指定してください')
+      .min(0, '資本金は0以上で指定してください')
+      .nullable()
+      .optional(),
+    /** 設立日 */
+    established_on: dateOnly,
+    /** 決算月（1-12） */
+    fiscal_month: z
+      .number()
+      .int('決算月は整数で指定してください')
+      .min(1, '決算月は1〜12で指定してください')
+      .max(12, '決算月は1〜12で指定してください')
+      .nullable()
+      .optional(),
+    /**
+     * 業種。**名前**で指定する（m2 の業種マスタに登録されている名前）。
+     * 読み出しレスポンスの `industry_options` が選べる名前の一覧。
+     */
+    industry: text(100, '業種'),
+    /** 顧客フォルダのURL */
+    folder_url: formatted(500, '顧客フォルダ', isUrl, '顧客フォルダは http(s):// から始まるURLで指定してください'),
+    /** 備考 */
+    customer_notes: longText,
+    /** ライト事業の事業別カスタム項目（customer_business_links.link_custom_data） */
+    custom_fields: z.record(customFieldValue).optional(),
+    /** 全事業共通のカスタム項目（customers.customer_custom_data） */
+    global_custom_fields: z.record(customFieldValue).optional(),
     /** 楽観ロック。編集前に読んだ顧客の version */
     version: z.number().int().min(1),
   })
@@ -25,51 +131,318 @@ export const mlCustomerPatchSchema = z
 
 export type MlCustomerPatchInput = z.infer<typeof mlCustomerPatchSchema>;
 
+/** ML のキー → m2 のカラム名 */
+const COLUMN_MAP = {
+  company_name: 'customerName',
+  customer_salutation: 'customerSalutation',
+  customer_type: 'customerType',
+  postal_code: 'customerPostalCode',
+  address: 'customerAddress',
+  company_phone: 'customerPhone',
+  company_fax: 'customerFax',
+  company_email: 'customerEmail',
+  website: 'customerWebsite',
+  corporate_no: 'customerCorporateNumber',
+  invoice_no: 'customerInvoiceNumber',
+  capital: 'customerCapital',
+  established_on: 'customerEstablishedDate',
+  fiscal_month: 'customerFiscalMonth',
+  folder_url: 'customerFolderUrl',
+  customer_notes: 'customerNotes',
+} as const;
+
 /** ML が書き戻せるキーの一覧（仕様書とのドリフト検知に使う） */
-export const ML_CUSTOMER_WRITABLE_KEYS = ['company_name', 'customer_type'] as const;
+export const ML_CUSTOMER_WRITABLE_KEYS = [
+  ...Object.keys(COLUMN_MAP),
+  'industry',
+  'custom_fields',
+  'global_custom_fields',
+] as const;
 
-export interface CustomerUpdateBody {
-  version: number;
-  customerName?: string;
-  customerType?: string;
+export interface ToCustomerUpdateBodyOptions {
+  /** ライト事業のID。`custom_fields` を書くとき中間テーブルの特定に必要 */
+  businessId: number;
+  /**
+   * `industry`（名前）を解決した業種ID。
+   * `industry` が送られていないときは undefined を渡す（カラムに触らない）。
+   */
+  industryId?: number | null;
 }
 
-/** ML のリクエストを共通更新処理（`applyCustomerUpdate`）のボディへ変換する */
-export function toCustomerUpdateBody(input: MlCustomerPatchInput): CustomerUpdateBody {
-  return {
-    version: input.version,
-    ...(input.company_name !== undefined ? { customerName: input.company_name } : {}),
-    ...(input.customer_type !== undefined ? { customerType: input.customer_type } : {}),
-  };
+/**
+ * ML のリクエストを共通更新処理（`applyCustomerUpdate`）のボディへ変換する。
+ *
+ * 空文字は null へ寄せる（m2 側は未入力を null で持つ。'' のまま渡すと
+ * 「空文字という値」が入り、画面の未入力判定と食い違う）。
+ */
+export function toCustomerUpdateBody(
+  input: MlCustomerPatchInput,
+  options: ToCustomerUpdateBodyOptions,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { version: input.version };
+
+  for (const [mlKey, column] of Object.entries(COLUMN_MAP)) {
+    const value = input[mlKey as keyof MlCustomerPatchInput];
+    if (value === undefined) continue;
+    body[column] = value === '' ? null : value;
+  }
+
+  if (input.industry !== undefined) body.industryId = options.industryId ?? null;
+
+  // カスタムデータは共通側がマージ更新する（送られたキーだけ差し替わる）
+  if (input.custom_fields !== undefined) {
+    body.linkCustomData = normalizeCustomPatch(input.custom_fields);
+    body.businessId = options.businessId;
+  }
+  if (input.global_custom_fields !== undefined) {
+    body.customerCustomData = normalizeCustomPatch(input.global_custom_fields);
+  }
+
+  return body;
 }
+
+/** カスタム項目の空文字は null にして保存する（読み出しが null を返す形に合わせる） */
+function normalizeCustomPatch(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    out[key] = value === '' ? null : value;
+  }
+  return out;
+}
+
+// ============================================
+// カスタム項目の検査
+// ============================================
+
+export interface AssertCustomFieldsOptions {
+  /** エラーの field に出す接頭辞（'custom_fields' / 'global_custom_fields'） */
+  scope: 'custom_fields' | 'global_custom_fields';
+  /** 定義はあるが書き込みを受け付けないキー（MO番号） */
+  readOnlyKeys?: readonly string[];
+}
+
+/**
+ * カスタム項目への書き込みを定義と突き合わせる。
+ *
+ * - 定義に無いキー → 422（ML のタイプミス。黙って保存すると画面に出ない値が貯まる）
+ * - 計算項目        → 422（入力値ではない）
+ * - MO番号          → 422（取り込みAPIがキーとして使う。上部のコメント参照）
+ * - 型違い          → 422（数値項目に文字列、select に無い選択肢 など）
+ */
+export function assertCustomFieldsWritable(
+  patch: Record<string, unknown>,
+  defs: EntityFieldDefinition[],
+  options: AssertCustomFieldsOptions,
+): void {
+  const byKey = new Map(defs.map((d) => [d.key, d]));
+  const readOnly = new Set(options.readOnlyKeys ?? []);
+  const errors: Array<{ field: string; message: string }> = [];
+  const field = (key: string) => `${options.scope}.${key}`;
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (readOnly.has(key)) {
+      errors.push({
+        field: field(key),
+        message:
+          key === MO_NO_KEY
+            ? 'MO番号は顧客取り込みAPIが管理する項目のため、ここからは更新できません'
+            : `${key} は読み取り専用の項目です`,
+      });
+      continue;
+    }
+
+    const def = byKey.get(key);
+    if (!def) {
+      errors.push({
+        field: field(key),
+        message: `${key} は営業管理システムに登録されていない項目です`,
+      });
+      continue;
+    }
+
+    if (def.type === 'formula') {
+      errors.push({
+        field: field(key),
+        message: `${def.label} は他の項目から計算される項目のため更新できません（計算元の項目を更新してください）`,
+      });
+      continue;
+    }
+
+    const typeError = checkCustomValue(def, value);
+    if (typeError) errors.push({ field: field(key), message: typeError });
+  }
+
+  if (errors.length > 0) throw ApiError.badRequest('カスタム項目の値が不正です', errors);
+}
+
+/** 定義の型に対して値が妥当か。問題なければ null */
+function checkCustomValue(def: EntityFieldDefinition, value: unknown): string | null {
+  // null / 空文字はどの型でも「空にする」
+  if (value === null || value === '') return null;
+
+  switch (def.type) {
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+        ? null
+        : `${def.label}は数値で指定してください`;
+    case 'checkbox':
+      return typeof value === 'boolean' ? null : `${def.label}は true / false で指定してください`;
+    case 'select':
+      if (typeof value !== 'string') return `${def.label}は文字列で指定してください`;
+      if (def.options && def.options.length > 0 && !def.options.includes(value)) {
+        return `${def.label}は次のいずれかで指定してください: ${def.options.join(' / ')}`;
+      }
+      return null;
+    case 'date':
+      return typeof value === 'string' && DATE_PATTERN.test(value)
+        ? null
+        : `${def.label}は YYYY-MM-DD 形式で指定してください`;
+    case 'month':
+      return typeof value === 'string' && MONTH_PATTERN.test(value)
+        ? null
+        : `${def.label}は YYYY-MM 形式で指定してください`;
+    case 'url':
+      if (typeof value !== 'string') return `${def.label}は文字列で指定してください`;
+      return isUrl(value) ? null : `${def.label}は http(s):// から始まるURLで指定してください`;
+    default:
+      return typeof value === 'string' ? null : `${def.label}は文字列で指定してください`;
+  }
+}
+
+// ============================================
+// レスポンスの整形
+// ============================================
 
 export interface MlCustomerItemSource {
+  id: number;
   customerCode: string;
   customerName: string;
+  customerSalutation: string | null;
   customerType: string;
+  customerPostalCode: string | null;
+  customerAddress: string | null;
+  customerPhone: string | null;
+  customerFax: string | null;
+  customerEmail: string | null;
+  customerWebsite: string | null;
+  customerCorporateNumber: string | null;
+  customerInvoiceNumber: string | null;
+  customerCapital: bigint | null;
+  customerEstablishedDate: Date | null;
+  customerFiscalMonth: number | null;
+  customerFolderUrl: string | null;
+  customerNotes: string | null;
+  customerCustomData: unknown;
   version: number;
+  updatedAt: Date;
+  industry: { industryName: string } | null;
+  /** ライト事業のリンク（0件なら事業別項目は全部 null になる） */
+  businessLinks: Array<{ linkCustomData: unknown }>;
+}
+
+export interface BuildMlCustomerItemOptions {
+  customerUrl: string;
+  /** 事業別カスタム項目の定義（businesses.business_config.customerFields） */
+  linkFieldDefs: EntityFieldDefinition[];
+  /** 全事業共通のカスタム項目の定義（system_settings.globalCustomerFields） */
+  globalFieldDefs: EntityFieldDefinition[];
+  /** 業種に指定できる名前の一覧（有効な業種マスタ） */
+  industryOptions: string[];
 }
 
 /**
  * ML へ返す顧客1件。
  *
- * PATCH のレスポンスと 409 の `current` で同じ形を使う。`version` を必ず含める。
- * 住所・法人番号・インボイス番号・口座は返さない。
+ * 読み出し（GET）・PATCH のレスポンス・409 の `current` で同じ形を使う。
+ * **キーは落とさない**（未入力は null）。ML が画面の欄を固定で埋めるため。
  */
 export function buildMlCustomerItem(
   row: MlCustomerItemSource,
-  options: { customerUrl: string },
+  options: BuildMlCustomerItemOptions,
 ) {
+  const linkData = asRecord(row.businessLinks[0]?.linkCustomData);
+  const globalData = asRecord(row.customerCustomData);
+
   return {
     customer_code: row.customerCode,
     customer_url: options.customerUrl,
+    /** MO番号（事業別カスタム項目。読み取り専用。`custom_fields` にも同じ値が入る） */
+    mo_no: emptyToNull(linkData[MO_NO_KEY]),
+
     company_name: row.customerName,
+    customer_salutation: row.customerSalutation,
     customer_type: row.customerType,
+
+    postal_code: row.customerPostalCode,
+    address: row.customerAddress,
+    company_phone: row.customerPhone,
+    company_fax: row.customerFax,
+    company_email: row.customerEmail,
+    website: row.customerWebsite,
+
+    corporate_no: row.customerCorporateNumber,
+    invoice_no: row.customerInvoiceNumber,
+    capital: row.customerCapital !== null ? Number(row.customerCapital) : null,
+    established_on: row.customerEstablishedDate
+      ? row.customerEstablishedDate.toISOString().slice(0, 10)
+      : null,
+    fiscal_month: row.customerFiscalMonth,
+    industry: row.industry?.industryName ?? null,
+    industry_options: options.industryOptions,
+    folder_url: row.customerFolderUrl,
+    customer_notes: row.customerNotes,
+
+    custom_fields: pickDefinedFields(options.linkFieldDefs, linkData),
+    global_custom_fields: pickDefinedFields(options.globalFieldDefs, globalData),
+
     version: row.version,
+    updated_at: row.updatedAt.toISOString(),
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function emptyToNull(value: unknown): unknown {
+  return value === undefined || value === '' ? null : value;
+}
+
+/**
+ * 定義されている項目だけを定義順に並べて返す。
+ *
+ * 定義に無いキー（取り込みAPIが内部的に持たせている `contact_roles` などは
+ * 顧客の画面に出ていない）は返さない。定義があって値が無いキーは null で埋める。
+ */
+function pickDefinedFields(
+  defs: EntityFieldDefinition[],
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const def of [...defs].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))) {
+    out[def.key] = emptyToNull(data[def.key]);
+  }
+  return out;
 }
 
 /** レスポンスが必ず持つキー（テストと仕様書のドリフト検知に使う） */
 export const ML_CUSTOMER_ITEM_KEYS = [
-  'customer_code', 'customer_url', 'company_name', 'customer_type', 'version',
+  'customer_code', 'customer_url', 'mo_no',
+  'company_name', 'customer_salutation', 'customer_type',
+  'postal_code', 'address', 'company_phone', 'company_fax', 'company_email', 'website',
+  'corporate_no', 'invoice_no', 'capital', 'established_on', 'fiscal_month',
+  'industry', 'industry_options', 'folder_url', 'customer_notes',
+  'custom_fields', 'global_custom_fields',
+  'version', 'updated_at',
+] as const;
+
+/**
+ * 絶対に返してはいけないキー。
+ * 整形関数を直したときに口座が混ざらないようテストで固定する。
+ */
+export const ML_CUSTOMER_FORBIDDEN_KEYS = [
+  'bank_name', 'bank_branch', 'branch_name', 'account_type', 'account_no', 'account_holder',
+  'bankAccounts', 'bank_account_scope',
 ] as const;

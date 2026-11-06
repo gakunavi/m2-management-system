@@ -12,10 +12,16 @@ import {
 } from '@/lib/integration-write';
 import { applyCustomerUpdate } from '@/lib/customer-update';
 import {
-  buildMlCustomerItem,
+  assertCustomFieldsWritable,
   mlCustomerPatchSchema,
   toCustomerUpdateBody,
 } from '@/lib/ml-customer-fields';
+import {
+  CUSTOMER_READ_ONLY_LINK_KEYS,
+  loadCustomerFieldDefinitions,
+  readMlCustomer,
+  resolveIndustryId,
+} from '@/lib/ml-customer-read';
 import { recordIntegrationChange } from '@/lib/integration-change-log';
 
 export const dynamic = 'force-dynamic';
@@ -166,30 +172,40 @@ export async function GET(
 // ML管理システムからの顧客の書き戻し。**GET とは引数が違う**: GET は数値ID
 // （取り込み時の読み戻し検算用・既存の挙動）、PATCH は顧客コード（CST-0001）。
 // Next.js は同じ階層で別名の動的セグメントを持てないため、同じ [id] を共有して
-// いる。
+// いる。顧客コードでの読み出しは別の道（by-code/{customer_code}）にある。
 //
 // - 認証: Authorization: Bearer <INTEGRATION_API_TOKEN>（読み取り用では 401）
 // - 変更者: X-ML-User ヘッダー（変更履歴に "ML：<名前>" として残る）
 // - 対象: env INTEGRATION_BUSINESS_CODE（既定 LIGHT）に紐づく顧客のみ。それ以外は 404
 // - 画面と同じ更新処理（src/lib/customer-update.ts）を通る。社名＋電話の重複
 //   チェックもそのまま効く
+// - 受け付ける項目は顧客の画面で人が直せるもの全部（口座・顧客コード・MO番号を除く）。
+//   対応は src/lib/ml-customer-fields.ts に一覧がある
+// - レスポンスは読み出し（by-code）と同じ形。ML が行全体を置き換えても欄が消えない
 // ============================================================================
 
-/** 409 のときに返す現在値 */
-async function currentMlCustomer(customerId: number) {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-    select: { id: true, customerCode: true, customerName: true, customerType: true, version: true },
-  });
-  if (!customer) return null;
-  return buildMlCustomerItem(customer, { customerUrl: customerAdminUrl(customer.id) });
+/** 変更履歴に残す項目名。カスタム項目は `custom_fields.<キー>` まで展開する（値は残さない） */
+function changedFieldNames(input: Record<string, unknown>): string[] {
+  const names: string[] = [];
+  for (const [key, value] of Object.entries(input)) {
+    if (key === 'version') continue;
+    if ((key === 'custom_fields' || key === 'global_custom_fields') && value && typeof value === 'object') {
+      for (const childKey of Object.keys(value as Record<string, unknown>)) {
+        names.push(`${key}.${childKey}`);
+      }
+      continue;
+    }
+    names.push(key);
+  }
+  return names.sort();
 }
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id: customerCode } = await params;
+  const { id: rawCustomerCode } = await params;
+  const customerCode = decodeURIComponent(rawCustomerCode);
   // 認証前に DB を叩かないよう、対象の解決は handler の中まで遅延させる
   const resolveScope = once(() => findIntegrationCustomerByCode(prisma, customerCode));
 
@@ -199,7 +215,11 @@ export async function PATCH(
     logContext: 'ml-customer-write',
     onConflict: async () => {
       const scope = await resolveScope();
-      return scope ? currentMlCustomer(scope.customerId) : null;
+      if (!scope) return null;
+      return readMlCustomer(prisma, {
+        customerId: scope.customerId,
+        businessId: scope.businessId,
+      });
     },
     handler: async ({ actor, body }) => {
       const scope = await resolveScope();
@@ -207,10 +227,30 @@ export async function PATCH(
 
       const input = mlCustomerPatchSchema.parse(body);
 
+      // カスタム項目は定義と突き合わせる（未定義キー・計算項目・MO番号・型違いは 422）
+      if (input.custom_fields !== undefined || input.global_custom_fields !== undefined) {
+        const defs = await loadCustomerFieldDefinitions(prisma, scope.businessId);
+        if (input.custom_fields !== undefined) {
+          assertCustomFieldsWritable(input.custom_fields, defs.link, {
+            scope: 'custom_fields',
+            readOnlyKeys: CUSTOMER_READ_ONLY_LINK_KEYS,
+          });
+        }
+        if (input.global_custom_fields !== undefined) {
+          assertCustomFieldsWritable(input.global_custom_fields, defs.global, {
+            scope: 'global_custom_fields',
+          });
+        }
+      }
+
+      // 業種は名前で届く。登録されていない名前は 422（選べる値を添えて返す）
+      const industryId =
+        input.industry !== undefined ? await resolveIndustryId(prisma, input.industry) : undefined;
+
       // 画面と同じ更新処理
       const updated = await applyCustomerUpdate(prisma, {
         customerId: scope.customerId,
-        body: toCustomerUpdateBody(input) as unknown as Record<string, unknown>,
+        body: toCustomerUpdateBody(input, { businessId: scope.businessId, industryId }),
         actor,
       });
 
@@ -219,13 +259,17 @@ export async function PATCH(
         entityId: updated.id,
         entityKey: updated.customerCode,
         action: 'update',
-        changedFields: Object.keys(input).filter((k) => k !== 'version').sort(),
+        changedFields: changedFieldNames(input),
       });
 
-      return {
-        status: 200,
-        body: buildMlCustomerItem(updated, { customerUrl: customerAdminUrl(updated.id) }),
-      };
+      const item = await readMlCustomer(prisma, {
+        customerId: updated.id,
+        businessId: scope.businessId,
+      });
+      // 直後に読めないのは想定外（更新は成功している）。500 で気づけるようにする
+      if (!item) throw new Error(`更新後の顧客を読み出せませんでした: ${updated.customerCode}`);
+
+      return { status: 200, body: item };
     },
   });
 }
