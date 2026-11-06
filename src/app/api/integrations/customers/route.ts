@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { authorizeIntegrationRequest } from '@/lib/integration-auth';
 import { resolveImportBusiness } from '@/lib/customer-import';
 import { customerAdminUrl } from '@/lib/integration-url';
+import { findCustomerIdsByMoNo } from '@/lib/mo-number';
 import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -59,13 +60,15 @@ export async function GET(request: NextRequest) {
 
     if (moNo) {
       matchedBy = 'mo_no';
-      // MO番号は事業別カスタムデータに入っているため、リンク経由で引く
-      const links = await prisma.customerBusinessLink.findMany({
-        where: { businessId: business.id, linkCustomData: { path: ['mo_no'], equals: moNo } },
-        select: { customerId: true },
+      // MO番号は事業別カスタムデータに入っているため、リンク経由で引く。
+      // **前のMO番号でも当てる。** ここで前の番号を見ないと、番号を変えた顧客が
+      // 「該当なし」になり、取り込み側が allow_create で2件目を作ってしまう。
+      // レスポンスの mo_no は常に**今の番号**なので、呼び出し側は差分に気づける。
+      customerIds = await findCustomerIdsByMoNo(prisma, {
+        businessId: business.id,
+        moNo,
         take: MAX_MATCHES,
       });
-      customerIds = links.map((l) => l.customerId);
       where = { id: { in: customerIds } };
     } else if (corporateNo) {
       matchedBy = 'corporate_no';

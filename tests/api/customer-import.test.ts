@@ -811,3 +811,86 @@ describe('口座の突合', () => {
     expect(findArgs.select.bankAccounts.take).toBeUndefined();
   });
 });
+
+// ============================================
+// 前のMO番号での取り込み（MO番号を変えた顧客）
+//
+// MO番号は画面・ML管理システムから変えられる。今の番号で見つからないときに
+// 前の番号（link_custom_data.mo_no_history）を見ないと、送信側の写しが古いだけで
+// 同じ顧客をもう1件作ってしまう。
+// ============================================
+
+describe('前のMO番号で取り込んだとき', () => {
+  /** 今の番号では当たらず、前の番号で当たる状態 */
+  function setupRenamed() {
+    setupExisting();
+    mockPrisma.customerBusinessLink.findFirst
+      // 1回目: 今の番号で検索 → 当たらない
+      .mockResolvedValueOnce(null)
+      // 2回目: 前の番号で検索 → 当たる
+      .mockResolvedValueOnce({
+        id: 3,
+        customerId: 501,
+        linkCustomData: { mo_no: 'MO-120', mo_no_history: ['MO-79'] },
+      });
+  }
+
+  it('新しい顧客を作らず、同じ顧客を更新する', async () => {
+    setupRenamed();
+
+    const response = await POST(buildRequest({ ...BODY, mo_no: 'MO-79', allow_create: true }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.created).toBe(false);
+    expect(json.id).toBe(501);
+    expect(mockPrisma.customer.create).not.toHaveBeenCalled();
+    expect(mockPrisma.customerBusinessLink.create).not.toHaveBeenCalled();
+  });
+
+  it('前の番号で探していることが分かる（2回目の検索は mo_no_history）', async () => {
+    setupRenamed();
+
+    await POST(buildRequest({ ...BODY, mo_no: 'MO-79', dry_run: true }));
+
+    const calls = mockPrisma.customerBusinessLink.findFirst.mock.calls as Array<[
+      { where: { linkCustomData: { path: string[]; equals?: string; array_contains?: string[] } } },
+    ]>;
+    expect(calls[0][0].where.linkCustomData.path).toEqual(['mo_no']);
+    expect(calls[0][0].where.linkCustomData.equals).toBe('MO-79');
+    expect(calls[1][0].where.linkCustomData.path).toEqual(['mo_no_history']);
+    expect(calls[1][0].where.linkCustomData.array_contains).toEqual(['MO-79']);
+  });
+
+  it('今のMO番号を送信値へ巻き戻さない（変更は人が意図したもの）', async () => {
+    setupRenamed();
+
+    await POST(buildRequest({ ...BODY, mo_no: 'MO-79' }));
+
+    const calls = mockPrisma.customerBusinessLink.update.mock.calls as Array<[
+      { data: { linkCustomData: Record<string, unknown> } },
+    ]>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0].data.linkCustomData.mo_no).toBe('MO-120');
+    expect(calls[0][0].data.linkCustomData.mo_no_history).toEqual(['MO-79']);
+  });
+
+  it('前の番号で当たったことを warnings で知らせる', async () => {
+    setupRenamed();
+
+    const json = await (await POST(buildRequest({ ...BODY, mo_no: 'MO-79', dry_run: true }))).json();
+
+    expect(json.warnings.join('\n')).toContain('MO-79');
+    expect(json.warnings.join('\n')).toContain('MO-120');
+  });
+
+  it('今の番号でも前の番号でも当たらなければ従来どおり 404', async () => {
+    setupNotFound();
+
+    const response = await POST(buildRequest({ ...BODY, mo_no: 'MO-9999' }));
+
+    expect(response.status).toBe(404);
+    expect(mockPrisma.customerBusinessLink.findFirst).toHaveBeenCalledTimes(2);
+    expectNoWrites();
+  });
+});

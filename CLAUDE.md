@@ -165,7 +165,10 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **計算項目への書き戻しは 422 で弾く**。ライト事業の購入金額は「購入単価×台数」の数式項目で、共通の更新処理が保存前に再計算する。受け付けると ML が送った値が黙って消える（`assertNoFormulaFields`）
 - **担当者の楽観ロックは `updated_at`**。`CustomerContact` に `version` カラムが無いため。案件・顧客は `version`
 - **既存の契約読み出しAPI（`GET /api/integrations/contracts`）は version を返さない**。挙動を変えないため足していない。ML は編集直前に `GET /api/integrations/projects/{project_no}` を読む
-- `/api/integrations/customers/[id]` は **GET が数値ID・PATCH が顧客コード**。Next.js が同じ階層で別名の動的セグメントを持てないため同じ `[id]` を共有している
+- `/api/integrations/customers/[id]` は **GET が数値ID・PATCH が顧客コード**。Next.js が同じ階層で別名の動的セグメントを持てないため同じ `[id]` を共有している。顧客コードでの**読み出し**だけ `by-code/{customer_code}` に分けてある（既存の数値ID GET は取り込みの読み戻し検算用で口座を返すため、挙動を変えない）
+- **MO番号は変えられるが、前の番号を必ず残す**。顧客取り込みAPIがこれをキーに顧客を引くため、履歴（`link_custom_data.mo_no_history`・古い順）を残し、取り込み・照合・契約の `mo_no` 絞り込みは「今の番号 → 前の番号」の順で探す。**前の番号で当たったときは今の番号を送信値へ戻さない**（人が意図した変更を巻き戻さない。warningsで知らせる）。他の顧客の今／前の番号との重複は画面400・ML422で止める。実装は `src/lib/mo-number.ts` に集約——**MO番号を読み書きする新しいコードはここを経由すること**
+- ML への入口は**トップレベルの `mo_no` だけ**。`custom_fields.mo_no` は 422（2箇所から違う値が来たときにどちらを採るか決めずに済ませるため）。顧客の他の項目は画面で人が直せるもの全部を受け付ける（`src/lib/ml-customer-fields.ts`）
+- **顧客の業種は名前でやり取りする**。m2 の内部IDを ML に覚えさせないため、読み出しで `industry_options`（選べる名前）も返し、書き込みは名前を解決する。未登録の名前は 422
 - 通知の送信は `integration_outbox_events` 経由。**控えの作成だけ同期**で送信はレスポンス後。本番の cron が実運用されていないため、次の通知の発生時に期限の来た pending 行を拾う
 
 ## 技術スタック

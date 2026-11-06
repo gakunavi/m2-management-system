@@ -10,8 +10,14 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
 - 既存の `/api/integrations/contracts`・`/api/integrations/customers`・
   `/api/integrations/customers/import` の挙動は**変えていない**
 - レート制限: 60回/分/IP（`/api/integrations/**` 共通・ECSタスクごとの計数）
-- ⚠️ **本番未適用。** Prisma マイグレーション
-  `20261105100000_add_ml_bidirectional_sync` は本番DBに当てていない（石井さんの承認後に別途）
+- **本番反映済み（2026-11-05）。** Prisma マイグレーション
+  `20261105100000_add_ml_bidirectional_sync` も本番DBに適用済み。
+  `ML_WEBHOOK_URL` / `ML_WEBHOOK_SECRET` は**意図的に未設定**なので、m2 → ML の通知は
+  no-op（6章）
+- 2026-11-06 追記: ML の MO（マシンオーナー）詳細画面のため、顧客の読み出し口を追加し、
+  顧客の書き戻しを「画面で人が直せる項目全部」へ広げた（4章）。
+  **MO番号も ML から直せる**（前の番号は履歴に残り、取り込みAPIは前の番号でも顧客を引ける）。
+  **この追記分は本番未適用**
 
 ---
 
@@ -256,33 +262,116 @@ curl -s -X PATCH "https://manage.example.test/api/integrations/projects/LIGHT-00
 
 ---
 
-## 4. 顧客を書き戻す（新規・書き込み）
+## 4. 顧客を読む・書き戻す（新規）
 
 ```
-PATCH /api/integrations/customers/{customer_code}
+GET   /api/integrations/customers/by-code/{customer_code}   ← 読み取り用トークン
+PATCH /api/integrations/customers/{customer_code}           ← 書き込み用トークン
 ```
 
-認証: **書き込み用トークン**。
+ML の MO（マシンオーナー）詳細画面が使う。**顧客の画面に出ている項目のうち口座以外を
+全部返し、人が直せる項目は全部受け付ける。**
 
-> ⚠️ 同じパスの `GET /api/integrations/customers/{id}`（既存・取り込みの読み戻し検算用）は
-> **数値ID**を取る。PATCH は**顧客コード**（`CST-0001`）。Next.js は同じ階層で別名の動的
-> セグメントを持てないため、同じ `[id]` を共有している。既存 GET の挙動は変えていない。
+> ⚠️ **読みと書きでパスが違う。**
+> 既存の `GET /api/integrations/customers/{id}`（取り込みの読み戻し検算用）は**数値ID**・
+> 書き込み用トークン・口座あり、で挙動を変えないと決めている。Next.js は同じ階層で別名の
+> 動的セグメント（`[id]` と `[customerCode]`）を持てないため、顧客コードでの**読み出しだけ**
+> `by-code/` の下に置いた。PATCH は既存 `[id]` と同じ階層で顧客コードを取る。
 
-### 受け付ける項目
+### 返す項目
 
-| キー | 型 | m2 の保存先 |
+| キー | 内容 | 直せる |
 |---|---|---|
-| `company_name` | 1〜200文字 | `customers.customer_name` |
-| `customer_type` | `法人` / `個人事業主` / `個人` / `確認中` / `未設定` | `customers.customer_type` |
-| `version` | 整数（**必須**） | 楽観ロック |
+| `customer_code` | m2 の採番コード（`CST-0001`） | × |
+| `customer_url` | 顧客詳細画面のURL | × |
+| `mo_no` | MO番号（`custom_fields.mo_no` と同じ値） | ○（下記） |
+| `mo_no_previous` | 前のMO番号（古い順の配列） | × |
+| `company_name` | 社名 | ○ |
+| `customer_salutation` | 呼称（御中・様 など） | ○ |
+| `customer_type` | `法人` / `個人事業主` / `個人` / `確認中` / `未設定` | ○ |
+| `postal_code` | 郵便番号 | ○ |
+| `address` | 住所 | ○ |
+| `company_phone` | 会社の電話番号 | ○ |
+| `company_fax` | 会社のFAX番号 | ○ |
+| `company_email` | 会社のメールアドレス | ○ |
+| `website` | ホームページ | ○ |
+| `corporate_no` | 法人番号（「なし」「申請中」も入る自由記述） | ○ |
+| `invoice_no` | インボイス番号（同じく自由記述） | ○ |
+| `capital` | 資本金（円・整数） | ○ |
+| `established_on` | 設立日（`YYYY-MM-DD`） | ○ |
+| `fiscal_month` | 決算月（1〜12） | ○ |
+| `industry` | 業種の**名前** | ○ |
+| `industry_options` | 業種に選べる名前の一覧（有効な業種マスタ） | × |
+| `folder_url` | 顧客フォルダのURL | ○ |
+| `customer_notes` | 備考 | ○ |
+| `custom_fields` | ライト事業の事業別カスタム項目（MO番号ほか） | ○ |
+| `global_custom_fields` | 全事業共通のカスタム項目 | ○ |
+| `version` | 楽観ロック用 | × |
+| `updated_at` | 最終更新（ISO 8601） | × |
 
-ML が顧客について持っているのは `ml.m2_project_details` の `company_name` と
-`customer_type` だけ（住所・法人番号・インボイス番号・連絡先は取り込み時に捨てている）。
-写しを持っていない項目は ML の画面に出ていないので、直す口も開けない。知らないキーは `422`。
+- **未入力は `null`。キーは落とさない**（ML が画面の欄を固定で埋めるため）
+- `custom_fields` / `global_custom_fields` は**定義されている項目だけ**を定義順に返す。
+  定義に無いキー（取り込みAPIが内部的に持たせている `contact_roles` など、顧客の画面に
+  出ていないもの）は返さない。定義があって値が無いキーは `null` で埋める
+- **口座（銀行名・支店・種別・口座番号・名義）は返さない。** 口座を返すのは既存の
+  `GET /api/integrations/contracts` と数値ID の GET だけ
+- `industry` は名前でやり取りする（m2 の内部IDを ML に覚えさせない）。
+  選択肢は `industry_options` をそのまま使う
 
-画面の `PATCH /api/v1/customers/[id]` と同じ関数（`src/lib/customer-update.ts` の
-`applyCustomerUpdate`）を通るので、**社名＋電話番号の完全一致の重複チェック**もそのまま
-効く（当たると `409`）。
+### 受け付けない項目とその理由
+
+| キー | 理由 |
+|---|---|
+| `customer_code` | m2 の採番。変えると ML 側の紐づけが切れる |
+| `customer_url` / `updated_at` / `version` の書き換え | m2 が決める値（`version` は送るが更新対象ではない） |
+| `industry_options` | 業種マスタ（顧客の項目ではない） |
+| `custom_fields.mo_no` | MO番号は**トップレベルの `mo_no`** で送る（入口を1つに絞っている）。`custom_fields` 側は `422` |
+| `mo_no_previous` | m2 が自動で積む履歴（直接は書けない） |
+| 計算項目（定義が `type: "formula"`） | 入力値ではない |
+| 口座 | ML は保存しない |
+
+知らないキーは `422`（黙って捨てない。ML 側のタイプミスに気づけるようにする）。
+
+### MO番号（`mo_no`）
+
+MO番号は顧客取り込みAPI（`POST /api/integrations/customers/import`）が**顧客を引くキー**
+なので、変えると次の取り込みで同じ顧客が見つからず、もう1件できてしまう。これを防ぐため:
+
+- **変えると前の番号が `mo_no_previous` に残る**（古い順。何回変えても全部残る）。
+  取り込みAPI・照合API（`GET /api/integrations/customers?mo_no=`）・契約読み出しの
+  `mo_no` 絞り込みは、今の番号で見つからなければ前の番号でも探す
+- **他の顧客の今／前の番号と同じなら `422`**（`field` は `mo_no`）。
+  どの顧客が使っているか分かるよう、相手の顧客コードを添えて返す
+- **`custom_fields.mo_no` は `422`。** トップレベルの `mo_no` で送る（2箇所から違う値が
+  来たときにどちらを採るかを決めずに済ませるため）。読み出しでは両方に同じ値が入る
+- 空文字・`null` を送ると未入力に戻るが、**前の番号は履歴に残る**ので取り込みAPIは
+  引き続き顧客を見つけられる
+- 前後の空白は落として保存する
+
+m2 の画面から変えたときも同じ処理（`src/lib/mo-number.ts`）を通り、同じように履歴が残り、
+重複は止まる（画面は `400`）。画面から変えたときは ML へ `customer.updated` を通知する。
+
+### カスタム項目の検査
+
+`custom_fields` / `global_custom_fields` は定義（m2 の事業マスタ・システム設定）と
+突き合わせる。次はすべて `422`:
+
+- 定義に無いキー → `custom_fields.<キー> は営業管理システムに登録されていない項目です`
+- 計算項目 → `… は他の項目から計算される項目のため更新できません`
+- `mo_no` → `MO番号は顧客取り込みAPIが管理する項目のため、ここからは更新できません`
+- 型違い（数値項目に文字列、`select` に無い選択肢、`date` が `YYYY-MM-DD` でない など）
+
+`field` は `custom_fields.machine_count` のように**送ったキーのまま**返るので、ML は
+そのままセルの下に出せる。
+
+### 値の扱い
+
+- `null` と `""` はどちらも「空にする」。m2 側は未入力を `null` で持つので `""` は `null` に寄せる
+- `custom_fields` は**送ったキーだけ**が差し替わる（マージ更新）。省いたキーは残る
+- 画面の `PATCH /api/v1/customers/[id]` と同じ関数（`src/lib/customer-update.ts` の
+  `applyCustomerUpdate`）を通るので、**社名＋電話番号の完全一致の重複チェック**もそのまま
+  効く（当たると `409`）
+- PATCH のレスポンスは**読み出しと同じ形**。ML が行全体を置き換えても欄が消えない
 
 ### レスポンス
 
@@ -290,21 +379,62 @@ ML が顧客について持っているのは `ml.m2_project_details` の `compa
 {
   "customer_code": "CST-0001",
   "customer_url": "https://manage.example.test/customers/11",
+  "mo_no": "MO-0001",
+  "mo_no_previous": ["MO-0000"],
   "company_name": "テスト商事",
+  "customer_salutation": "御中",
   "customer_type": "法人",
-  "version": 3
+  "postal_code": "153-0051",
+  "address": "東京都目黒区中目黒1-1-1",
+  "company_phone": "03-1234-5678",
+  "company_fax": null,
+  "company_email": "info@example.test",
+  "website": null,
+  "corporate_no": "1234567890123",
+  "invoice_no": "T1234567890123",
+  "capital": 10000000,
+  "established_on": "2015-04-01",
+  "fiscal_month": 3,
+  "industry": "IT・ソフトウェア",
+  "industry_options": ["IT・ソフトウェア", "製造業"],
+  "folder_url": null,
+  "customer_notes": null,
+  "custom_fields": { "mo_no": "MO-0001", "machine_count": 2, "support_plan": null },
+  "global_custom_fields": { "intro_route": "展示会" },
+  "version": 3,
+  "updated_at": "2026-11-06T01:00:00.000Z"
 }
 ```
 
 ### curl
 
 ```bash
+# 1. 読む（編集画面を開く直前。version もここで取る）
+curl -s "https://manage.example.test/api/integrations/customers/by-code/CST-0001" \
+  -H "Authorization: Bearer READONLY_TOKEN_DUMMY"
+```
+
+```bash
+# 2. 書き戻す（直した項目だけ送ればよい）
 curl -s -X PATCH "https://manage.example.test/api/integrations/customers/CST-0001" \
   -H "Authorization: Bearer WRITE_TOKEN_DUMMY" \
   -H "X-ML-User: %E5%B1%B1%E7%94%B0%E5%A4%AA%E9%83%8E" \
-  -H "Idempotency-Key: ml-20261105-0002" \
+  -H "Idempotency-Key: ml-20261106-0002" \
   -H "Content-Type: application/json" \
-  -d '{ "version": 2, "company_name": "テスト商事", "customer_type": "法人" }'
+  -d '{
+        "version": 3,
+        "company_name": "テスト商事",
+        "postal_code": "153-0051",
+        "address": "東京都目黒区中目黒1-1-1",
+        "company_phone": "03-1234-5678",
+        "industry": "製造業",
+        "capital": 10000000,
+        "established_on": "2015-04-01",
+        "fiscal_month": 3,
+        "mo_no": "MO-0002",
+        "custom_fields": { "machine_count": 4, "support_plan": "B" },
+        "global_custom_fields": { "intro_route": "展示会" }
+      }'
 ```
 
 ---
@@ -496,10 +626,14 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 | ML 由来の変更履歴 | `src/lib/integration-change-log.ts` |
 | 書き込み口の共通入口（認証・冪等・エラー変換） | `src/lib/integration-write.ts` |
 | 案件の項目定義・整形 | `src/lib/ml-project-fields.ts` |
-| 顧客の項目定義・整形 | `src/lib/ml-customer-fields.ts` |
+| 顧客の項目定義・検査・整形 | `src/lib/ml-customer-fields.ts` |
+| 顧客1件の読み出し（業種マスタ・カスタム項目定義） | `src/lib/ml-customer-read.ts` |
+| MO番号の変更・履歴・重複チェック | `src/lib/mo-number.ts` |
 | 担当者読み出しの整形 | `src/lib/integration-contacts-read.ts` |
 
-テスト: `tests/api/ml-sync.test.ts`（エンドポイント）/ `tests/lib/ml-notify.test.ts`（通知・履歴）。
+テスト: `tests/api/ml-sync.test.ts`（エンドポイント）/ `tests/lib/ml-notify.test.ts`（通知・履歴）/
+`tests/lib/mo-number.test.ts`（MO番号の履歴）/ `tests/api/customer-mo-number.test.ts`（画面から
+MO番号を変えたとき）/ `tests/api/customer-import.test.ts`（前の番号での取り込み）。
 
 **更新ロジックは画面と共有している。** `applyProjectUpdate` 等をコピーして ML 用に
 書き直すと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに

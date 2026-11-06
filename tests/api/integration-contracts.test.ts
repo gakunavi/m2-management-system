@@ -560,4 +560,34 @@ describe('meta', () => {
     const where = mockPrisma.project.findMany.mock.calls[0][0].where as { customerId: { in: number[] } };
     expect(where.customerId).toEqual({ in: [311] });
   });
+
+  it('mo_no 絞り込みは前のMO番号でも当たる', async () => {
+    // MO番号を変えた顧客。今の番号は MO-120 だが MO-79 でも引けること
+    mockPrisma.customerBusinessLink.findMany.mockResolvedValue([{ customerId: 311 }]);
+
+    await GET(buildRequest('?mo_no=MO-79'));
+
+    const linkWhere = mockPrisma.customerBusinessLink.findMany.mock.calls[0][0].where as {
+      businessId: number;
+      OR: Array<{ linkCustomData: { path: string[]; equals?: string; array_contains?: string[] } }>;
+    };
+    expect(linkWhere.businessId).toBe(5);
+    expect(linkWhere.OR[0].linkCustomData).toEqual({ path: ['mo_no'], equals: 'MO-79' });
+    expect(linkWhere.OR[1].linkCustomData).toEqual({
+      path: ['mo_no_history'],
+      array_contains: ['MO-79'],
+    });
+  });
+
+  it('返す mo_no は今の番号（前の番号で引いても今の番号を返す）', async () => {
+    mockPrisma.customerBusinessLink.findMany.mockResolvedValue([{ customerId: 311 }]);
+    // 今の番号は MO-120（前の番号 MO-79 で引いた）
+    mockPrisma.project.findMany.mockResolvedValue([
+      projectRow({}, { businessLinks: [{ linkCustomData: { mo_no: 'MO-120', mo_no_history: ['MO-79'] } }] }),
+    ]);
+
+    const json = await (await GET(buildRequest('?mo_no=MO-79'))).json();
+
+    expect(json.items[0].mo_no).toBe('MO-120');
+  });
 });

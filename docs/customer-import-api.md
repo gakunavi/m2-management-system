@@ -15,6 +15,7 @@
 |---|---|
 | 1 | 顧客の特定キーは **`mo_no`（MO番号）だけ**。専用カラムは作らず、既存の事業別カスタムフィールドを使う |
 | 2 | **既定は更新のみ**。`mo_no` で見つからなければ `404`。`allow_create: true` のときだけ新規作成 |
+| 2-b | **今の `mo_no` で見つからなければ、前の `mo_no` でも探す**（2026-11-06 追加。下記「MO番号を変えたとき」） |
 | 3 | **食い違いは黙って上書きしない**。空欄は自動で埋め、相違は `conflicts` で返す。上書きは `overwrite_fields` 指定分のみ |
 | 4 | **`dry_run: true`** は DB を一切変更せず判定結果だけ返す。**冪等キーも消費しない** |
 
@@ -37,6 +38,31 @@ customer_business_links.link_custom_data->>'mo_no'   ← 実データ（事業 =
 | 形式 | 全件 `MO-<数字>`（例: `MO-1`, `MO-79`） |
 
 なお m2 の `customers.customer_code` は社内採番の `CST-####` で、MO番号とは**別物**（本番173件すべて `CST-` 形式）。
+
+### MO番号を変えたとき（2026-11-06 追加）
+
+MO番号は m2 の画面と ML管理システム（`PATCH /api/integrations/customers/{customer_code}`）から
+**変えられる**。この API は MO番号をキーに顧客を引くため、変えたあとも同じ顧客に当たるよう
+次の仕掛けがある。
+
+```
+customer_business_links.link_custom_data = {
+  "mo_no": "MO-120",                     ← 今の番号
+  "mo_no_history": ["MO-79", "MO-100"]   ← 前の番号（古い順・何回変えても全部残る）
+}
+```
+
+- **顧客の特定は「今の番号 → 前の番号」の順**。今の番号で当たらなければ `mo_no_history` を見る
+- **前の番号で当たったときは、今の番号を送信値へ戻さない。** 番号の変更は人が意図したもので、
+  送信側の写しが古いだけ。`warnings` に
+  `mo_no=MO-79 は前のMO番号です（現在: MO-120）。同じ顧客として更新し、現在のMO番号は変更していません`
+  を入れて返す
+- 同じ番号を2顧客に持たせない。変更先が**他の顧客の今／前の番号**なら、画面・ML の両方で止める
+  （画面は `400`、ML は `422`）
+- 実装は `src/lib/mo-number.ts` に集約。**MO番号を読み書きする新しいコードはここを経由すること**
+
+> 送信側（`push_to_m2.py`）は変更不要。ただし `warnings` に上の文が出たら、送信側の MO番号の
+> 写しが古い（＝次回も前の番号で送られる）ことを意味するので、気づいたら直すとよい。
 
 ---
 
@@ -330,6 +356,10 @@ GET /api/integrations/customers?company_email=info@example.co.jp
 
 複数指定した場合は `mo_no` → `corporate_no` → `company_email` の優先順位で1つだけを使う。いずれも未指定なら `422`。
 
+`mo_no` は**前のMO番号でも当たる**（2026-11-06）。ここで前の番号を見ないと、番号を変えた顧客が
+「該当なし」になり、取り込み側が `allow_create` で2件目を作ってしまう。`matched_by` は
+`mo_no` のままで、返す `mo_no` は**今の番号**なので、送信側は差分に気づける。
+
 ### レスポンス（`200`）
 
 ```json
@@ -417,7 +447,7 @@ curl -s "$M2_API_BASE_PROD/api/integrations/customers/501" \
 
 | リクエストJSON | m2 の格納先 | 備考 |
 |---|---|---|
-| `mo_no` | `customer_business_links.link_custom_data->>'mo_no'` | **特定キー**。既存カスタムフィールド。専用カラムは作っていない |
+| `mo_no` | `customer_business_links.link_custom_data->>'mo_no'` | **特定キー**。既存カスタムフィールド。専用カラムは作っていない。前の番号は同じ JSON の `mo_no_history`（配列・古い順） |
 | `customer_type` | `customers.customer_type` | 法人 / 個人事業主 / 個人。既定値 `未設定` は空欄扱い |
 | `company_name` | `customers.customer_name` | |
 | `postal_code` | `customers.customer_postal_code` | |

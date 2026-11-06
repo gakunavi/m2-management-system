@@ -24,7 +24,7 @@ GET /api/integrations/contracts?status=purchased&limit=100
 |---|---|---|---|
 | `status` | 任意 | 全件 | 営業ステータス**コード**で絞る（例 `purchased`）。**ラベル（`1_購入済み`）を渡すと `422`** |
 | `updated_since` | 任意 | なし | ISO 8601。`project_status_changed_at` がこの日時**以降**のものだけ |
-| `mo_no` | 任意 | なし | 単一MO番号での絞り込み |
+| `mo_no` | 任意 | なし | 単一MO番号での絞り込み。**前のMO番号でも当たる**（下記） |
 | `limit` | 任意 | 100 | 1〜500 の整数。範囲外は `422` |
 | `cursor` | 任意 | なし | 前回レスポンスの `next_cursor` をそのまま渡す |
 
@@ -74,6 +74,11 @@ GET /api/integrations/contracts?status=purchased&limit=100
 ```
 
 - **1件 = 1案件（契約）**。1顧客が複数の案件を持てるため、`mo_no` は複数の item に出うる。
+- **`mo_no` の絞り込みは前のMO番号でも当たる**（2026-11-06）。MO番号は m2 の画面と
+  ML管理システムから変えられ、前の番号は `link_custom_data.mo_no_history` に残る。
+  呼び出し側が古い番号を持っていても案件が引けるようにしてある。返す `mo_no` は常に
+  **今の番号**なので、差分に気づける。詳しくは `docs/customer-import-api.md` の
+  「MO番号を変えたとき」と `src/lib/mo-number.ts`。
   スプレッドシート側は **`project_no` をキーに追記／更新**すること。
 - 値が無い項目は `null`。**キー自体は落とさない**（呼び出し側が列を固定で埋めるため）。
 - **値の正規化・整形はしない。** ニーズは `A_節税` のまま、決算月は `3`（整数）のまま返す。
@@ -86,7 +91,7 @@ GET /api/integrations/contracts?status=purchased&limit=100
 |---|---|---|
 | `project_no` | `projects.project_no` | スプレッドシートの更新キー |
 | `project_url` | 管理画面の案件詳細URL | |
-| `mo_no` | `customer_business_links.link_custom_data->>'mo_no'` | |
+| `mo_no` | `customer_business_links.link_custom_data->>'mo_no'` | 常に**今の番号**。前の番号で絞り込んでも今の番号を返す |
 | `customer_id` / `customer_code` / `customer_url` | `customers.id` / `.customer_code` | |
 | `status_code` | `projects.project_sales_status` | 例 `purchased` |
 | `status` | `business_status_definitions.status_label` | 例 `1_購入済み` |
