@@ -137,6 +137,7 @@ export function parseContractQuery(
 export interface ContractContact {
   contactName: string;
   contactPhone: string | null;
+  contactMobile: string | null;
   contactEmail: string | null;
   contactIsRepresentative: boolean;
   contactIsPrimary: boolean;
@@ -251,9 +252,11 @@ export function buildContractItem(row: ContractProjectRow, options: BuildContrac
     // --- 連絡先 ---
     representative_name: representative?.contactName ?? null,
     representative_phone: representative?.contactPhone ?? null,
+    representative_mobile: representative?.contactMobile ?? null,
     representative_email: representative?.contactEmail ?? null,
     contact_name: contact?.contactName ?? null,
     contact_phone: contact?.contactPhone ?? null,
+    contact_mobile: contact?.contactMobile ?? null,
     contact_email: contact?.contactEmail ?? null,
 
     // --- 所在地・番号 ---
@@ -292,8 +295,8 @@ export const CONTRACT_ITEM_KEYS = [
   'company_name', 'customer_salutation', 'customer_type', 'purchase_count', 'fiscal_month', 'assigned_user_name',
   'needs', 'unit_count', 'unit_price', 'purchase_amount',
   'sales_contract_date', 'operation_contract_date', 'payment_received_date', 'project_notes',
-  'representative_name', 'representative_phone', 'representative_email',
-  'contact_name', 'contact_phone', 'contact_email',
+  'representative_name', 'representative_phone', 'representative_mobile', 'representative_email',
+  'contact_name', 'contact_phone', 'contact_mobile', 'contact_email',
   'postal_code', 'address', 'corporate_no', 'invoice_no', 'company_phone',
   'thank_you_recipient', 'gratitude_certificate_name',
   'sme_agency_applicant',

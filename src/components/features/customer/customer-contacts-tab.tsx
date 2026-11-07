@@ -84,6 +84,7 @@ export function CustomerContactsTab({ entityId }: Props) {
           contactDepartment: data.contactDepartment || null,
           contactPosition: data.contactPosition || null,
           contactPhone: data.contactPhone || null,
+          contactMobile: data.contactMobile || null,
           contactFax: data.contactFax || null,
           contactEmail: data.contactEmail || null,
           contactBusinessCardFrontUrl: data.contactBusinessCardFrontUrl || null,
@@ -117,6 +118,7 @@ export function CustomerContactsTab({ entityId }: Props) {
           contactDepartment: data.contactDepartment || null,
           contactPosition: data.contactPosition || null,
           contactPhone: data.contactPhone || null,
+          contactMobile: data.contactMobile || null,
           contactFax: data.contactFax || null,
           contactEmail: data.contactEmail || null,
           contactBusinessCardFrontUrl: data.contactBusinessCardFrontUrl || null,
@@ -215,6 +217,7 @@ export function CustomerContactsTab({ entityId }: Props) {
                 <TableHead>担当者名</TableHead>
                 <TableHead>部署 / 役職</TableHead>
                 <TableHead>電話番号</TableHead>
+                <TableHead>携帯番号</TableHead>
                 <TableHead>メール</TableHead>
                 <TableHead>担当事業</TableHead>
                 <TableHead className="w-[64px] text-center">名刺</TableHead>
@@ -246,6 +249,7 @@ export function CustomerContactsTab({ entityId }: Props) {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">{contact.contactPhone ?? '-'}</TableCell>
+                  <TableCell className="text-sm">{contact.contactMobile ?? '-'}</TableCell>
                   <TableCell className="text-sm">{contact.contactEmail ?? '-'}</TableCell>
                   <TableCell className="text-sm">
                     {contact.businesses.length > 0

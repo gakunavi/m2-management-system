@@ -24,6 +24,7 @@ export interface ContactFormData {
   contactPosition: string | null;
   contactIsRepresentative: boolean;
   contactPhone: string | null;
+  contactMobile: string | null;
   contactFax: string | null;
   contactEmail: string | null;
   contactBusinessCardFrontUrl: string | null;
@@ -44,6 +45,7 @@ export interface ContactRecord {
   contactPosition: string | null;
   contactIsRepresentative: boolean;
   contactPhone: string | null;
+  contactMobile: string | null;
   contactFax: string | null;
   contactEmail: string | null;
   contactBusinessCardFrontUrl: string | null;
@@ -88,6 +90,7 @@ function getInitialValues(contact?: ContactRecord | null): ContactFormData {
       contactPosition: contact.contactPosition,
       contactIsRepresentative: contact.contactIsRepresentative,
       contactPhone: contact.contactPhone,
+      contactMobile: contact.contactMobile,
       contactFax: contact.contactFax,
       contactEmail: contact.contactEmail,
       contactBusinessCardFrontUrl: contact.contactBusinessCardFrontUrl,
@@ -104,6 +107,7 @@ function getInitialValues(contact?: ContactRecord | null): ContactFormData {
     contactPosition: null,
     contactIsRepresentative: false,
     contactPhone: null,
+    contactMobile: null,
     contactFax: null,
     contactEmail: null,
     contactBusinessCardFrontUrl: null,
@@ -242,6 +246,17 @@ export function CustomerContactFormModal({
                 value={formData.contactPhone ?? ''}
                 onChange={(e) => set('contactPhone', e.target.value || null)}
                 placeholder="03-0000-0000"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="contactMobile">携帯番号</Label>
+              <Input
+                id="contactMobile"
+                type="tel"
+                value={formData.contactMobile ?? ''}
+                onChange={(e) => set('contactMobile', e.target.value || null)}
+                placeholder="090-0000-0000"
                 className="mt-1"
               />
             </div>

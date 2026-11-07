@@ -52,6 +52,7 @@ export const CUSTOMER_INCLUDE = {
       contactDepartment: true,
       contactPosition: true,
       contactPhone: true,
+      contactMobile: true,
       contactEmail: true,
       contactIsRepresentative: true,
       contactIsPrimary: true,

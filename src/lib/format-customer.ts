@@ -37,6 +37,7 @@ export interface CustomerRow {
     contactDepartment: string | null;
     contactPosition: string | null;
     contactPhone: string | null;
+    contactMobile: string | null;
     contactEmail: string | null;
     contactIsRepresentative: boolean;
     contactIsPrimary: boolean;
@@ -90,6 +91,7 @@ export function formatCustomer(c: CustomerRow, businessId?: number) {
     primaryContactName: primaryContact?.contactName ?? null,
     primaryContactDepartment: primaryContact?.contactDepartment ?? null,
     primaryContactPhone: primaryContact?.contactPhone ?? null,
+    primaryContactMobile: primaryContact?.contactMobile ?? null,
     primaryContactEmail: primaryContact?.contactEmail ?? null,
     businessLinkIds: c.businessLinks?.map((bl) => bl.businessId) ?? [],
     customerCustomData,

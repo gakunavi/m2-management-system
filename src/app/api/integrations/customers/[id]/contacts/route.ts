@@ -62,6 +62,7 @@ export async function GET(
           contactIsRepresentative: true,
           contactIsPrimary: true,
           contactPhone: true,
+      contactMobile: true,
           contactFax: true,
           contactEmail: true,
           contactBusinessCardFrontUrl: true,

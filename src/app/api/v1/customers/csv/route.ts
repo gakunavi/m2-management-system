@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
             contactDepartment: true,
             contactPosition: true,
             contactPhone: true,
+            contactMobile: true,
             contactEmail: true,
             contactIsRepresentative: true,
             contactIsPrimary: true,
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest) {
         primaryContactName: primaryContact?.contactName ?? '',
         primaryContactDepartment: primaryContact?.contactDepartment ?? '',
         primaryContactPhone: primaryContact?.contactPhone ?? '',
+        primaryContactMobile: primaryContact?.contactMobile ?? '',
         primaryContactEmail: primaryContact?.contactEmail ?? '',
         customerPostalCode: c.customerPostalCode,
         customerAddress: c.customerAddress,
@@ -339,6 +341,7 @@ export async function POST(request: NextRequest) {
               contactName: primaryName,
               contactDepartment: row.primaryContactDepartment?.trim() || null,
               contactPhone: row.primaryContactPhone?.trim() || null,
+              contactMobile: row.primaryContactMobile?.trim() || null,
               contactEmail: row.primaryContactEmail?.trim() || null,
             };
             if (existingPrimary) {

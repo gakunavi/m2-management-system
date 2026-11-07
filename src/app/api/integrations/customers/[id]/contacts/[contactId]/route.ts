@@ -38,6 +38,7 @@ async function currentContact(customerId: number, contactId: number) {
       contactIsRepresentative: true,
       contactIsPrimary: true,
       contactPhone: true,
+      contactMobile: true,
       contactFax: true,
       contactEmail: true,
       contactBusinessCardFrontUrl: true,

@@ -41,6 +41,8 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   手で足すこと
 - 例外（どちらからでも直せない項目）は、理由つきで各章の「受け付けない項目」に書く。
   **理由を書かずに閉じないこと**
+- **担当者の携帯（読み出しは `mobile`・書き込みは `contactMobile`）も両方に持ち、同じ値にする**
+  （2026-11-07 石井さん）。ML は MO の担当者の写しに携帯を持ち、一覧・追加／編集の窓・CSV に出す
 - **工業会・中企庁の日付は営業管理システムと ML の両方に持ち、同じ値にする**
   （2026-11-07 石井さん：「日付はどちらのシステムにも必要」）。キーは下記
   「工業会・中企庁の項目」の表のとおり。ML 側に日付を足すときも同じキーで持ち、
@@ -138,6 +140,7 @@ GET /api/integrations/customers/{customer_code}/contacts
       "is_representative": false,
       "is_primary": true,
       "phone": "03-1234-5678",
+      "mobile": "090-1234-5678",
       "fax": "03-1234-5679",
       "email": "suzuki@example.com",
       "has_business_card_front": true,
@@ -150,6 +153,7 @@ GET /api/integrations/customers/{customer_code}/contacts
 }
 ```
 
+- `mobile`（携帯）は 2026-11-07 追加。**ML の MO担当者の写しと同じ値にする**
 - 並びは `contactSortOrder` → `id`
 - 未入力は `null`。**キーは絶対に落とさない**（ML が列を固定で埋めるため）
 - `version` は常に `null`（担当者に version カラムが無い）。楽観ロックは `updated_at` を使う
@@ -622,6 +626,7 @@ DELETE /api/integrations/customers/{customer_code}/contacts/{id}
 | `contactIsRepresentative` | boolean | 代表者フラグ |
 | `contactIsPrimary` | boolean | **主担当は1人まで**。true にすると既存の主担当が自動で降りる |
 | `contactPhone` | 20文字以内 / null | |
+| `contactMobile` | 20文字以内 / null | 携帯。2026-11-07 追加 |
 | `contactFax` | 20文字以内 / null | |
 | `contactEmail` | メール形式 / null / `""` | |
 | `contactSortOrder` | 0以上の整数 | 並び順 |

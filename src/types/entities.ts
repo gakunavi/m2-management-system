@@ -92,6 +92,7 @@ export type CustomerContact = {
   contactPosition: string | null;
   contactIsRepresentative: boolean;
   contactPhone: string | null;
+  contactMobile: string | null;
   contactFax: string | null;
   contactEmail: string | null;
   contactBusinessCardFrontUrl: string | null;
