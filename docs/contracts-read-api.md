@@ -122,8 +122,8 @@ GET /api/integrations/contracts?status=purchased&limit=100
 | `operation_contract_date` | `project_custom_data.operation_contract_date` | 運用契約日 |
 | `payment_received_date` | `project_custom_data.payment_received_date` | 着金日 |
 | `project_notes` | `projects.project_notes` | 備考 |
-| `representative_name` / `_phone` / `_email` | `customer_contacts`（`contact_is_representative=true`） | 1名 |
-| `contact_name` / `_phone` / `_email` | `customer_contacts`（代表者以外の主担当→無ければ並び順先頭） | 1名。CCは返さない |
+| `representative_name` / `_phone` / `_mobile` / `_email` | `customer_contacts`（`contact_is_representative=true`） | 1名。`_mobile` は 2026-11-07 追加 |
+| `contact_name` / `_phone` / `_mobile` / `_email` | `customer_contacts`（代表者以外の主担当→無ければ並び順先頭） | 1名。CCは返さない。`_mobile` は 2026-11-07 追加 |
 | `postal_code` / `address` | `customers.customer_postal_code` / `.customer_address` | 郵便番号は住所に含めない |
 | `corporate_no` / `invoice_no` | `customers.customer_corporate_number` / `.customer_invoice_number` | **平文** |
 | `company_phone` | `customers.customer_phone` | |

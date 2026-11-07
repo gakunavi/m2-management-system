@@ -92,6 +92,19 @@ export const customerListConfig: EntityListConfig = {
       },
     },
     {
+      key: 'primaryContactMobile',
+      label: '担当者携帯',
+      width: 140,
+      sortable: false,
+      defaultVisible: false,
+      group: '担当者情報',
+      edit: { type: 'phone', placeholder: '090-0000-0000' },
+      customPatch: {
+        endpoint: (row) => row.primaryContactId ? `/customers/${row.id}/contacts/${row.primaryContactId}` : '',
+        field: 'contactMobile',
+      },
+    },
+    {
       key: 'primaryContactEmail',
       label: '担当者メール',
       width: 200,
@@ -246,6 +259,7 @@ export const customerListConfig: EntityListConfig = {
       representativeName: 'representativeName',
       primaryContactName: 'primaryContactName',
       primaryContactPhone: 'primaryContactPhone',
+      primaryContactMobile: 'primaryContactMobile',
       primaryContactEmail: 'primaryContactEmail',
     },
     templateColumns: [
@@ -264,6 +278,7 @@ export const customerListConfig: EntityListConfig = {
       { key: 'primaryContactName', label: '主担当者名', description: '主担当者の氏名', example: '鈴木花子' },
       { key: 'primaryContactDepartment', label: '主担当者部署', description: '主担当者の部署', example: '営業部' },
       { key: 'primaryContactPhone', label: '主担当者TEL', description: '主担当者の電話番号', example: '03-1234-5680' },
+      { key: 'primaryContactMobile', label: '主担当者携帯', description: '主担当者の携帯番号', example: '090-1234-5678' },
       { key: 'primaryContactEmail', label: '主担当者メール', description: '主担当者のメールアドレス', example: 'suzuki@example.com' },
       { key: 'industryName', label: '業種', description: '業種マスタに登録済みの名称', example: '情報通信業' },
       { key: 'customerCorporateNumber', label: '法人番号', description: '自由記述', example: '1234567890123' },

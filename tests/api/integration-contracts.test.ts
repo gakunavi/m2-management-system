@@ -96,8 +96,8 @@ function projectRow(over: Record<string, unknown> = {}, customerOver: Record<str
       customerFiscalMonth: 3,
       businessLinks: [{ linkCustomData: { mo_no: 'MO-79' } }],
       contacts: [
-        { contactName: '山田 太郎', contactPhone: '06-0000-0001', contactEmail: 'yamada@example.test', contactIsRepresentative: true, contactIsPrimary: false },
-        { contactName: '鈴木 花子', contactPhone: null, contactEmail: 'suzuki@example.test', contactIsRepresentative: false, contactIsPrimary: true },
+        { contactName: '山田 太郎', contactPhone: '06-0000-0001', contactMobile: '090-0000-0001', contactEmail: 'yamada@example.test', contactIsRepresentative: true, contactIsPrimary: false },
+        { contactName: '鈴木 花子', contactPhone: null, contactMobile: '090-0000-0002', contactEmail: 'suzuki@example.test', contactIsRepresentative: false, contactIsPrimary: true },
       ],
       bankAccounts: [COMMON_BANK],
       ...customerOver,
@@ -523,8 +523,11 @@ describe('レスポンス', () => {
 
     expect(item.representative_name).toBe('山田 太郎');
     expect(item.representative_phone).toBe('06-0000-0001');
+    expect(item.representative_mobile).toBe('090-0000-0001');
     expect(item.contact_name).toBe('鈴木 花子');
     expect(item.contact_phone).toBeNull();
+    // 携帯は電話が空でも返る（ML の MO担当者の写しと同じ値にするため）
+    expect(item.contact_mobile).toBe('090-0000-0002');
     expect(item.contact_email).toBe('suzuki@example.test');
   });
 });

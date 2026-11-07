@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
               contactDepartment: true,
               contactPosition: true,
               contactPhone: true,
+              contactMobile: true,
               contactEmail: true,
               contactIsRepresentative: true,
               contactIsPrimary: true,

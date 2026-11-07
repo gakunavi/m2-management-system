@@ -593,6 +593,7 @@ describe('409（楽観ロック）', () => {
         contactIsRepresentative: false,
         contactIsPrimary: false,
         contactPhone: null,
+        contactMobile: null,
         contactFax: null,
         contactEmail: null,
         contactBusinessCardFrontUrl: null,
@@ -633,6 +634,7 @@ describe('409（楽観ロック）', () => {
         contactIsRepresentative: false,
         contactIsPrimary: false,
         contactPhone: null,
+        contactMobile: null,
         contactFax: null,
         contactEmail: null,
         contactBusinessCardFrontUrl: null,
@@ -1122,6 +1124,86 @@ describe('画面と同じ更新処理（ステータス変更の副作用）', (
     expect(mockPrisma.customer.update).not.toHaveBeenCalled();
   });
 
+  it('担当者の携帯を ML から直せる（営業管理システムに入る）', async () => {
+    stubLightScope();
+    const now = new Date('2026-11-05T02:00:00.000Z');
+    mockPrisma.customerContact.findFirst.mockResolvedValue({
+      id: 31,
+      customerId: 11,
+      contactIsPrimary: false,
+      updatedAt: now,
+    });
+    mockPrisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+      mockPrisma.customerContact.findUnique.mockResolvedValue({
+        id: 31,
+        contactName: '鈴木花子',
+        contactDepartment: null,
+        contactPosition: null,
+        contactIsRepresentative: false,
+        contactIsPrimary: false,
+        contactPhone: null,
+        contactMobile: '090-9999-0001',
+        contactFax: null,
+        contactEmail: null,
+        contactBusinessCardFrontUrl: null,
+        contactBusinessCardBackUrl: null,
+        updatedAt: new Date('2026-11-05T03:00:00.000Z'),
+        businessLinks: [],
+      });
+      return fn(mockPrisma);
+    });
+
+    const res = await CONTACT_PATCH(
+      request('/api/integrations/customers/CST-0001/contacts/31', {
+        method: 'PATCH',
+        body: { updated_at: now.toISOString(), contactMobile: '090-9999-0001' },
+      }),
+      contactParams(),
+    );
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.customerContact.update.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.contactMobile).toBe('090-9999-0001');
+    // 読み出しと同じ形で返す（ML は行をまるごと置き換える）
+    expect((await res.json()).mobile).toBe('090-9999-0001');
+  });
+
+  it('担当者を携帯つきで追加できる', async () => {
+    stubLightScope();
+    mockPrisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+      mockPrisma.customerContact.create.mockResolvedValue({ id: 32 });
+      mockPrisma.customerContact.findUnique.mockResolvedValue({
+        id: 32,
+        contactName: '鈴木花子',
+        contactDepartment: null,
+        contactPosition: null,
+        contactIsRepresentative: false,
+        contactIsPrimary: false,
+        contactPhone: null,
+        contactMobile: '090-9999-0002',
+        contactFax: null,
+        contactEmail: null,
+        contactBusinessCardFrontUrl: null,
+        contactBusinessCardBackUrl: null,
+        updatedAt: new Date('2026-11-05T03:00:00.000Z'),
+        businessLinks: [],
+      });
+      return fn(mockPrisma);
+    });
+
+    const res = await CONTACTS_POST(
+      request('/api/integrations/customers/CST-0001/contacts', {
+        method: 'POST',
+        body: { contactName: '鈴木花子', contactMobile: '090-9999-0002' },
+      }),
+      customerParams(),
+    );
+
+    expect(res.status).toBe(201);
+    const data = mockPrisma.customerContact.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.contactMobile).toBe('090-9999-0002');
+  });
+
   it('担当者の追加で主担当を立てると、既存の主担当が降りる（1人まで）', async () => {
     stubLightScope();
     mockPrisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
@@ -1134,6 +1216,7 @@ describe('画面と同じ更新処理（ステータス変更の副作用）', (
         contactIsRepresentative: false,
         contactIsPrimary: true,
         contactPhone: null,
+        contactMobile: null,
         contactFax: null,
         contactEmail: null,
         contactBusinessCardFrontUrl: null,
@@ -1202,6 +1285,7 @@ describe('担当者の読み出し', () => {
     contactIsRepresentative: false,
     contactIsPrimary: true,
     contactPhone: '03-1234-5678',
+    contactMobile: '090-1234-5678',
     contactFax: '03-1234-5679',
     contactEmail: 'suzuki@example.com',
     contactBusinessCardFrontUrl: 'uploads/cards/front.jpg',
@@ -1225,6 +1309,22 @@ describe('担当者の読み出し', () => {
     for (const forbidden of CONTACT_FORBIDDEN_KEYS) {
       expect(body.items[0]).not.toHaveProperty(forbidden);
     }
+  });
+
+  it('携帯（mobile）を返す', async () => {
+    stubLightScope();
+    mockPrisma.customer.findUnique.mockResolvedValue({ version: 2 });
+    mockPrisma.customerContact.findMany.mockResolvedValue([CONTACT_ROW]);
+
+    const res = await CONTACTS_GET(
+      request('/api/integrations/customers/CST-0001/contacts', { token: READ_TOKEN }),
+      customerParams(),
+    );
+    const body = await res.json();
+
+    expect(body.items[0].mobile).toBe('090-1234-5678');
+    // 取る列に入れ忘れると undefined になり、JSON でキーごと落ちる
+    expect(mockPrisma.customerContact.findMany.mock.calls[0][0].select.contactMobile).toBe(true);
   });
 
   it('名刺は有無だけを返し、画像URLは返さない', async () => {

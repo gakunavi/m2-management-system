@@ -274,6 +274,7 @@ model CustomerContact {
   contactPosition             String?                       @map("contact_position") @db.VarChar(100)
   contactIsRepresentative     Boolean                       @default(false) @map("contact_is_representative")
   contactPhone                String?                       @map("contact_phone") @db.VarChar(20)
+  contactMobile               String?                       @map("contact_mobile") @db.VarChar(20)
   contactFax                  String?                       @map("contact_fax") @db.VarChar(20)
   contactEmail                String?                       @map("contact_email") @db.VarChar(255)
   contactBusinessCardFrontUrl String?                       @map("contact_business_card_front_url") @db.VarChar(500)

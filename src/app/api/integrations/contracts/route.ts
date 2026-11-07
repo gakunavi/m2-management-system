@@ -152,6 +152,7 @@ export async function GET(request: NextRequest) {
               select: {
                 contactName: true,
                 contactPhone: true,
+                contactMobile: true,
                 contactEmail: true,
                 contactIsRepresentative: true,
                 contactIsPrimary: true,

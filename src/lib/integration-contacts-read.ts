@@ -17,6 +17,7 @@ export interface ContactReadRow {
   contactIsRepresentative: boolean;
   contactIsPrimary: boolean;
   contactPhone: string | null;
+  contactMobile: string | null;
   contactFax: string | null;
   contactEmail: string | null;
   contactBusinessCardFrontUrl: string | null;
@@ -41,6 +42,7 @@ export function buildContactItem(row: ContactReadRow) {
     is_representative: row.contactIsRepresentative,
     is_primary: row.contactIsPrimary,
     phone: row.contactPhone,
+    mobile: row.contactMobile,
     fax: row.contactFax,
     email: row.contactEmail,
     // 名刺は有無だけ。画像のURLは返さない
@@ -61,7 +63,7 @@ export function buildContactItem(row: ContactReadRow) {
 export const CONTACT_ITEM_KEYS = [
   'id', 'contact_name', 'department', 'position',
   'is_representative', 'is_primary',
-  'phone', 'fax', 'email',
+  'phone', 'mobile', 'fax', 'email',
   'has_business_card_front', 'has_business_card_back',
   'businesses', 'version', 'updated_at',
 ] as const;

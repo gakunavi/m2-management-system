@@ -22,6 +22,7 @@ export const createContactSchema = z.object({
   contactPosition: z.string().max(100).optional().nullable(),
   contactIsRepresentative: z.boolean().default(false),
   contactPhone: z.string().max(20).optional().nullable(),
+  contactMobile: z.string().max(20).optional().nullable(),
   contactFax: z.string().max(20).optional().nullable(),
   contactEmail: z.string().email().optional().nullable().or(z.literal('')),
   contactBusinessCardFrontUrl: z.string().max(500).optional().nullable().or(z.literal('')),
@@ -37,6 +38,7 @@ export const updateContactSchema = z.object({
   contactPosition: z.string().max(100).optional().nullable(),
   contactIsRepresentative: z.boolean().optional(),
   contactPhone: z.string().max(20).optional().nullable(),
+  contactMobile: z.string().max(20).optional().nullable(),
   contactFax: z.string().max(20).optional().nullable(),
   contactEmail: z.string().email().optional().nullable().or(z.literal('')),
   contactBusinessCardFrontUrl: z.string().max(500).optional().nullable().or(z.literal('')),
@@ -62,6 +64,7 @@ export interface ContactRow {
   contactPosition: string | null;
   contactIsRepresentative: boolean;
   contactPhone: string | null;
+  contactMobile: string | null;
   contactFax: string | null;
   contactEmail: string | null;
   contactBusinessCardFrontUrl: string | null;
@@ -117,6 +120,7 @@ export async function createCustomerContact(
         contactPosition: data.contactPosition ?? null,
         contactIsRepresentative: data.contactIsRepresentative,
         contactPhone: data.contactPhone ?? null,
+        contactMobile: data.contactMobile ?? null,
         contactFax: data.contactFax ?? null,
         contactEmail: data.contactEmail || null,
         contactBusinessCardFrontUrl: data.contactBusinessCardFrontUrl || null,
