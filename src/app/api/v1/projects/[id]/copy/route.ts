@@ -8,6 +8,8 @@ import { formatProject } from '@/lib/format-project';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { latchRevenueConfirmation } from '@/lib/revenue-confirm-latch';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
+import { notifyProjectChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
 
 export const dynamic = 'force-dynamic';
@@ -130,6 +132,12 @@ export async function POST(
     // トランザクションの外（案件が存在する状態）で呼ぶ。
     await latchRevenueConfirmation(prisma, source.businessId, {
       projectIds: [created.id],
+    });
+
+    // コピーでできた案件も ML には「新しい案件」。知らせないと ML 側に写しができない
+    await notifyProjectChangedToMl(prisma, userActor(user), {
+      businessId: created.businessId,
+      projectNo: created.projectNo,
     });
 
     const responseProject = await prisma.project.findUnique({

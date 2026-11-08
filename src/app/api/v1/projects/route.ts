@@ -15,6 +15,8 @@ import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers
 import { getBusinessPartnerScope } from '@/lib/revenue-helpers';
 import { applyProjectListFilters, matchesCustomFieldFilters } from '@/lib/project-filters';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
+import { notifyProjectChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 import {
   calculateProjectFinancialsByBusiness,
   canSeeCompanyRevenue,
@@ -452,6 +454,14 @@ export async function POST(request: NextRequest) {
     // 事業設定・代理店階層を読むため、案件が確定済みで存在している必要があるから。
     const latch = await latchRevenueConfirmation(prisma, data.businessId, {
       projectIds: [project.id],
+    });
+
+    // ML管理システムへ「案件ができたよ」を知らせる。ML は知らせで来たまだ無い案件を、
+    // 内諾・申請中・購入済みならその場で入れる（それより前の状態は入れない）。
+    // ML 由来・env 未設定・対象外事業は通知の入口が内側で弾く。
+    await notifyProjectChangedToMl(prisma, userActor(user), {
+      businessId: project.businessId,
+      projectNo: project.projectNo,
     });
 
     // ラッチした場合はレスポンスに確定日を反映させる（作成直後の画面が

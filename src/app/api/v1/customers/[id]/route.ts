@@ -7,6 +7,7 @@ import { formatCustomer } from '@/lib/format-customer';
 // 更新ロジックは画面と ML連携（/api/integrations/customers/[customer_code]）で共有する
 import { applyCustomerUpdate, CUSTOMER_INCLUDE } from '@/lib/customer-update';
 import { userActor } from '@/lib/update-actor';
+import { notifyCustomerChangedToMl } from '@/lib/ml-scope';
 
 // ============================================
 // GET /api/v1/customers/:id
@@ -123,6 +124,12 @@ export async function DELETE(
         version: { increment: 1 },
         updatedBy: user.id,
       },
+    });
+
+    // 案件の削除と同じ扱い（ML が読み直すと 404 で「消えた」と分かる）
+    await notifyCustomerChangedToMl(prisma, userActor(user), {
+      customerId,
+      kind: 'customer',
     });
 
     return new NextResponse(null, { status: 204 });

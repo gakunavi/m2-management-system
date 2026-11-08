@@ -28,6 +28,9 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
 - 2026-11-08 追記: 案件の**段階（ムーブメント）**を読み書きできるようにした（§6）。
   画面で段階を直すと `project.movements.updated` を通知する。
   **本番反映済み（2026-11-08・PR #8・タスク定義 :264。マイグレーションなし）**
+- 2026-11-08 追記2: **作成・CSV取り込み・コピー・一括削除でも知らせる**ようにした（§7）。
+  これまで知らせが出るのは PATCH だけで、新しくできた案件は ML に伝わらなかった。
+  顧客・担当者・段階の作成／取り込み／一括の入口にも同じように足した。**本番未適用**
 
 ## 決まり: ライト事業は両方から直せて、いつも同じ値
 
@@ -931,15 +934,52 @@ hmac.compare_digest(expected, signature.removeprefix("sha256="))
 
 ### 通知する更新経路
 
+> 2026-11-08 石井さん：作成・CSV取り込み・コピー・一括削除でも知らせる。
+> **ML は知らせで来たまだ無い案件を、内諾・申請中・購入済みならその場で入れる**
+> （それより前の状態は入れない）。
+
+**案件**
+
 | 経路 | 通知 |
 |---|---|
-| `PATCH /api/v1/projects/[id]`（画面・インライン編集・フォーム編集） | ○ |
-| `PATCH /api/v1/projects/[id]`（画面・営業担当やステータスの変更を含む案件の更新すべて） | ○ |
-| `PATCH /api/v1/projects/[id]/movements/[movementId]`（画面・段階の編集） | ○（`project.movements.updated`） |
+| `PATCH /api/v1/projects/[id]`（画面・インライン編集・フォーム編集・営業担当やステータスの変更を含む更新すべて） | ○ |
+| `POST /api/v1/projects`（画面・新規作成） | ○ |
+| `POST /api/v1/projects/[id]/copy`（画面・コピー） | ○ |
+| `POST /api/v1/projects/csv`（CSV取り込みの作成・更新） | ○（案件ごとに1通。ドライランは除く） |
+| `POST /api/v1/projects/batch`（一括削除＝論理削除） | ○（案件ごとに1通） |
+| `DELETE /api/v1/projects/[id]`（単体の論理削除） | ○ |
+| `PATCH /api/v1/projects/[id]/restore`（復元） | ○ |
+| `PATCH /api/v1/projects/[id]/movements/[movementId]`（画面・段階の編集） | ○（`project.movements.updated`。連動フィールドを書いたときは `project.updated` も） |
+| `POST /api/v1/businesses/[id]/movement-templates/sync`（段階の定義を全案件へ反映） | ○（`project.movements.updated`・案件ごとに1通） |
+
+**顧客・担当者**
+
+| 経路 | 通知 |
+|---|---|
 | `PATCH /api/v1/customers/[id]`（画面） | ○ |
+| `POST /api/v1/customers`（画面・新規作成） | ○（ライト事業に紐づけたときだけ） |
+| `POST /api/v1/customers/csv`（CSV取り込み） | ○（顧客ごとに1通。担当者も触ったら `customer.contacts.updated` も。ドライランは除く） |
+| `POST /api/v1/customers/batch`（一括削除） | ○（顧客ごとに1通） |
+| `DELETE /api/v1/customers/[id]` / `PATCH .../restore` | ○ |
 | `POST`/`PATCH`/`DELETE /api/v1/customers/[id]/contacts[/...]`（画面） | ○ |
-| `/api/integrations/**` の PATCH（ML 由来） | ×（ループ防止） |
-| 案件の新規作成・コピー・CSV取り込み・一括操作 | ×（**未対応**。ML は1日1回の取り込みで拾う） |
+| `POST`/`PATCH`/`DELETE /api/v1/customers/[id]/business-links[/...]` | ○（`customer.updated`） |
+
+**通知しないもの**
+
+| 経路 | 理由 |
+|---|---|
+| `/api/integrations/**` の書き込み（ML 由来） | ループ防止 |
+| `POST /api/integrations/customers/import`（ML の取り込み） | ML 由来。ML が送った値をそのまま送り返すことになる |
+| 収益確定のラッチ・手数料の凍結・スナップショットの一括付与 | 社内の会計。ML には開けていない項目しか変わらない |
+| 代理店（`/api/v1/partners/**`） | ML は代理店を持たない |
+| ムーブメント定義の名前・並びの変更（`movement-templates` の PATCH / CSV / reorder） | 案件ごとの値ではなく設定。ML は読み出しのたびに `step_name` を取り直す |
+
+**論理削除も `project.updated` / `customer.updated` で送る**（削除専用の種別は作っていない）。
+ML が読み直すと `404` になるので、そこで「消えた」と分かる。復元したときも同じ種別で送る。
+
+**件数が何件あっても1件＝1通。** 1通にまとめると ML 側が「どれが変わったか」を自分で
+調べることになり、控え・再送の単位も崩れる。送信はレスポンス後に回るので、
+取り込んだ人は待たない。
 
 ---
 

@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyProjectsMovementsChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +20,7 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const { id } = await params;
@@ -80,12 +82,20 @@ export async function POST(
         deleted = deleteResult.count;
       }
 
-      return { created, deleted };
+      return { created, deleted, projectIds: projects.map((p) => p.id) };
     }, { timeout: 120000 });
+
+    // 段階の構成が変わった＝ ML の読み出し（.../movements）の中身が変わる。
+    // どの案件の行が増減したかは createMany/deleteMany からは分からないので、
+    // 何か変わったときは事業内の案件すべてに1通ずつ送る。
+    // 段階の定義を直すのは管理者の設定作業で、頻度は低い
+    if (result.created > 0 || result.deleted > 0) {
+      await notifyProjectsMovementsChangedToMl(prisma, userActor(user), result.projectIds);
+    }
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: { created: result.created, deleted: result.deleted },
     });
   } catch (error) {
     return handleApiError(error);

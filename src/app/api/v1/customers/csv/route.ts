@@ -9,6 +9,8 @@ import { resolveSort, applyAppSort } from '@/lib/sort/engine';
 import { CUSTOMER_SORT_SPEC } from '@/lib/sort/specs';
 import { CUSTOMER_CSV_HEADERS, escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 import { buildCustomerListWhere } from '@/lib/master-filters';
+import { notifyCustomersChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 
 const CSV_HEADERS = CUSTOMER_CSV_HEADERS;
 
@@ -143,7 +145,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const formData = await request.formData();
@@ -188,6 +190,9 @@ export async function POST(request: NextRequest) {
     const industryMap = new Map(industries.map((i) => [i.industryName, i.id]));
 
     const results = { created: 0, updated: 0, skipped: 0, errors: [] as string[], dryRun };
+    // 取り込みで作成・更新した顧客と、担当者まで触った顧客。取り込み後に ML へ知らせる
+    const touchedCustomerIds: number[] = [];
+    const touchedContactCustomerIds: number[] = [];
 
     try {
     await prisma.$transaction(async (tx) => {
@@ -293,6 +298,7 @@ export async function POST(request: NextRequest) {
               },
             });
             customerId = existing.id;
+            touchedCustomerIds.push(customerId);
             results.updated++;
           } else {
             const created = await tx.customer.create({
@@ -304,6 +310,7 @@ export async function POST(request: NextRequest) {
               },
             });
             customerId = created.id;
+            touchedCustomerIds.push(customerId);
             results.created++;
           }
 
@@ -328,6 +335,7 @@ export async function POST(request: NextRequest) {
                 data: { customerId, ...repData, contactIsRepresentative: true, contactSortOrder: 0 },
               });
             }
+            touchedContactCustomerIds.push(customerId);
           }
 
           // 連絡先のインポート（主担当者）
@@ -354,6 +362,7 @@ export async function POST(request: NextRequest) {
                 data: { customerId, ...primaryData, contactIsPrimary: true, contactSortOrder: 1 },
               });
             }
+            touchedContactCustomerIds.push(customerId);
           }
         } catch (err) {
           const detail = err instanceof Error ? err.message : '';
@@ -373,6 +382,20 @@ export async function POST(request: NextRequest) {
       } else {
         throw err;
       }
+    }
+
+    // 取り込みで触った顧客・担当者を ML へ知らせる（顧客ごとに1通）。
+    // ドライランは中身をロールバックするので送らない
+    if (!dryRun) {
+      const actor = userActor(user);
+      await notifyCustomersChangedToMl(prisma, actor, {
+        customerIds: Array.from(new Set(touchedCustomerIds)),
+        kind: 'customer',
+      });
+      await notifyCustomersChangedToMl(prisma, actor, {
+        customerIds: Array.from(new Set(touchedContactCustomerIds)),
+        kind: 'contacts',
+      });
     }
 
     return NextResponse.json({

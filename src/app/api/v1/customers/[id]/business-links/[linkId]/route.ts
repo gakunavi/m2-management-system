@@ -5,6 +5,8 @@ import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyCustomerLinkChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 
 // ============================================
 // PATCH /api/v1/customers/:id/business-links/:linkId
@@ -47,6 +49,13 @@ export async function PATCH(
           ? { linkCustomData: data.linkCustomData as Prisma.InputJsonValue }
           : {}),
       },
+    });
+
+    // 事業別カスタム項目（linkCustomData）も ML が読む値なので知らせる。
+    // linkStatus を落としたときは「ML から見えなくなった」ことを知らせる
+    await notifyCustomerLinkChangedToMl(prisma, userActor(user), {
+      businessId: existing.businessId,
+      customerId,
     });
 
     const updated = await prisma.customerBusinessLink.findUnique({
@@ -101,6 +110,13 @@ export async function DELETE(
     if (!existing) throw ApiError.notFound('事業リンクが見つかりません');
 
     await prisma.customerBusinessLink.delete({ where: { id: linkIdNum } });
+
+    // リンクが消えると ML からは 404 になる。notifyCustomerChangedToMl は
+    // 「リンクのある顧客」しか通さないので、事業IDで判定する専用の入口を使う
+    await notifyCustomerLinkChangedToMl(prisma, userActor(user), {
+      businessId: existing.businessId,
+      customerId,
+    });
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

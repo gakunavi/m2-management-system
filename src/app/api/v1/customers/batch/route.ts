@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyCustomersChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 
 const batchSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1, '対象を1件以上選択してください'),
@@ -19,7 +21,7 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const body = await request.json();
@@ -29,6 +31,12 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'delete': {
+        // 実際に消える顧客を先に控える（updateMany は対象の行を返さない）
+        const targets = await prisma.customer.findMany({
+          where: { id: { in: ids }, customerIsActive: true },
+          select: { id: true },
+        });
+
         const result = await prisma.customer.updateMany({
           where: {
             id: { in: ids },
@@ -40,6 +48,12 @@ export async function POST(request: NextRequest) {
           },
         });
         count = result.count;
+
+        // ML へ顧客ごとに1通
+        await notifyCustomersChangedToMl(prisma, userActor(user), {
+          customerIds: targets.map((t) => t.id),
+          kind: 'customer',
+        });
         break;
       }
 

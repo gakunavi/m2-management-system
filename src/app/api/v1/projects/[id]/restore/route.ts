@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyProjectChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 
 export async function PATCH(
   request: NextRequest,
@@ -12,7 +14,7 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (user.role !== 'admin') throw ApiError.forbidden('管理者のみ復元できます');
 
     const { id } = await params;
@@ -25,6 +27,12 @@ export async function PATCH(
     await prisma.project.update({
       where: { id: projectId },
       data: { projectIsActive: true, updatedBy: user.id },
+    });
+
+    // 消えていた案件が戻ったことも知らせる（知らせないと ML 側は消えたままになる）
+    await notifyProjectChangedToMl(prisma, userActor(user), {
+      businessId: existing.businessId,
+      projectNo: existing.projectNo,
     });
 
     return NextResponse.json({ success: true });

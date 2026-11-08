@@ -22,7 +22,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { ApiError } from '@/lib/error-handler';
-import { notifyProjectMovementsChangedToMl } from '@/lib/ml-scope';
+import { notifyProjectChangedToMl, notifyProjectMovementsChangedToMl } from '@/lib/ml-scope';
 import { updatedByFor, type UpdateActor } from '@/lib/update-actor';
 import type { MovementStatus } from '@/lib/validations/movement';
 
@@ -166,6 +166,10 @@ export async function applyMovementUpdate(
     }
   }
 
+  // 連動フィールドを実際に書いたか（案件のカスタム項目が変わるので、段階とは別に
+  // 案件の変更としても知らせる必要がある）
+  let linkedFieldWritten = false;
+
   // トランザクション: ムーブメント更新 + 連動フィールド更新
   const updated = await prisma.$transaction(async (tx) => {
     const movement = await tx.projectMovement.update({
@@ -199,6 +203,7 @@ export async function applyMovementUpdate(
             version: { increment: 1 },
           },
         });
+        linkedFieldWritten = true;
       }
     }
 
@@ -211,6 +216,15 @@ export async function applyMovementUpdate(
     businessId: existing.project.businessId,
     projectNo: existing.project.projectNo,
   });
+
+  // 連動フィールドを書いたときは案件のカスタム項目も変わっている。
+  // ML は案件本体を別の口で読むので、段階の知らせだけでは気づけない
+  if (linkedFieldWritten) {
+    await notifyProjectChangedToMl(prisma, actor, {
+      businessId: existing.project.businessId,
+      projectNo: existing.project.projectNo,
+    });
+  }
 
   return updated;
 }
