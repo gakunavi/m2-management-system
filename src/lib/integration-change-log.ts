@@ -13,7 +13,7 @@ import type { PrismaClient } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { isMlActor, type UpdateActor } from '@/lib/update-actor';
 
-export type ChangeLogEntityType = 'project' | 'customer' | 'contact';
+export type ChangeLogEntityType = 'project' | 'movement' | 'customer' | 'contact';
 export type ChangeLogAction = 'create' | 'update' | 'delete';
 
 export interface RecordChangeInput {

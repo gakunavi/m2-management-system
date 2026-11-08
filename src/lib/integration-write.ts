@@ -30,6 +30,7 @@ import { mlActorFromRequest, type UpdateActor } from '@/lib/update-actor';
 export const IDEMPOTENCY_SCOPE_ML_PROJECT = 'ml-project-write';
 export const IDEMPOTENCY_SCOPE_ML_CUSTOMER = 'ml-customer-write';
 export const IDEMPOTENCY_SCOPE_ML_CONTACT = 'ml-contact-write';
+export const IDEMPOTENCY_SCOPE_ML_MOVEMENT = 'ml-movement-write';
 
 export type ValidationError = { field: string; message: string };
 
