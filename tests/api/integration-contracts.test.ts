@@ -138,6 +138,13 @@ beforeEach(() => {
         { key: 'purchase_unit_price', label: '購入単価', type: 'number' },
         { key: 'unit_count', label: '台数', type: 'number' },
         { key: 'purchase_amount', label: '購入金額', type: 'formula', formula: 'purchase_unit_price* unit_count' },
+        // 着金ステータス（2026-11-09 追加）。契約読み出しでも定義ごと返ることを押さえる
+        {
+          key: 'payment_status',
+          label: '着金ステータス',
+          type: 'select',
+          options: ['1_着金済', '2_請求書送付済', '3_請求書未送付', '4_不要'],
+        },
       ],
     },
   });
@@ -582,6 +589,7 @@ describe('meta', () => {
       'purchase_unit_price',
       'unit_count',
       'purchase_amount',
+      'payment_status',
     ]);
   });
 

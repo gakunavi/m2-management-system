@@ -110,6 +110,13 @@ const PROJECT_FIELD_DEFS = [
     options: ['1_認定済', '2_申請中', '3_行政書士引継済', '4_未対応', '5_不要'],
     sortOrder: 15,
   },
+  {
+    key: 'payment_status',
+    label: '着金ステータス',
+    type: 'select',
+    options: ['1_着金済', '2_請求書送付済', '3_請求書未送付', '4_不要'],
+    sortOrder: 18,
+  },
   { key: 'first_meeting_date', label: '初回商談日', type: 'date', sortOrder: 21 },
 ];
 
@@ -2294,7 +2301,7 @@ describe('案件のカスタム項目', () => {
     // 定義順・キーは落とさない（未入力は null）
     expect(Object.keys(body.custom_fields)).toEqual([
       'needs', 'purchase_unit_price', 'unit_count', 'purchase_amount',
-      'industry_assoc_status', 'tax_incentive_status', 'first_meeting_date',
+      'industry_assoc_status', 'tax_incentive_status', 'payment_status', 'first_meeting_date',
     ]);
     expect(body.custom_fields.industry_assoc_status).toBe('3_申請済');
     expect(body.custom_fields.tax_incentive_status).toBeNull();
@@ -2350,6 +2357,101 @@ describe('案件のカスタム項目', () => {
     expect(data.projectCustomData.first_meeting_date).toBe('2026-09-01');
     // 送っていない項目は残る（マージ更新）
     expect(data.projectCustomData.needs).toBe('A_節税');
+  });
+
+  // ============================================
+  // 着金ステータス（2026-11-09 追加）
+  // ML の「MO受注」の段階「購入代金の着金確認」と両方向でそろえる項目。
+  // 事業マスタのカスタム項目なので ML の口のコードは足していない。
+  // ここが通っていれば、定義を足すだけで読めて書けることの裏づけになる。
+  // ============================================
+
+  it('着金ステータスの定義が選べる値つきで読み出しに入る', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue({
+      ...updatedProject({ projectCustomData: { payment_status: '2_請求書送付済' } }),
+      customer: { customerCode: 'CST-0001' },
+    });
+
+    const body = await (
+      await PROJECT_GET(
+        request('/api/integrations/projects/LIGHT-0077', { token: READ_TOKEN }),
+        projectParams(),
+      )
+    ).json();
+
+    expect(body.custom_fields.payment_status).toBe('2_請求書送付済');
+    expect(
+      body.project_custom_field_defs.find((d: { key: string }) => d.key === 'payment_status'),
+    ).toEqual({
+      key: 'payment_status',
+      label: '着金ステータス',
+      type: 'select',
+      options: ['1_着金済', '2_請求書送付済', '3_請求書未送付', '4_不要'],
+      is_formula: false,
+      sort_order: 18,
+    });
+  });
+
+  it('着金ステータスを custom_fields で直せる', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, custom_fields: { payment_status: '1_着金済' } },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.project.update.mock.calls[0][0].data as {
+      projectCustomData: Record<string, unknown>;
+    };
+    expect(data.projectCustomData.payment_status).toBe('1_着金済');
+    // 送っていない項目は残る（マージ更新）
+    expect(data.projectCustomData.needs).toBe('A_節税');
+  });
+
+  it('着金ステータスは null で空にできる', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, custom_fields: { payment_status: null } },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.project.update.mock.calls[0][0].data as {
+      projectCustomData: Record<string, unknown>;
+    };
+    expect(data.projectCustomData.payment_status).toBeNull();
+  });
+
+  it('着金ステータスに無い選択肢を送ると 422（選べる値を理由に返す）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, custom_fields: { payment_status: '着金済' } },
+      }),
+      projectParams(),
+    );
+
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.errors[0].field).toBe('custom_fields.payment_status');
+    expect(body.errors[0].message).toContain('1_着金済');
+    expect(mockPrisma.project.update).not.toHaveBeenCalled();
   });
 
   it('トップレベルの専用キーと custom_fields を混ぜて送れる', async () => {
@@ -2470,6 +2572,6 @@ describe('案件のカスタム項目', () => {
     ).json();
 
     expect(Object.keys(body).sort()).toEqual([...ML_PROJECT_ITEM_KEYS].sort());
-    expect(body.project_custom_field_defs.length).toBe(7);
+    expect(body.project_custom_field_defs.length).toBe(8);
   });
 });
