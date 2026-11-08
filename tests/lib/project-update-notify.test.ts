@@ -133,6 +133,25 @@ describe('営業担当を変えたとき', () => {
     expect(JSON.stringify(event)).not.toContain('鈴木');
   });
 
+  it('受注予定月だけ変えても ML へ知らせる', async () => {
+    stub();
+
+    await applyProjectUpdate(mockPrisma as never, {
+      projectId: 123,
+      body: { version: 4, projectExpectedCloseMonth: '2027-03' },
+      actor: ADMIN,
+    });
+
+    const data = mockPrisma.project.update.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.projectExpectedCloseMonth).toBe('2027-03');
+
+    const event = mockPrisma.integrationOutboxEvent.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(event.eventType).toBe('project.updated');
+    expect(event.projectNo).toBe('LIGHT-0077');
+    // 本文に値（月）は入れない
+    expect(JSON.stringify(event)).not.toContain('2027-03');
+  });
+
   it('ステータスは変えていないので社内通知は作らない', async () => {
     stub();
 

@@ -108,6 +108,7 @@ GET /api/integrations/contracts?status=purchased&limit=100
 | `status_code` | `projects.project_sales_status` | 例 `purchased` |
 | `status` | `business_status_definitions.status_label` | 例 `1_購入済み` |
 | `status_changed_at` | `projects.project_status_changed_at` | ISO 8601。**最後にステータスが変わった日時** |
+| `expected_close_month` | `projects.project_expected_close_month` | 受注予定月（`YYYY-MM`）。ML では「販売予定月」。2026-11-09 追加 |
 | `company_name` | `customers.customer_name` | |
 | `customer_salutation` | `customers.customer_salutation` | 画面ラベル「呼称」 |
 | `customer_type` | `customers.customer_type` | `法人` / `個人事業主` / `個人` / `未設定` |

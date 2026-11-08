@@ -28,6 +28,9 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
 - 2026-11-08 追記: 案件の**段階（ムーブメント）**を読み書きできるようにした（§6）。
   画面で段階を直すと `project.movements.updated` を通知する。
   **本番反映済み（2026-11-08・PR #8・タスク定義 :264。マイグレーションなし）**
+- 2026-11-09 追記: 案件の**受注予定月**（`expected_close_month`・`YYYY-MM`）を読み書き
+  できるようにした（§2・§3・契約読み出し）。ML のマシン管理マスタでは「販売予定月」。
+  **本番未適用**
 - 2026-11-08 追記2: **作成・CSV取り込み・コピー・一括削除でも知らせる**ようにした（§7）。
   これまで知らせが出るのは PATCH だけで、新しくできた案件は ML に伝わらなかった。
   顧客・担当者・段階の作成／取り込み／一括の入口にも同じように足した。**本番未適用**
@@ -204,6 +207,7 @@ GET /api/integrations/projects/{project_no}
   "status_code": "informal_approval",
   "status_label": "3_内諾",
   "status_changed_at": "2026-11-05T01:00:00.000Z",
+  "expected_close_month": "2026-12",
   "assigned_user_name": "佐藤 次郎",
   "needs": "A_節税",
   "unit_count": 5,
@@ -280,6 +284,7 @@ PATCH /api/integrations/projects/{project_no}
 | キー | 型 | m2 の保存先 |
 |---|---|---|
 | `status_code` | 営業ステータスの**コード** | `projects.project_sales_status` |
+| `expected_close_month` | `YYYY-MM` / null / `""` | `projects.project_expected_close_month` |
 | `needs` | 文字列 / null | `project_custom_data.needs` |
 | `unit_count` | 0以上の整数 / null | `project_custom_data.unit_count` |
 | `unit_price` | 0以上の整数 / null | `project_custom_data.purchase_unit_price` |
@@ -291,6 +296,18 @@ PATCH /api/integrations/projects/{project_no}
 | `version` | 整数（**必須**） | 楽観ロック |
 
 **知らないキーは `422`。** ML 側のタイプミスを黙って捨てない（`.strict()`）。
+
+##### 受注予定月（`expected_close_month`・2026-11-09 追加）
+
+ML のマシン管理マスタでは「**販売予定月**」として出す項目。m2 の画面では案件の
+「受注予定月」で、`projects` の**専用カラム**（カスタム項目ではないので
+`custom_fields` には入らない）。
+
+- 形式は `YYYY-MM` のみ。`2027-3`・`2027/03`・`2027-13`・`2027-03-01` などは `422`
+  （`field` は `expected_close_month`）
+- `null` と `""` はどちらも「空にする」。保存は `null` に寄せる
+- 読み出し（§2・契約読み出し）にも同じキーで入る。未入力は `null` でキーは落とさない
+- **変わったら `project.updated` を通知する**（案件の更新はすべて通知の対象・§7）
 
 #### `custom_fields`（専用キーの無い項目すべて）
 

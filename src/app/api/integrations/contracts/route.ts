@@ -127,6 +127,7 @@ export async function GET(request: NextRequest) {
         projectNo: true,
         projectSalesStatus: true,
         projectStatusChangedAt: true,
+        projectExpectedCloseMonth: true,
         projectAssignedUserName: true,
         projectNotes: true,
         projectCustomData: true,

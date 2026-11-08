@@ -166,6 +166,7 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **事業マスタのカスタム項目を本番で直すときは `scripts/light-project-date-fields.js`**（`sh scripts/run-prod-task.sh <スクリプト> MODE=dump|dry|apply`）。本番 RDS は非公開サブネットかつ ECS Exec 無効なので、稼働中サービスと同じネットワークの単発タスクで回す。`MODE=dump` の出力が戻すための控えで、`docs/backups/` に残す。画面の PATCH と同じ書き込み（`projectFields` を入れ替えて `version` を+1）だけをする——お客様のデータ（`project_custom_data`）には触らない
 - **`meta.project_custom_field_defs` は0件のときも返す**。`mo_no` が当たらない早期 return で meta を削ると「MO番号で絞ると ML の入力欄が消える」ことになる
 
+- **受注予定月（`project_expected_close_month`）も ML から読み書きできる**（2026-11-09 石井さん。ML のマシン管理マスタでは「販売予定月」）。キーは `expected_close_month`、形式は `YYYY-MM` のみで他は422。**`projects` の専用カラムなので `custom_fields` には入らない**——カスタム項目と混ぜると保存先を間違える
 - **案件の段階（ムーブメント）も両方から直せ、同じ値にする**（2026-11-08 石井さん）。ML の「MO受注」とライト事業の段階（工業会証明書発行〜共有フォルダ案内）は同じもの。口は `GET /api/integrations/projects/{project_no}/movements` と `PATCH .../movements/{step_code}`（状態・開始日・完了日）。段階の指定は **step_code**（ML は m2 の内部 id を持たない）。楽観ロックは `updated_at`（`project_movements` に version カラムが無いため）で**必須**。代理店向けの表示はこれまでどおりポータル
 - **段階の変更は `project.movements.updated` で知らせる**（`project.updated` に混ぜない）。ML が読み直す口が別だから。顧客と担当者を分けているのと同じ理由
 - **状態の自動日付は画面の編集モーダルと同じ規則にする**（`src/lib/project-movement-update.ts`）。編集モーダルは必ず両方の日付を送ってくるのでこの分岐を通るのは ML だけ。**規則がズレると「ML で飛ばすと完了日が入り、画面で飛ばすと入らない」になる**

@@ -212,6 +212,7 @@ function updatedProject(over: Record<string, unknown> = {}) {
     projectNo: 'LIGHT-0077',
     projectSalesStatus: 'informal_approval',
     projectStatusChangedAt: new Date('2026-11-05T01:00:00.000Z'),
+    projectExpectedCloseMonth: '2026-12',
     projectAssignedUserName: '佐藤 次郎',
     projectCustomData: { needs: 'A_節税', unit_count: 8, purchase_unit_price: 2_400_000 },
     projectAssignedUserId: 42,
@@ -2063,6 +2064,131 @@ describe('カスタム項目の定義', () => {
 // ============================================================================
 // 14. 案件の営業担当
 // ============================================================================
+
+describe('案件の受注予定月（ML では「販売予定月」）', () => {
+  it('読み出しに expected_close_month が入る', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue({
+      ...updatedProject(),
+      customer: { customerCode: 'CST-0001' },
+    });
+
+    const res = await PROJECT_GET(
+      request('/api/integrations/projects/LIGHT-0077', { token: READ_TOKEN }),
+      projectParams(),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.expected_close_month).toBe('2026-12');
+    // 読み出しで引いていること（select 漏れで常に null にならないように）
+    const select = mockPrisma.project.findUnique.mock.calls[0][0].select as Record<string, unknown>;
+    expect(select.projectExpectedCloseMonth).toBe(true);
+  });
+
+  it('未入力なら null（キーは落とさない）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue({
+      ...updatedProject({ projectExpectedCloseMonth: null }),
+      customer: { customerCode: 'CST-0001' },
+    });
+
+    const body = await (
+      await PROJECT_GET(
+        request('/api/integrations/projects/LIGHT-0077', { token: READ_TOKEN }),
+        projectParams(),
+      )
+    ).json();
+
+    expect(body.expected_close_month).toBeNull();
+    expect('expected_close_month' in body).toBe(true);
+  });
+
+  it('ML から直せる（YYYY-MM）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject({ projectExpectedCloseMonth: '2027-03' }));
+
+    const res = await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, expected_close_month: '2027-03' },
+      }),
+      projectParams(),
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    const data = mockPrisma.project.update.mock.calls[0][0].data as Record<string, unknown>;
+    // 専用カラム。カスタム項目には入れない
+    expect(data.projectExpectedCloseMonth).toBe('2027-03');
+    expect(data.projectCustomData).toBeUndefined();
+    expect(body.expected_close_month).toBe('2027-03');
+  });
+
+  it('null と空文字はどちらも「空にする」', async () => {
+    for (const value of [null, '']) {
+      vi.clearAllMocks();
+      stubLightScope();
+      mockPrisma.integrationIdempotencyKey.findUnique.mockResolvedValue(null);
+      mockPrisma.integrationChangeLog.create.mockResolvedValue({ id: 1 });
+      mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+      mockPrisma.project.update.mockResolvedValue(updatedProject({ projectExpectedCloseMonth: null }));
+
+      const res = await PROJECT_PATCH(
+        request('/api/integrations/projects/LIGHT-0077', {
+          method: 'PATCH',
+          body: { version: 4, expected_close_month: value },
+        }),
+        projectParams(),
+      );
+
+      expect(res.status).toBe(200);
+      const data = mockPrisma.project.update.mock.calls[0][0].data as Record<string, unknown>;
+      expect(data.projectExpectedCloseMonth).toBeNull();
+    }
+  });
+
+  it('YYYY-MM 以外は 422（field は送ったキーのまま）', async () => {
+    for (const value of ['2027/03', '2027-3', '2027-13', '2027-03-01', '来月']) {
+      vi.clearAllMocks();
+      stubLightScope();
+      mockPrisma.integrationIdempotencyKey.findUnique.mockResolvedValue(null);
+      mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+
+      const res = await PROJECT_PATCH(
+        request('/api/integrations/projects/LIGHT-0077', {
+          method: 'PATCH',
+          body: { version: 4, expected_close_month: value },
+        }),
+        projectParams(),
+      );
+      const body = await res.json();
+
+      expect(res.status).toBe(422);
+      expect(body.errors.some((e: { field: string }) => e.field === 'expected_close_month')).toBe(true);
+      expect(mockPrisma.project.update).not.toHaveBeenCalled();
+    }
+  });
+
+  it('変更履歴には項目名だけ残る（値は残さない）', async () => {
+    stubLightScope();
+    mockPrisma.project.findUnique.mockResolvedValue(existingProject());
+    mockPrisma.project.update.mockResolvedValue(updatedProject({ projectExpectedCloseMonth: '2027-03' }));
+
+    await PROJECT_PATCH(
+      request('/api/integrations/projects/LIGHT-0077', {
+        method: 'PATCH',
+        body: { version: 4, expected_close_month: '2027-03' },
+      }),
+      projectParams(),
+    );
+
+    const log = mockPrisma.integrationChangeLog.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(log.changedFields).toEqual(['expected_close_month']);
+    expect(JSON.stringify(log.changedFields)).not.toContain('2027-03');
+  });
+});
 
 describe('案件の営業担当', () => {
   it('読み出しに assigned_user_name が入る', async () => {

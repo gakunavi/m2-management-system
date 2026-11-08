@@ -67,6 +67,7 @@ function projectRow(over: Record<string, unknown> = {}, customerOver: Record<str
     projectNo: 'LIGHT-0077',
     projectSalesStatus: 'purchased',
     projectStatusChangedAt: new Date('2026-09-15T04:12:33.000Z'),
+    projectExpectedCloseMonth: '2026-10',
     projectAssignedUserName: '田中太郎',
     projectNotes: '初回提案済み',
     projectCustomData: {
@@ -424,11 +425,22 @@ describe('レスポンス', () => {
     expectNoWrites();
   });
 
+  it('受注予定月（ML では「販売予定月」）を返す', async () => {
+    const res = await GET(buildRequest('?status=purchased'));
+    const json = await res.json();
+
+    expect(json.items[0].expected_close_month).toBe('2026-10');
+    // 読み出しで引いていること（select 漏れで常に null にならないように）
+    const select = mockPrisma.project.findMany.mock.calls[0][0].select as Record<string, unknown>;
+    expect(select.projectExpectedCloseMonth).toBe(true);
+  });
+
   it('値が全て未入力でもキーが欠落しない', async () => {
     mockPrisma.project.findMany.mockResolvedValue([
       projectRow(
         {
           projectStatusChangedAt: null,
+          projectExpectedCloseMonth: null,
           projectAssignedUserName: null,
           projectNotes: null,
           projectCustomData: {},

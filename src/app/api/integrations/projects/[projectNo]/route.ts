@@ -59,6 +59,7 @@ async function readMlProject(projectId: number) {
       projectNo: true,
       projectSalesStatus: true,
       projectStatusChangedAt: true,
+      projectExpectedCloseMonth: true,
       projectAssignedUserName: true,
       projectCustomData: true,
       version: true,
