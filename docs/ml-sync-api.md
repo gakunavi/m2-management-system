@@ -26,7 +26,8 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   契約読み出しAPIにも `custom_fields` と `meta.project_custom_field_defs` を足した。
   **本番反映済み（2026-11-06・PR #5・タスク定義 :261）**
 - 2026-11-08 追記: 案件の**段階（ムーブメント）**を読み書きできるようにした（§6）。
-  画面で段階を直すと `project.movements.updated` を通知する。**この追記分は本番未適用**
+  画面で段階を直すと `project.movements.updated` を通知する。
+  **本番反映済み（2026-11-08・PR #8・タスク定義 :264。マイグレーションなし）**
 
 ## 決まり: ライト事業は両方から直せて、いつも同じ値
 
@@ -699,6 +700,21 @@ PATCH /api/integrations/projects/{project_no}/movements/{step_code}  ← 書き�
 ムーブメント定義で段階を足し引きしても、読み出しが `step_code` と名前を返すので
 ML 側のコードは直さなくてよい。
 
+本番のライト事業の段階（2026-11-08 時点・7段階）:
+
+| `step_number` | `step_code` | 画面の名前 |
+|---|---|---|
+| 1 | `industry_cert_issuance` | 工業会証明書発行 |
+| 2 | `sme_agency_approval` | 中企庁認定 |
+| 3 | `application_acquisition` | 申込書取得 |
+| 4 | `sales_contract_execution` | 販売契約書締結 |
+| 5 | `payment_received` | 着金確認 |
+| 6 | `joint_operation_contract_execution` | 共同運用契約書締結 |
+| 7 | `shared_folder_guide` | 共有フォルダ案内 |
+
+**この表を ML 側に焼き込まないこと。** 段階は事業マスタの設定なので、読み出しが返す
+`step_code` と `step_name` をそのまま使えば、増減しても追従できる。
+
 ### 読み出し
 
 ```json
@@ -717,7 +733,7 @@ ML 側のコードは直さなくてよい。
   },
   "items": [
     {
-      "step_code": "industry_assoc_cert",
+      "step_code": "industry_cert_issuance",
       "step_name": "工業会証明書発行",
       "step_number": 1,
       "status": "completed",
@@ -822,7 +838,7 @@ curl -s "https://manage.example.test/api/integrations/projects/LIGHT-0077/moveme
 ```bash
 # 2. 書き戻す
 curl -s -X PATCH \
-  "https://manage.example.test/api/integrations/projects/LIGHT-0077/movements/industry_assoc_cert" \
+  "https://manage.example.test/api/integrations/projects/LIGHT-0077/movements/industry_cert_issuance" \
   -H "Authorization: Bearer WRITE_TOKEN_DUMMY" \
   -H "X-ML-User: %E5%B1%B1%E7%94%B0%E5%A4%AA%E9%83%8E" \
   -H "Idempotency-Key: ml-20261108-0001" \
