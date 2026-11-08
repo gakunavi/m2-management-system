@@ -1190,9 +1190,9 @@ model TaskBoardMember {
 /// 項目名だけを持つ。
 model IntegrationChangeLog {
   id Int @id @default(autoincrement())
-  /// 対象の種別。'project' | 'customer' | 'contact'
+  /// 対象の種別。'project' | 'movement' | 'customer' | 'contact'
   entityType String @map("entity_type") @db.VarChar(20)
-  /// 対象のID（projects.id / customers.id / customer_contacts.id）
+  /// 対象のID（projects.id / project_movements.id / customers.id / customer_contacts.id）
   entityId Int @map("entity_id")
   /// 人が読めるキー（project_no / customer_code）。IDだけでは追えないため併記する
   entityKey String? @map("entity_key") @db.VarChar(50)
@@ -1222,7 +1222,7 @@ model IntegrationOutboxEvent {
   id Int @id @default(autoincrement())
   /// ML が冪等に扱えるようにする一意キー（UUID）
   eventId String @unique @map("event_id") @db.VarChar(64)
-  /// 'project.updated' | 'customer.updated' | 'customer.contacts.updated'
+  /// 'project.updated' | 'project.movements.updated' | 'customer.updated' | 'customer.contacts.updated'
   eventType String @map("event_type") @db.VarChar(40)
   /// 案件No（案件の通知のみ）
   projectNo String? @map("project_no") @db.VarChar(30)

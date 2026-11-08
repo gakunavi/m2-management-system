@@ -13,7 +13,7 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
 - **本番反映済み（2026-11-05）。** Prisma マイグレーション
   `20261105100000_add_ml_bidirectional_sync` も本番DBに適用済み。
   `ML_WEBHOOK_URL` / `ML_WEBHOOK_SECRET` は**意図的に未設定**なので、m2 → ML の通知は
-  no-op（6章）
+  no-op（7章）
 - 2026-11-06 追記: ML の MO（マシンオーナー）詳細画面のため、顧客の読み出し口を追加し、
   顧客の書き戻しを「画面で人が直せる項目全部」へ広げた（4章）。
   **MO番号も ML から直せる**（前の番号は履歴に残り、取り込みAPIは前の番号でも顧客を引ける）。
@@ -24,7 +24,9 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
 - 2026-11-06 追記3: 案件の**事業別カスタム項目を全部**読み書きできるようにした
   （工業会ステータス・中企庁ステータス・各リースのステータスなど）。定義も返す。
   契約読み出しAPIにも `custom_fields` と `meta.project_custom_field_defs` を足した。
-  **この追記分は本番未適用**
+  **本番反映済み（2026-11-06・PR #5・タスク定義 :261）**
+- 2026-11-08 追記: 案件の**段階（ムーブメント）**を読み書きできるようにした（§6）。
+  画面で段階を直すと `project.movements.updated` を通知する。**この追記分は本番未適用**
 
 ## 決まり: ライト事業は両方から直せて、いつも同じ値
 
@@ -43,6 +45,9 @@ ML管理システム（`ml-management-system`）と営業管理システム（m2
   **理由を書かずに閉じないこと**
 - **担当者の携帯（読み出しは `mobile`・書き込みは `contactMobile`）も両方に持ち、同じ値にする**
   （2026-11-07 石井さん）。ML は MO の担当者の写しに携帯を持ち、一覧・追加／編集の窓・CSV に出す
+- **案件の段階（ムーブメント）も両方から直せ、同じ値にする**（2026-11-08 石井さん）。
+  ML の「MO受注」とライト事業の段階は同じものなので、状態・開始日・完了日を双方向で
+  つないだ（§6）。代理店向けの表示はこれまでどおり営業管理システムのポータル
 - **工業会・中企庁の日付は営業管理システムと ML の両方に持ち、同じ値にする**
   （2026-11-07 石井さん：「日付はどちらのシステムにも必要」）。キーは下記
   「工業会・中企庁の項目」の表のとおり。ML 側に日付を足すときも同じキーで持ち、
@@ -185,7 +190,7 @@ GET /api/integrations/projects/{project_no}
 `assigned_user_name` は営業担当の名前。契約読み出しAPI（`GET /api/integrations/contracts`）の
 `assigned_user_name` と同じ値で、**読むだけ**（ML からは書き戻せない → `422`）。
 社内の割り当てなので m2 の画面で決める。**変わったときは `project.updated` を通知する**
-（ステータス変更に限らず、案件の更新はすべて通知の対象。6章）。
+（ステータス変更に限らず、案件の更新はすべて通知の対象。7章）。
 
 ```json
 {
@@ -677,10 +682,166 @@ curl -s -X DELETE "https://manage.example.test/api/integrations/customers/CST-00
 
 ---
 
-## 6. m2 → ML の変更通知
+## 6. 段階（ムーブメント）を読む・書き戻す（新規）
 
-ライト事業の案件・その顧客・担当者が m2 で更新されたら（**画面経由でも API 経由でも**）、
-ML の受け口へ POST する。ML は通知を受けてから §1・§2 の読み出しAPIを引く。
+```
+GET   /api/integrations/projects/{project_no}/movements              ← 読み取り用トークン
+PATCH /api/integrations/projects/{project_no}/movements/{step_code}  ← 書き込み用トークン
+```
+
+> 2026-11-08 石井さん：ML の業務ムーブメント「MO受注」と、ライト事業の案件ムーブメント
+> （工業会証明書発行・中企庁認定・申込書取得・販売契約書締結・着金確認・
+> 共同運用契約書締結・共有フォルダ案内）は**同じ段階**。今は両方に手で入れているので
+> 双方向でつなぎ、どちらで直しても同じ値にする。代理店はこれまでどおり営業管理システムの
+> ポータルで見る。
+
+段階の指定は **`step_code`**（ML は m2 の内部 id を持たない）。事業マスタの
+ムーブメント定義で段階を足し引きしても、読み出しが `step_code` と名前を返すので
+ML 側のコードは直さなくてよい。
+
+### 読み出し
+
+```json
+{
+  "project_no": "LIGHT-0077",
+  "project_url": "https://manage.example.test/projects/123",
+  "meta": {
+    "count": 7,
+    "status_options": [
+      { "code": "pending",     "label": "未着手" },
+      { "code": "started",     "label": "進行中" },
+      { "code": "completed",   "label": "完了" },
+      { "code": "skipped",     "label": "スキップ" },
+      { "code": "unnecessary", "label": "不要" }
+    ]
+  },
+  "items": [
+    {
+      "step_code": "industry_assoc_cert",
+      "step_name": "工業会証明書発行",
+      "step_number": 1,
+      "status": "completed",
+      "status_label": "完了",
+      "started_at": "2026-11-01",
+      "completed_at": "2026-11-05",
+      "updated_at": "2026-11-08T01:00:00.000Z"
+    }
+  ]
+}
+```
+
+- 並びは事業マスタのムーブメント定義の順（`step_number` 昇順）
+- 未入力は `null`。**キーは落とさない**
+- `updated_at` は PATCH の**楽観ロックで送り返す値**（`project_movements` に `version`
+  カラムが無いため、担当者と同じ扱い）
+- `meta.status_options` は選べる状態の一覧。顧客の `industry_options` と同じ考え方で、
+  ML が選択肢を自前で持たなくて済むようにしてある（m2 側で増えたら自動で出る）
+
+### 書き込み
+
+```
+PATCH /api/integrations/projects/{project_no}/movements/{step_code}
+{ "updated_at": "2026-11-08T01:00:00.000Z", "status": "completed", "completed_at": "2026-11-05" }
+```
+
+| キー | 型 | 備考 |
+|---|---|---|
+| `status` | `pending` / `started` / `completed` / `skipped` / `unnecessary` | 営業管理システムの5つをそのまま受ける |
+| `started_at` | `YYYY-MM-DD` / null | 開始日 |
+| `completed_at` | `YYYY-MM-DD` / null | 完了日 |
+| `updated_at` | ISO 8601 | **必須**。編集前に読んだその段階の値。違えば `409`（本文の `current` に現在値） |
+
+- 送ったキーだけ変わる。`null` は「空にする」
+- レスポンスは読み出しの `items[]` と同じ形（行全体を置き換えても欄が消えない）
+- 知らないキー・知らない状態の値・日付の形式違いは `422`。知らない `step_code` と
+  ライト事業以外の案件は `404`
+- `updated_at` を必須にしているのは、読まずに上書きすると「ML で直したのに画面の値に
+  戻る」が起きるため（案件・顧客の `version` と同じ役目）
+
+#### 日付を送らないと状態から自動で入る
+
+`status` だけ送ると、画面の編集モーダルと同じ規則で日付が入る。
+
+| 送った状態 | 開始日 | 完了日 |
+|---|---|---|
+| `started` | 空なら今 | 空にする |
+| `completed` | 空なら今 | 今 |
+| `skipped` | そのまま | 空にする |
+| `pending` | 空にする | 空にする |
+| `unnecessary` | 空にする | 空にする |
+
+日付を自分で決めたいときは `started_at` / `completed_at` を一緒に送る（**明示指定が優先**）。
+
+#### 日付は `YYYY-MM-DD`
+
+m2 の保存先は timestamptz だが、画面の入力欄は日付のみ（`<input type="date">`）で、
+表示も ISO 文字列の日付部分をそのまま使っている。ML にも同じ `YYYY-MM-DD` で返す／受ける
+ことで、画面と ML がいつも同じ日付を指すようにしてある。
+
+> 状態の切り替えだけで日付を自動セットした行には実時刻（UTC）が入る。読み出しはその
+> UTC 日付を返す（＝画面が表示している日付と同じ）。JST 00:00〜09:00 に切り替えた分は
+> 画面も ML も前日の日付に見えるが、これは画面側の既存の挙動で、両者はズレない。
+
+### 状態の値（「スキップ」と「不要」の違い）
+
+**コードには「スキップ」を使う条件は書かれていない。** 5つの状態はどれも
+「人が選ぶ札」で、営業ステータス・報酬・収益確定・進捗の計算には一切影響しない。
+コードから分かる差は見た目と自動日付だけ:
+
+| 状態 | 画面の見え方 | 自動日付 |
+|---|---|---|
+| `skipped`（スキップ） | 黄色・送りアイコン。進捗バーは満たす | 完了日を空にする。**開始日はそのまま**（着手した記録は残る） |
+| `unnecessary`（不要） | グレー・取り消し線・薄字。進捗バーは満たす | 開始日・完了日の両方を空にする |
+
+つまり `skipped` は「着手したが先に進めた／今回は飛ばした」、`unnecessary` は
+「この案件ではやらない」という使い分けで作られている（見た目がそう示している）が、
+**強制はしていない**。ML 側でどう扱うかは石井さんが決める。
+
+### 開けていない項目とその理由
+
+| 項目 | 理由 |
+|---|---|
+| `movement_notes`（段階のメモ） | ML 側に相当する欄が無い。必要になれば開ける |
+| 連動フィールド（`step_linked_field_key` が指す案件のカスタム項目） | 案件の PATCH（`custom_fields`・3章）で直せる。段階からも書けるようにすると同じ項目に入口が2つできる |
+| 段階そのものの追加・削除 | 事業マスタ（ムーブメント定義）の設定。案件ごとの値ではなく、画面で管理者が決めるもの |
+
+### 画面と同じ更新処理を通る
+
+画面の `PATCH /api/v1/projects/:id/movements/:movementId` と、この ML の口は
+どちらも `src/lib/project-movement-update.ts` の `applyMovementUpdate` を通る。
+違うのは対象の指定（画面は id・ML は `step_code`）と楽観ロックの有無だけ。
+
+### curl
+
+```bash
+# 1. 読む（編集画面を開く直前。updated_at もここで取る）
+curl -s "https://manage.example.test/api/integrations/projects/LIGHT-0077/movements" \
+  -H "Authorization: Bearer READONLY_TOKEN_DUMMY"
+```
+
+```bash
+# 2. 書き戻す
+curl -s -X PATCH \
+  "https://manage.example.test/api/integrations/projects/LIGHT-0077/movements/industry_assoc_cert" \
+  -H "Authorization: Bearer WRITE_TOKEN_DUMMY" \
+  -H "X-ML-User: %E5%B1%B1%E7%94%B0%E5%A4%AA%E9%83%8E" \
+  -H "Idempotency-Key: ml-20261108-0001" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "updated_at": "2026-11-08T01:00:00.000Z",
+        "status": "completed",
+        "started_at": "2026-11-01",
+        "completed_at": "2026-11-05"
+      }'
+```
+
+---
+
+## 7. m2 → ML の変更通知
+
+ライト事業の案件・その段階・その顧客・担当者が m2 で更新されたら（**画面経由でも
+API 経由でも**）、ML の受け口へ POST する。ML は通知を受けてから §1・§2・§6 の
+読み出しAPIを引く。
 
 ### env
 
@@ -702,8 +863,13 @@ ML の受け口へ POST する。ML は通知を受けてから §1・§2 の読
 }
 ```
 
-- `event_type`: `project.updated` / `customer.updated` / `customer.contacts.updated`
-- 案件の通知は `project_no`、顧客・担当者の通知は `customer_code` だけ
+- `event_type`: `project.updated` / `project.movements.updated` /
+  `customer.updated` / `customer.contacts.updated`
+- 案件・段階の通知は `project_no`、顧客・担当者の通知は `customer_code` だけ
+- **段階の変更は `project.updated` ではなく `project.movements.updated`。** 読み直す口が
+  別（§6）だからで、顧客と担当者を `customer.updated` / `customer.contacts.updated` に
+  分けているのと同じ理由。`project.updated` に混ぜると ML は案件本体を読み直しても
+  段階の変更に気づけない
 - **値・個人の連絡先・金額は一切入れない**（`tests/lib/ml-notify.test.ts` が検証）
 - `event_id` は一意。ML 側は同じ `event_id` を2回受けたら1回として扱うこと
 
@@ -753,6 +919,7 @@ hmac.compare_digest(expected, signature.removeprefix("sha256="))
 |---|---|
 | `PATCH /api/v1/projects/[id]`（画面・インライン編集・フォーム編集） | ○ |
 | `PATCH /api/v1/projects/[id]`（画面・営業担当やステータスの変更を含む案件の更新すべて） | ○ |
+| `PATCH /api/v1/projects/[id]/movements/[movementId]`（画面・段階の編集） | ○（`project.movements.updated`） |
 | `PATCH /api/v1/customers/[id]`（画面） | ○ |
 | `POST`/`PATCH`/`DELETE /api/v1/customers/[id]/contacts[/...]`（画面） | ○ |
 | `/api/integrations/**` の PATCH（ML 由来） | ×（ループ防止） |
@@ -760,7 +927,7 @@ hmac.compare_digest(expected, signature.removeprefix("sha256="))
 
 ---
 
-## 7. 変更履歴
+## 8. 変更履歴
 
 m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`（`users` への FK）でしか
 表せない。ML の利用者は m2 のユーザーではないため FK に載せられないので、ML 由来の変更は
@@ -768,9 +935,9 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 
 | 列 | 内容 |
 |---|---|
-| `entity_type` | `project` / `customer` / `contact` |
-| `entity_id` | `projects.id` / `customers.id` / `customer_contacts.id` |
-| `entity_key` | `project_no` / `customer_code`（IDだけでは追えないため併記） |
+| `entity_type` | `project` / `movement` / `customer` / `contact` |
+| `entity_id` | `projects.id` / `project_movements.id` / `customers.id` / `customer_contacts.id` |
+| `entity_key` | `project_no` / `customer_code` / `<案件No>:<step_code>`（IDだけでは追えないため併記） |
 | `action` | `create` / `update` / `delete` |
 | `actor_label` | `ML：山田太郎` |
 | `changed_fields` | 変わった**項目名**の配列 |
@@ -784,12 +951,13 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 
 ---
 
-## 8. 実装とテスト
+## 9. 実装とテスト
 
 | 役割 | ファイル |
 |---|---|
 | 実行者（画面ユーザー / ML）の抽象 | `src/lib/update-actor.ts` |
 | 案件の更新（画面・ML 共通） | `src/lib/project-update.ts` |
+| 段階（ムーブメント）の更新（画面・ML 共通） | `src/lib/project-movement-update.ts` |
 | 顧客の更新（画面・ML 共通） | `src/lib/customer-update.ts` |
 | 担当者の作成・更新・削除（画面・ML 共通） | `src/lib/customer-contact-update.ts` |
 | ML 連携の対象判定・通知の入口 | `src/lib/ml-scope.ts` |
@@ -797,6 +965,7 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 | ML 由来の変更履歴 | `src/lib/integration-change-log.ts` |
 | 書き込み口の共通入口（認証・冪等・エラー変換） | `src/lib/integration-write.ts` |
 | 案件の項目定義・整形 | `src/lib/ml-project-fields.ts` |
+| 段階の項目定義・整形 | `src/lib/ml-movement-fields.ts` |
 | カスタム項目の入出力・定義・検査（顧客・案件で共通） | `src/lib/ml-custom-fields.ts` |
 | 顧客の項目定義・検査・整形 | `src/lib/ml-customer-fields.ts` |
 | 顧客1件の読み出し（業種マスタ・カスタム項目定義） | `src/lib/ml-customer-read.ts` |
@@ -806,7 +975,8 @@ m2 には汎用の変更履歴テーブルが無く、更新者は `updated_by`�
 テスト: `tests/api/ml-sync.test.ts`（エンドポイント）/ `tests/lib/ml-notify.test.ts`（通知・履歴）/
 `tests/lib/mo-number.test.ts`（MO番号の履歴）/ `tests/api/customer-mo-number.test.ts`（画面から
 MO番号を変えたとき）/ `tests/api/customer-import.test.ts`（前の番号での取り込み）/
-`tests/lib/project-update-notify.test.ts`（営業担当を変えたときの通知）。
+`tests/lib/project-update-notify.test.ts`（営業担当を変えたときの通知）/
+`tests/api/ml-movements.test.ts`（段階の読み書き・通知・画面とMLの経路）。
 
 **更新ロジックは画面と共有している。** `applyProjectUpdate` 等をコピーして ML 用に
 書き直すと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに

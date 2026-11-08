@@ -13,7 +13,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { resolveImportBusiness } from '@/lib/customer-import';
 import { logger } from '@/lib/logger';
-import { queueMlNotification } from '@/lib/ml-notify';
+import { queueMlNotification, type MlEventType } from '@/lib/ml-notify';
 import { mlWebhookConfig } from '@/lib/ml-notify';
 import { isMlActor, type UpdateActor } from '@/lib/update-actor';
 
@@ -116,11 +116,36 @@ export async function notifyProjectChangedToMl(
   actor: UpdateActor,
   target: { businessId: number; projectNo: string },
 ): Promise<void> {
+  await notifyProjectEvent(prisma, actor, target, 'project.updated');
+}
+
+/**
+ * 案件の段階（ムーブメント）の変更通知。
+ *
+ * 案件本体の `project.updated` と分けるのは、ML が読み直す口が別だから
+ * （段階は `GET /api/integrations/projects/{project_no}/movements`）。
+ * 顧客と担当者を `customer.updated` / `customer.contacts.updated` に
+ * 分けているのと同じ理由。
+ */
+export async function notifyProjectMovementsChangedToMl(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  target: { businessId: number; projectNo: string },
+): Promise<void> {
+  await notifyProjectEvent(prisma, actor, target, 'project.movements.updated');
+}
+
+async function notifyProjectEvent(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  target: { businessId: number; projectNo: string },
+  eventType: MlEventType,
+): Promise<void> {
   if (isMlActor(actor)) return;
   if (!mlWebhookConfig()) return;
   if (!(await isIntegrationBusiness(target.businessId))) return;
   await queueMlNotification(prisma, actor, {
-    eventType: 'project.updated',
+    eventType,
     projectNo: target.projectNo,
   });
 }

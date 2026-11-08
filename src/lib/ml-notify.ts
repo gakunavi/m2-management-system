@@ -19,7 +19,12 @@ import type { PrismaClient } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { isMlActor, type UpdateActor } from '@/lib/update-actor';
 
-export type MlEventType = 'project.updated' | 'customer.updated' | 'customer.contacts.updated';
+export type MlEventType =
+  | 'project.updated'
+  /** 案件の段階（ムーブメント）が変わった。案件本体の項目とは別の口を読み直す */
+  | 'project.movements.updated'
+  | 'customer.updated'
+  | 'customer.contacts.updated';
 
 /** 1回の sweep で送る上限（1リクエストの後処理が長引かないようにする） */
 const DELIVER_BATCH_SIZE = 20;

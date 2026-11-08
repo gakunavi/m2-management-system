@@ -5,11 +5,15 @@ import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
 import { requireInternalUser } from '@/lib/authz';
 import { updateMovementSchema } from '@/lib/validations/movement';
-import type { Prisma } from '@prisma/client';
+import { applyMovementUpdate } from '@/lib/project-movement-update';
+import { userActor } from '@/lib/update-actor';
 
 // ============================================
 // PATCH /api/v1/projects/:id/movements/:movementId
 // ============================================
+//
+// 更新そのものは ML連携と共通（src/lib/project-movement-update.ts）。
+// ここは認証・権限チェックとレスポンス整形だけを持つ。
 
 export async function PATCH(
   request: NextRequest,
@@ -20,7 +24,7 @@ export async function PATCH(
     if (!session?.user) throw ApiError.unauthorized();
     requireInternalUser(session);
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     const { id, movementId } = await params;
     const projectId = parseInt(id, 10);
     const mvId = parseInt(movementId, 10);
@@ -28,104 +32,11 @@ export async function PATCH(
     const body = await request.json();
     const data = updateMovementSchema.parse(body);
 
-    // ムーブメントの存在確認 + テンプレート情報取得
-    const existing = await prisma.projectMovement.findFirst({
-      where: { id: mvId, projectId },
-      include: {
-        template: {
-          select: {
-            stepLinkedFieldKey: true,
-            stepName: true,
-          },
-        },
-      },
-    });
-    if (!existing) throw ApiError.notFound('ムーブメントが見つかりません');
-
-    const now = new Date();
-
-    // タイムスタンプの設定（明示的な日付指定がある場合はそちらを優先）
-    const timestamps: {
-      movementStartedAt?: Date | null;
-      movementCompletedAt?: Date | null;
-    } = {};
-
-    if (data.movementStartedAt !== undefined) {
-      timestamps.movementStartedAt = data.movementStartedAt ? new Date(data.movementStartedAt) : null;
-    }
-    if (data.movementCompletedAt !== undefined) {
-      timestamps.movementCompletedAt = data.movementCompletedAt ? new Date(data.movementCompletedAt) : null;
-    }
-
-    // 明示的な日付指定がない場合のみ、ステータスに応じた自動設定
-    if (data.movementStatus && data.movementStartedAt === undefined && data.movementCompletedAt === undefined) {
-      switch (data.movementStatus) {
-        case 'started':
-          timestamps.movementStartedAt = existing.movementStartedAt ?? now;
-          timestamps.movementCompletedAt = null;
-          break;
-        case 'completed':
-          timestamps.movementStartedAt = existing.movementStartedAt ?? now;
-          timestamps.movementCompletedAt = now;
-          break;
-        case 'skipped':
-          timestamps.movementCompletedAt = now;
-          break;
-        case 'pending':
-          timestamps.movementStartedAt = null;
-          timestamps.movementCompletedAt = null;
-          break;
-      }
-    }
-
-    // トランザクション: ムーブメント更新 + 連動フィールド更新
-    const updated = await prisma.$transaction(async (tx) => {
-      const movement = await tx.projectMovement.update({
-        where: { id: mvId },
-        data: {
-          ...(data.movementStatus !== undefined && { movementStatus: data.movementStatus }),
-          ...(data.movementNotes !== undefined && { movementNotes: data.movementNotes || null }),
-          ...timestamps,
-          updatedBy: user.id,
-        },
-        include: {
-          template: {
-            select: {
-              id: true,
-              stepNumber: true,
-              stepCode: true,
-              stepName: true,
-              stepDescription: true,
-              stepLinkedFieldKey: true,
-            },
-          },
-        },
-      });
-
-      // 連動フィールド更新: linkedFieldUpdate が送信された場合
-      if (data.linkedFieldUpdate) {
-        const { key, value } = data.linkedFieldUpdate;
-        // テンプレートの連動フィールドキーと一致するか検証
-        if (existing.template.stepLinkedFieldKey && key === existing.template.stepLinkedFieldKey) {
-          const project = await tx.project.findUniqueOrThrow({
-            where: { id: projectId },
-            select: { projectCustomData: true },
-          });
-          const currentCustomData = (project.projectCustomData ?? {}) as Record<string, unknown>;
-          const updatedCustomData = { ...currentCustomData, [key]: value };
-
-          await tx.project.update({
-            where: { id: projectId },
-            data: {
-              projectCustomData: updatedCustomData as Prisma.InputJsonValue,
-              updatedBy: user.id,
-              version: { increment: 1 },
-            },
-          });
-        }
-      }
-
-      return movement;
+    const updated = await applyMovementUpdate(prisma, {
+      projectId,
+      target: { kind: 'id', movementId: mvId },
+      fields: data,
+      actor: userActor(user),
     });
 
     return NextResponse.json({

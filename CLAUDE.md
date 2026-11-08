@@ -166,7 +166,11 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **事業マスタのカスタム項目を本番で直すときは `scripts/light-project-date-fields.js`**（`sh scripts/run-prod-task.sh <スクリプト> MODE=dump|dry|apply`）。本番 RDS は非公開サブネットかつ ECS Exec 無効なので、稼働中サービスと同じネットワークの単発タスクで回す。`MODE=dump` の出力が戻すための控えで、`docs/backups/` に残す。画面の PATCH と同じ書き込み（`projectFields` を入れ替えて `version` を+1）だけをする——お客様のデータ（`project_custom_data`）には触らない
 - **`meta.project_custom_field_defs` は0件のときも返す**。`mo_no` が当たらない早期 return で meta を削ると「MO番号で絞ると ML の入力欄が消える」ことになる
 
-- **更新ロジックは画面とMLで共有する**。案件は `src/lib/project-update.ts` の `applyProjectUpdate`、顧客は `src/lib/customer-update.ts` の `applyCustomerUpdate`、担当者は `src/lib/customer-contact-update.ts`。ルートはレスポンス整形と権限チェックだけを持つ。**コピーして別経路を書くと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに入る**
+- **案件の段階（ムーブメント）も両方から直せ、同じ値にする**（2026-11-08 石井さん）。ML の「MO受注」とライト事業の段階（工業会証明書発行〜共有フォルダ案内）は同じもの。口は `GET /api/integrations/projects/{project_no}/movements` と `PATCH .../movements/{step_code}`（状態・開始日・完了日）。段階の指定は **step_code**（ML は m2 の内部 id を持たない）。楽観ロックは `updated_at`（`project_movements` に version カラムが無いため）で**必須**。代理店向けの表示はこれまでどおりポータル
+- **段階の変更は `project.movements.updated` で知らせる**（`project.updated` に混ぜない）。ML が読み直す口が別だから。顧客と担当者を分けているのと同じ理由
+- **状態の自動日付は画面の編集モーダルと同じ規則にする**（`src/lib/project-movement-update.ts`）。編集モーダルは必ず両方の日付を送ってくるのでこの分岐を通るのは ML だけ。**規則がズレると「ML で飛ばすと完了日が入り、画面で飛ばすと入らない」になる**
+- **段階の状態（未着手・進行中・完了・スキップ・不要）は札でしかない**。営業ステータス・報酬・収益確定・進捗の計算には影響しない。`skipped` と `unnecessary` の差は見た目（取り消し線の有無）と自動日付（`skipped` は開始日を残す）だけで、使う条件はコードに無い
+- **更新ロジックは画面とMLで共有する**。案件は `src/lib/project-update.ts` の `applyProjectUpdate`、段階は `src/lib/project-movement-update.ts` の `applyMovementUpdate`、顧客は `src/lib/customer-update.ts` の `applyCustomerUpdate`、担当者は `src/lib/customer-contact-update.ts`。ルートはレスポンス整形と権限チェックだけを持つ。**コピーして別経路を書くと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに入る**
 - **「誰が更新したか」は `UpdateActor`**（`src/lib/update-actor.ts`）に押し出してある。画面は `updated_by` に user.id が入り、ML は FK に載せられないので `integration_change_logs` に `ML：<名前>` と**項目名だけ**を残す（値は残さない）
 - **ML 利用者名のヘッダー（`X-ML-User`）は UTF-8 のパーセントエンコード**。HTTP ヘッダーの値は Latin-1 しか運べないため、日本語をそのまま入れると落ちるか文字化けする
 - **通知のループ防止は実行者で判定する**（`isMlActor`）。判定は通知の入口（`src/lib/ml-scope.ts`）1箇所にあり、呼び出し側は条件を持たない。更新経路を増やしても漏れない
