@@ -14,6 +14,7 @@
 #   AWS_PROFILE=<環境Bのプロファイル> sh scripts/run-env-b-task.sh                    # 調査のみ
 #   AWS_PROFILE=<環境Bのプロファイル> sh scripts/run-env-b-task.sh --fix-duplicates
 #   AWS_PROFILE=<環境Bのプロファイル> sh scripts/run-env-b-task.sh --set-password=a@b.com
+#   AWS_PROFILE=<環境Bのプロファイル> sh scripts/run-env-b-task.sh --verify --email=a@b.com
 #
 # 引数を省略すると調査のみ（DBを変更しない）。
 set -e
