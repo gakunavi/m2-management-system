@@ -5,6 +5,8 @@ import { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyCustomerLinkChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 import { requireInternalUser } from '@/lib/authz';
 
 // ============================================
@@ -101,6 +103,13 @@ export async function POST(
         linkStatus: data.linkStatus,
         linkCustomData: data.linkCustomData as Prisma.InputJsonValue,
       },
+    });
+
+    // 事業リンクそのものが「その顧客が ML から見えるかどうか」。
+    // ライト事業に紐づいた瞬間に ML へ知らせる（知らせないと ML 側に写しができない）
+    await notifyCustomerLinkChangedToMl(prisma, userActor(user), {
+      businessId: data.businessId,
+      customerId,
     });
 
     const linkWithBusiness = await prisma.customerBusinessLink.findUnique({

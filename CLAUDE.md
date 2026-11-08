@@ -173,6 +173,8 @@ grep -r "customerDetailConfig" src/app/ src/components/
 - **更新ロジックは画面とMLで共有する**。案件は `src/lib/project-update.ts` の `applyProjectUpdate`、段階は `src/lib/project-movement-update.ts` の `applyMovementUpdate`、顧客は `src/lib/customer-update.ts` の `applyCustomerUpdate`、担当者は `src/lib/customer-contact-update.ts`。ルートはレスポンス整形と権限チェックだけを持つ。**コピーして別経路を書くと、ステータス変更の副作用（確定日ラッチ・手数料の凍結・通知）が片方だけに入る**
 - **「誰が更新したか」は `UpdateActor`**（`src/lib/update-actor.ts`）に押し出してある。画面は `updated_by` に user.id が入り、ML は FK に載せられないので `integration_change_logs` に `ML：<名前>` と**項目名だけ**を残す（値は残さない）
 - **ML 利用者名のヘッダー（`X-ML-User`）は UTF-8 のパーセントエンコード**。HTTP ヘッダーの値は Latin-1 しか運べないため、日本語をそのまま入れると落ちるか文字化けする
+- **作成・CSV取り込み・コピー・一括削除でも知らせる**（2026-11-08 石井さん）。ML は知らせで来たまだ無い案件を、内諾・申請中・購入済みならその場で入れるので、**作成の知らせが無いと ML 側に写しができない**。論理削除・復元も同じ種別（`project.updated` / `customer.updated`）で送り、ML は読み直したときの 404 で「消えた」と判断する。**件数が何件あっても1件＝1通**（まとめると控え・再送の単位が崩れる）。まとめて送る入口は `notifyProjectsChangedToMl` / `notifyCustomersChangedToMl`、事業リンクの増減は `notifyCustomerLinkChangedToMl`（リンクが消えたあとは通常の入口では送れない）
+- **`updateMany` で一括更新するときは、対象の行を更新の前に控える**。`updateMany` は影響した行を返さないため、あとから引くと「もともと消えていた分」と区別できない
 - **通知のループ防止は実行者で判定する**（`isMlActor`）。判定は通知の入口（`src/lib/ml-scope.ts`）1箇所にあり、呼び出し側は条件を持たない。更新経路を増やしても漏れない
 - **計算項目への書き戻しは 422 で弾く**。ライト事業の購入金額は「購入単価×台数」の数式項目で、共通の更新処理が保存前に再計算する。受け付けると ML が送った値が黙って消える（`assertNoFormulaFields`）
 - **担当者の楽観ロックは `updated_at`**。`CustomerContact` に `version` カラムが無いため。案件・顧客は `version`

@@ -181,3 +181,126 @@ export async function notifyCustomerChangedToMl(
     customerCode: customer.customerCode,
   });
 }
+
+// ============================================
+// まとめて通知する入口（作成・取り込み・一括操作から呼ぶ）
+// ============================================
+//
+// 案件の新規作成・CSV取り込み・コピー・一括削除でも ML へ知らせる
+// （2026-11-08 石井さん）。ML は知らせで来たまだ無い案件を、内諾・申請中・購入済み
+// なら その場で入れる（それより前の状態は入れない）ので、作成の知らせが要る。
+//
+// **件数が何件あっても案件ごとに1通ずつ送る。** 1通にまとめると、ML 側は
+// 「どれが変わったか」を自分で調べることになり、控え・再送の単位（1件＝1通）も
+// 崩れる。送信そのものはレスポンス後に回るので、編集した人は待たない。
+//
+// 論理削除でも `project.updated` を送る（削除専用の種別は作っていない）。
+// ML が読み直すと `404` になるので、そこで「消えた」と分かる。
+
+/**
+ * 案件IDの配列から、ライト事業の案件だけ1件ずつ通知する。
+ *
+ * 案件Noは呼び出し側に持たせず、ここで引く（CSV取り込みや一括削除は ID しか
+ * 持っていないため）。**論理削除済みの案件も対象**（消したことを知らせるため
+ * `projectIsActive` では絞らない）。
+ */
+export async function notifyProjectsChangedToMl(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  projectIds: number[],
+): Promise<void> {
+  await notifyProjectsEvent(prisma, actor, projectIds, 'project.updated');
+}
+
+/** 段階（ムーブメント）の構成がまとめて変わったときの通知（定義の同期など） */
+export async function notifyProjectsMovementsChangedToMl(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  projectIds: number[],
+): Promise<void> {
+  await notifyProjectsEvent(prisma, actor, projectIds, 'project.movements.updated');
+}
+
+async function notifyProjectsEvent(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  projectIds: number[],
+  eventType: MlEventType,
+): Promise<void> {
+  if (isMlActor(actor)) return;
+  if (!mlWebhookConfig()) return;
+  if (projectIds.length === 0) return;
+
+  const business = await resolveImportBusiness();
+  if (!business) return;
+
+  // 事業の判定はここで1回だけ（案件ごとに引くと取り込み件数ぶん問い合わせが増える）
+  const projects = await prisma.project.findMany({
+    where: { id: { in: projectIds }, businessId: business.id },
+    select: { projectNo: true },
+  });
+
+  for (const project of projects) {
+    await queueMlNotification(prisma, actor, { eventType, projectNo: project.projectNo });
+  }
+}
+
+/**
+ * 顧客IDの配列から、ライト事業の顧客だけ1件ずつ通知する（CSV取り込み・一括削除）。
+ *
+ * 1件ずつの `notifyCustomerChangedToMl` を回しても同じだが、それだと顧客の数だけ
+ * 事業の解決と問い合わせが走る。
+ */
+export async function notifyCustomersChangedToMl(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  target: { customerIds: number[]; kind: 'customer' | 'contacts' },
+): Promise<void> {
+  if (isMlActor(actor)) return;
+  if (!mlWebhookConfig()) return;
+  if (target.customerIds.length === 0) return;
+
+  const business = await resolveImportBusiness();
+  if (!business) return;
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      id: { in: target.customerIds },
+      businessLinks: { some: { businessId: business.id, linkStatus: 'active' } },
+    },
+    select: { customerCode: true },
+  });
+
+  const eventType = target.kind === 'customer' ? 'customer.updated' : 'customer.contacts.updated';
+  for (const customer of customers) {
+    await queueMlNotification(prisma, actor, { eventType, customerCode: customer.customerCode });
+  }
+}
+
+/**
+ * 顧客の事業リンクを作った・直した・消したときの通知。
+ *
+ * リンクそのものが「その顧客が ML から見えるかどうか」なので、
+ * `notifyCustomerChangedToMl`（リンクがある顧客だけ通す）では**消したときに
+ * 送れない**。ここでは事業IDで判定し、顧客コードはリンクを見ずに引く。
+ */
+export async function notifyCustomerLinkChangedToMl(
+  prisma: PrismaClient,
+  actor: UpdateActor,
+  target: { businessId: number; customerId: number },
+): Promise<void> {
+  if (isMlActor(actor)) return;
+  if (!mlWebhookConfig()) return;
+  if (!(await isIntegrationBusiness(target.businessId))) return;
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: target.customerId },
+    select: { customerCode: true },
+  });
+  if (!customer) return;
+
+  await queueMlNotification(prisma, actor, {
+    eventType: 'customer.updated',
+    customerCode: customer.customerCode,
+  });
+}

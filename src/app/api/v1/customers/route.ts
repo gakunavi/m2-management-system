@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyCustomerChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 import type { Prisma } from '@prisma/client';
 import { parseSortParams } from '@/lib/sort-helper';
 import { resolveSort, applyAppSort, appSortPagination, withCustomDataFields } from '@/lib/sort/engine';
@@ -251,6 +253,13 @@ export async function POST(request: NextRequest) {
       });
       (customer as Record<string, unknown>).businessLinks = freshLinks;
     }
+
+    // ML管理システムへ「顧客ができたよ」を知らせる（ライト事業に紐づいたときだけ）。
+    // 事業リンクを作ったあとに呼ぶ — リンクが無いうちは対象外と判定される
+    await notifyCustomerChangedToMl(prisma, userActor(user), {
+      customerId: customer.id,
+      kind: 'customer',
+    });
 
     return NextResponse.json({ success: true, data: formatCustomer(customer, linkBusinessId) }, { status: 201 });
   } catch (error) {

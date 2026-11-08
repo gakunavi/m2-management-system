@@ -10,6 +10,8 @@ import { PROJECT_CSV_SORT_SPEC } from '@/lib/sort/specs';
 import { escapeCSV, parseCSVLine } from '@/lib/csv-helpers';
 import { generateProjectNo, createInitialMovements } from '@/lib/project-helpers';
 import { latchRevenueConfirmation } from '@/lib/revenue-confirm-latch';
+import { notifyProjectsChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 import { computeAllFormulas } from '@/lib/formula-evaluator';
 import { applyProjectListFilters, matchesCustomFieldFilters } from '@/lib/project-filters';
 import type { ProjectFieldDefinition } from '@/types/dynamic-fields';
@@ -669,6 +671,10 @@ export async function POST(request: NextRequest) {
         projectIds: touchedProjectIds,
       });
       results.latched = latch.latched;
+
+      // 取り込みで作成・更新した案件を ML へ知らせる（案件ごとに1通）。
+      // ドライランは中身をロールバックするので対象外（この if の中にある）。
+      await notifyProjectsChangedToMl(prisma, userActor(user), touchedProjectIds);
     }
 
     return NextResponse.json({

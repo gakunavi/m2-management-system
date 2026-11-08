@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { handleApiError, ApiError } from '@/lib/error-handler';
+import { notifyCustomerChangedToMl } from '@/lib/ml-scope';
+import { userActor } from '@/lib/update-actor';
 
 // ============================================
 // PATCH /api/v1/customers/:id/restore
@@ -39,6 +41,12 @@ export async function PATCH(
         version: { increment: 1 },
         updatedBy: user.id,
       },
+    });
+
+    // 消えていた顧客が戻ったことも知らせる
+    await notifyCustomerChangedToMl(prisma, userActor(user), {
+      customerId,
+      kind: 'customer',
     });
 
     return NextResponse.json({

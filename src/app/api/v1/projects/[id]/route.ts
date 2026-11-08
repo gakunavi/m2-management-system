@@ -18,6 +18,7 @@ import {
 // 片方だけに入る事故が起きる。
 import { applyProjectUpdate, PROJECT_INCLUDE } from '@/lib/project-update';
 import { userActor } from '@/lib/update-actor';
+import { notifyProjectChangedToMl } from '@/lib/ml-scope';
 
 /**
  * この案件を含む「確定済み」の支払明細書が既にあるか。
@@ -309,7 +310,7 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user) throw ApiError.unauthorized();
 
-    const user = session.user as { id: number; role: string };
+    const user = session.user as { id: number; role: string; userName?: string | null };
     if (!['admin', 'staff'].includes(user.role)) throw ApiError.forbidden();
 
     const { id } = await params;
@@ -321,6 +322,12 @@ export async function DELETE(
     await prisma.project.update({
       where: { id: projectId },
       data: { projectIsActive: false, updatedBy: user.id },
+    });
+
+    // 一括削除と同じ扱い（ML が読み直すと 404 で「消えた」と分かる）
+    await notifyProjectChangedToMl(prisma, userActor(user), {
+      businessId: existing.businessId,
+      projectNo: existing.projectNo,
     });
 
     return NextResponse.json({ success: true });
