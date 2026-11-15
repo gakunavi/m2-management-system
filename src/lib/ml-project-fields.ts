@@ -57,6 +57,18 @@ export const mlProjectPatchSchema = z
   .object({
     /** 営業ステータスの**コード**（informal_approval / purchased など）。ラベルは受け付けない */
     status_code: z.string().min(1).optional(),
+    /**
+     * 受注予定月（`YYYY-MM`）。ML のマシン管理マスタでは「販売予定月」。
+     *
+     * `projects.project_expected_close_month` の専用カラムで、カスタム項目ではない。
+     * 空にするときは `null` か `""`（画面のフォームが空文字を送るのに合わせる）。
+     */
+    expected_close_month: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/, '受注予定月は YYYY-MM 形式で指定してください')
+      .nullable()
+      .optional()
+      .or(z.literal('')),
     /** ニーズ（A_節税 など生の値）。ML の plan はこれから導く */
     needs: z.string().max(200).nullable().optional(),
     /** 台数 */
@@ -103,6 +115,7 @@ const CUSTOM_DATA_KEY_MAP: Record<string, string> = {
 /** ML が書き戻せるキーの一覧（仕様書とのドリフト検知に使う） */
 export const ML_PROJECT_WRITABLE_KEYS = [
   'status_code',
+  'expected_close_month',
   ...Object.keys(CUSTOM_DATA_KEY_MAP),
   'custom_fields',
 ] as const;
@@ -153,6 +166,8 @@ export function assertNoFormulaFields(
 export interface ProjectUpdateBody {
   version: number;
   projectSalesStatus?: string;
+  /** 受注予定月。`projects` の専用カラムなので customData には入れない */
+  projectExpectedCloseMonth?: string | null;
   projectCustomData?: Record<string, unknown>;
 }
 
@@ -165,6 +180,10 @@ export function toProjectUpdateBody(input: MlProjectPatchInput): ProjectUpdateBo
   const body: ProjectUpdateBody = { version: input.version };
 
   if (input.status_code !== undefined) body.projectSalesStatus = input.status_code;
+  // 空文字は「空にする」。保存は null に寄せる（読み出しが null を返す形に合わせる）
+  if (input.expected_close_month !== undefined) {
+    body.projectExpectedCloseMonth = input.expected_close_month || null;
+  }
 
   const customData: Record<string, unknown> = {};
   for (const [mlKey, dataKey] of Object.entries(CUSTOM_DATA_KEY_MAP)) {
@@ -186,6 +205,8 @@ export interface MlProjectItemSource {
   projectNo: string;
   projectSalesStatus: string;
   projectStatusChangedAt: Date | null;
+  /** 受注予定月（YYYY-MM）。ML では「販売予定月」 */
+  projectExpectedCloseMonth: string | null;
   /** 営業担当の名前。契約読み出しAPIの assigned_user_name と同じ値 */
   projectAssignedUserName: string | null;
   projectCustomData: unknown;
@@ -222,6 +243,8 @@ export function buildMlProjectItem(
     status_code: row.projectSalesStatus,
     status_label: options.statusLabel,
     status_changed_at: row.projectStatusChangedAt ? row.projectStatusChangedAt.toISOString() : null,
+    // 受注予定月（ML では「販売予定月」）。ML からも直せる
+    expected_close_month: row.projectExpectedCloseMonth,
     // 営業担当（m2 側で変わると project.updated を通知する）。書き戻しは受け付けない
     assigned_user_name: row.projectAssignedUserName,
     needs: customValue(data, 'needs'),
@@ -246,7 +269,8 @@ export function buildMlProjectItem(
 /** レスポンスが必ず持つキー（テストと仕様書のドリフト検知に使う） */
 export const ML_PROJECT_ITEM_KEYS = [
   'project_no', 'project_url', 'customer_code',
-  'status_code', 'status_label', 'status_changed_at', 'assigned_user_name',
+  'status_code', 'status_label', 'status_changed_at', 'expected_close_month',
+  'assigned_user_name',
   'needs', 'unit_count', 'unit_price', 'purchase_amount',
   'sales_contract_date', 'operation_contract_date', 'payment_received_date',
   'sme_agency_applicant',

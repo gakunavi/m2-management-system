@@ -158,6 +158,8 @@ export interface ContractProjectRow {
   projectNo: string;
   projectSalesStatus: string;
   projectStatusChangedAt: Date | null;
+  /** 受注予定月（YYYY-MM）。ML のマシン管理マスタでは「販売予定月」 */
+  projectExpectedCloseMonth: string | null;
   projectAssignedUserName: string | null;
   projectNotes: string | null;
   projectCustomData: unknown;
@@ -230,6 +232,8 @@ export function buildContractItem(row: ContractProjectRow, options: BuildContrac
     status_code: row.projectSalesStatus,
     status: options.statusLabel,
     status_changed_at: row.projectStatusChangedAt ? row.projectStatusChangedAt.toISOString() : null,
+    // 受注予定月（YYYY-MM）。ML では「販売予定月」として出す
+    expected_close_month: row.projectExpectedCloseMonth,
 
     // --- 顧客の基本情報 ---
     company_name: c.customerName,
@@ -291,7 +295,7 @@ export function buildContractItem(row: ContractProjectRow, options: BuildContrac
 /** レスポンスの item が必ず持つキー（テストと仕様書のドリフト検知に使う） */
 export const CONTRACT_ITEM_KEYS = [
   'project_no', 'project_url', 'mo_no', 'customer_id', 'customer_code', 'customer_url',
-  'status_code', 'status', 'status_changed_at',
+  'status_code', 'status', 'status_changed_at', 'expected_close_month',
   'company_name', 'customer_salutation', 'customer_type', 'purchase_count', 'fiscal_month', 'assigned_user_name',
   'needs', 'unit_count', 'unit_price', 'purchase_amount',
   'sales_contract_date', 'operation_contract_date', 'payment_received_date', 'project_notes',

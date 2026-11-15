@@ -67,6 +67,7 @@ function projectRow(over: Record<string, unknown> = {}, customerOver: Record<str
     projectNo: 'LIGHT-0077',
     projectSalesStatus: 'purchased',
     projectStatusChangedAt: new Date('2026-09-15T04:12:33.000Z'),
+    projectExpectedCloseMonth: '2026-10',
     projectAssignedUserName: '田中太郎',
     projectNotes: '初回提案済み',
     projectCustomData: {
@@ -137,6 +138,13 @@ beforeEach(() => {
         { key: 'purchase_unit_price', label: '購入単価', type: 'number' },
         { key: 'unit_count', label: '台数', type: 'number' },
         { key: 'purchase_amount', label: '購入金額', type: 'formula', formula: 'purchase_unit_price* unit_count' },
+        // 着金ステータス（2026-11-09 追加）。契約読み出しでも定義ごと返ることを押さえる
+        {
+          key: 'payment_status',
+          label: '着金ステータス',
+          type: 'select',
+          options: ['1_着金済', '2_請求書送付済', '3_請求書未送付', '4_不要'],
+        },
       ],
     },
   });
@@ -424,11 +432,22 @@ describe('レスポンス', () => {
     expectNoWrites();
   });
 
+  it('受注予定月（ML では「販売予定月」）を返す', async () => {
+    const res = await GET(buildRequest('?status=purchased'));
+    const json = await res.json();
+
+    expect(json.items[0].expected_close_month).toBe('2026-10');
+    // 読み出しで引いていること（select 漏れで常に null にならないように）
+    const select = mockPrisma.project.findMany.mock.calls[0][0].select as Record<string, unknown>;
+    expect(select.projectExpectedCloseMonth).toBe(true);
+  });
+
   it('値が全て未入力でもキーが欠落しない', async () => {
     mockPrisma.project.findMany.mockResolvedValue([
       projectRow(
         {
           projectStatusChangedAt: null,
+          projectExpectedCloseMonth: null,
           projectAssignedUserName: null,
           projectNotes: null,
           projectCustomData: {},
@@ -570,6 +589,7 @@ describe('meta', () => {
       'purchase_unit_price',
       'unit_count',
       'purchase_amount',
+      'payment_status',
     ]);
   });
 
